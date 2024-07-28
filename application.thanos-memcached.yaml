@@ -10,6 +10,10 @@ spec:
   destination:
     server: "https://kubernetes.default.svc"
     namespace: thanos
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
   source:
     chart: memcached
     repoURL: https://charts.bitnami.com/bitnami
