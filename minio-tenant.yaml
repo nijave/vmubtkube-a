@@ -1,0 +1,512 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio-tenant
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provision-minio
+  namespace: minio-tenant
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: create-secret-role
+  namespace: minio-tenant
+rules:
+- verbs: ["create", "get"]
+  apiGroups: [""]
+  resources: ["secrets"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: create-secret-role
+  namespace: thanos
+rules:
+- verbs: ["create", "get"]
+  apiGroups: [""]
+  resources: ["secrets"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: provision-minio-create-secret
+  namespace: minio-tenant
+subjects:
+- kind: ServiceAccount
+  name: provision-minio
+  namespace: minio-tenant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: create-secret-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: provision-minio-create-secret
+  namespace: thanos
+subjects:
+- kind: ServiceAccount
+  name: provision-minio
+  namespace: minio-tenant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: create-secret-role
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-minio
+  namespace: minio-tenant
+spec:
+  template:
+    spec:
+      serviceAccountName: provision-minio
+      containers:
+      - name: kubectl
+        image: docker.io/bitnami/kubectl:1.29
+        command: [/bin/bash, -c]
+        args:
+        - |
+          cd /tmp
+          cat <<EOF > config.env
+          export MINIO_ROOT_USER="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20)"
+          export MINIO_ROOT_PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
+          export MINIO_PROMETHEUS_URL=http://thanos-query.thanos.svc.cluster.local.:9090
+          export MINIO_PROMETHEUS_JOB_ID=minio-default-minio-job
+          EOF
+
+          kubectl create secret generic storage-configuration --from-file=config.env || true
+
+          for client in loki thanos; do
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: ${client}
+            namespace: minio-tenant  
+          data:
+            CONSOLE_ACCESS_KEY: $(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20 | base64 -w 0)
+            CONSOLE_SECRET_KEY: $(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40 | base64 -w 0)
+          EOF
+          done
+
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: loki-bucket
+            namespace: loki
+          type: Opaque
+          stringData:
+            bucketnames: loki
+            endpoint: minio-default-hl.minio-tenant.svc.cluster.local.:9000
+            access_key_id: $(kubectl get secret -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' loki | base64 -d)
+            access_key_secret: $(kubectl get secret -o jsonpath='{.data.CONSOLE_SECRET_KEY}' loki | base64 -d)
+          EOF
+
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: thanos-objectstorage
+            namespace: thanos
+          type: Opaque
+          stringData:
+            thanos.yaml: |
+              type: S3
+              config:
+                endpoint: minio-default-hl.minio-tenant.svc.cluster.local.:9000
+                bucket: thanos
+                access_key: $(kubectl get secret -o jsonpath='{.data.CONSOLE_ACCESS_KEY}' thanos | base64 -d)
+                secret_key: $(kubectl get secret -o jsonpath='{.data.CONSOLE_SECRET_KEY}' thanos | base64 -d)
+                http_config:
+                  tls_config:
+                    ca_file: /etc/kubernetes/pki/ca.crt
+          EOF
+
+          exit 0
+      restartPolicy: OnFailure
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-prometheus-monitoring
+  namespace: minio-tenant
+spec:
+  template:
+    spec:
+      serviceAccountName: provision-minio
+      restartPolicy: OnFailure
+      volumes:
+      - name: minio-config
+        secret:
+          secretName: storage-configuration
+      - name: k8s-ca
+        hostPath:
+          path: /etc/kubernetes/pki
+      containers:
+      - name: minio
+        image: ghcr.io/almalinux/almalinux:9
+        volumeMounts:
+          - mountPath: /etc/minio
+            name: minio-config
+          - mountPath: /root/.minio/certs/CAs
+            name: k8s-ca
+            subPath: ca.crt
+        env:
+          - name: CONSOLE_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: thanos
+                key: CONSOLE_ACCESS_KEY
+          - name: CONSOLE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: thanos
+                key: CONSOLE_SECRET_KEY
+        command: [/bin/bash, -c]
+        args:
+        - |
+            set -eu
+
+            dnf install -y jq
+
+            curl https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+            chmod +x /usr/local/bin/mc
+
+            curl -L "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
+            chmod +x /usr/local/bin/kubectl
+
+            . /etc/minio/config.env
+            mc alias set local https://minio.minio-tenant.svc.cluster.local "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+
+            PROM_TOKEN=$(mc admin prometheus generate local --json | jq -r .bearerToken)
+
+            cat <<EOF | kubectl create -f -
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: prometheus-bearer-token
+              namespace: minio-tenant
+            type: Opaque
+            stringData:
+              token: "$PROM_TOKEN"
+            EOF
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: minio-cluster-metrics
+  namespace: minio-tenant
+  labels:
+    release: prom
+spec:
+  metricsPath: /minio/v2/metrics/cluster
+  scrapeInterval: 10s
+  scheme: HTTPS
+  tlsConfig:
+    insecureSkipVerify: true
+  authorization:
+    type: Bearer
+    credentials:
+      name: prometheus-bearer-token
+      key: token
+  staticConfigs:
+  - targets:
+    - minio.minio-tenant
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: minio-bucket-metrics
+  namespace: minio-tenant
+  labels:
+    release: prom
+spec:
+  metricsPath: /minio/v2/metrics/bucket
+  scrapeInterval: 10s
+  scheme: HTTPS
+  tlsConfig:
+    insecureSkipVerify: true
+  authorization:
+    type: Bearer
+    credentials:
+      name: prometheus-bearer-token
+      key: token
+  staticConfigs:
+  - targets:
+    - minio.minio-tenant
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio-node-metrics
+  namespace: minio-tenant
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      v1.min.io/tenant: minio-default
+      scrapeMetrics: "true"
+  endpoints:
+  - port: https-minio
+    path: /minio/v2/metrics/node
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    bearerTokenSecret:
+      name: prometheus-bearer-token
+      key: token
+  - port: https-minio
+    path: /minio/v2/metrics/resource
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    bearerTokenSecret:
+      name: prometheus-bearer-token
+      key: token
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-thanos
+  namespace: minio-tenant
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      volumes:
+      - name: minio-config
+        secret:
+          secretName: storage-configuration
+      - name: k8s-ca
+        hostPath:
+          path: /etc/kubernetes/pki
+      containers:
+      - name: kubectl
+        image: quay.io/minio/minio
+        volumeMounts:
+          - mountPath: /etc/minio
+            name: minio-config
+          - mountPath: /root/.minio/certs/CAs
+            name: k8s-ca
+            subPath: ca.crt
+        env:
+          - name: CONSOLE_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: thanos
+                key: CONSOLE_ACCESS_KEY
+          - name: CONSOLE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: thanos
+                key: CONSOLE_SECRET_KEY
+        command: [/bin/bash, -c]
+        args:
+        - |
+            set -eu
+            . /etc/minio/config.env
+            mc alias set local https://minio.minio-tenant.svc.cluster.local "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+            mc mb thanos
+            mc admin user add local "${CONSOLE_ACCESS_KEY}" "${CONSOLE_SECRET_KEY}"
+            cd /tmp
+            cat <<'EOF' > access.json
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                        "s3:List*",
+                        "s3:Get*",
+                        "s3:AbortMultipartUpload",
+                        "s3:PutObject",
+                        "s3:DeleteObject"
+                    ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    "arn:aws:s3:::thanos",
+                    "arn:aws:s3:::thanos/*"
+                  ],
+                  "Sid": "BucketAccessForUser"
+                }
+              ]
+            }
+            EOF
+            mc admin policy create local thanos-access access.json
+
+            # Attachment will fail if the policy is already attached
+            mc admin policy attach local thanos-access --user="${CONSOLE_ACCESS_KEY}" || true
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-loki
+  namespace: minio-tenant
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      volumes:
+      - name: minio-config
+        secret:
+          secretName: storage-configuration
+      - name: k8s-ca
+        hostPath:
+          path: /etc/kubernetes/pki
+      containers:
+      - name: kubectl
+        image: quay.io/minio/minio
+        volumeMounts:
+          - mountPath: /etc/minio
+            name: minio-config
+          - mountPath: /root/.minio/certs/CAs
+            name: k8s-ca
+            subPath: ca.crt
+        env:
+          - name: BUCKET
+            value: loki
+          - name: CONSOLE_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: loki
+                key: CONSOLE_ACCESS_KEY
+          - name: CONSOLE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: loki
+                key: CONSOLE_SECRET_KEY
+        command: [/bin/bash, -c]
+        args:
+        - |
+            set -eu
+            . /etc/minio/config.env
+            mc alias set local https://minio.minio-tenant.svc.cluster.local "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+
+            mc mb ${BUCKET}
+            mc admin user add local "${CONSOLE_ACCESS_KEY}" "${CONSOLE_SECRET_KEY}"
+            cd /tmp
+            cat <<EOF > access.json
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Action": [
+                        "s3:List*",
+                        "s3:Get*",
+                        "s3:AbortMultipartUpload",
+                        "s3:PutObject",
+                        "s3:DeleteObject"
+                    ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    "arn:aws:s3:::${BUCKET}",
+                    "arn:aws:s3:::${BUCKET}/*"
+                  ],
+                  "Sid": "BucketAccessForUser"
+                }
+              ]
+            }
+            EOF
+            mc admin policy create local ${BUCKET}-access access.json
+
+            # Attachment will fail if the policy is already attached
+            mc admin policy attach local ${BUCKET}-access --user="${CONSOLE_ACCESS_KEY}" || true
+# ---
+# apiVersion: v1
+# kind: Secret
+# type: Opaque
+# metadata:
+#   name: storage-configuration
+#   namespace: minio-tenant  
+# data:
+#   config.env: ""
+---
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  labels:
+    app: minio
+  name: minio-default
+  namespace: minio-tenant
+spec:
+  # certConfig: {}
+  configuration:
+    name: storage-configuration
+  env:
+  - name: MINIO_PROMETHEUS_URL
+    value: http://thanos-query.thanos.svc.cluster.local.:9090
+  # externalCaCertSecret: []
+  # externalCertSecret: []
+  # externalClientCertSecrets: []
+  features:
+    bucketDNS: false
+  image: quay.io/minio/minio:RELEASE.2024-07-16T23-46-41Z
+  # imagePullSecret: {}
+  serviceMetadata:
+    consoleServiceAnnotations:
+      external-dns.alpha.kubernetes.io/hostname: minio.k8s.somemissing.info
+    minioServiceLabels:
+      scrapeMetrics: "true"
+  mountPath: /export
+  subPath: 'data'
+  podManagementPolicy: Parallel
+  pools:
+    - name: hdd-0
+      servers: 3
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      volumeClaimTemplate:
+        metadata:
+          name: data
+        spec:
+          storageClassName: libvirt-low
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 250Gi
+      volumesPerServer: 2
+    # - name: pool-2
+    #   servers: 3
+    #   resources:
+    #     limits:
+    #       cpu: 1000m
+    #       memory: 1Gi
+    #     requests:
+    #       cpu: 100m
+    #       memory: 256Mi
+    #   volumeClaimTemplate:
+    #     metadata:
+    #       name: data
+    #     spec:
+    #       accessModes:
+    #         - ReadWriteOnce
+    #       resources:
+    #         requests:
+    #           storage: 250Gi
+    #   volumesPerServer: 2
+  # priorityClassName: ''
+  requestAutoCert: true
+  # serviceAccountName: ''
+  # serviceMetadata:
+    # consoleServiceAnnotations: {}
+    # consoleServiceLabels: {}
+    # minioServiceAnnotations: {}
+    # minioServiceLabels: {}
+  users:
+    - name: default
+  prometheusOperator: false
