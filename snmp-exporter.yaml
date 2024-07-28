@@ -1,0 +1,161 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: snmp-exporter
+  namespace: monitoring
+  labels:
+    app: snmp-exporter
+spec:
+  ports:
+  - port: 9116
+    targetPort: 9116
+    protocol: TCP
+  selector:
+    app: snmp-exporter
+  type: ClusterIP
+
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: snmp-exporter-config
+  namespace: monitoring
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: snmp-exporter-config
+    template:
+      data:
+        snmp.merge.yml: |
+          auths:
+            tor-switch:
+              community: {{ .torSwitchCommunity }}
+              version: 2
+            home-ap:
+              community: {{ .homeApCommunity }}
+              version: 2
+  data:
+  - secretKey: torSwitchCommunity
+    remoteRef:
+      key: snmp-tor-switch-community
+  - secretKey: homeApCommunity
+    remoteRef:
+      key: snmp-home-ap-community
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snmp-exporter
+  namespace: monitoring
+  labels:
+    app: &appName snmp-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: *appName
+  template:
+    metadata:
+      labels:
+        app: *appName
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          # Prefer to schedule pods on the same node where Docker images
+          # have already been pulled
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - *appName
+              topologyKey: "kubernetes.io/hostname"
+      initContainers:
+      - name: snmp-exporter-copy-config
+        image: &snmpExporterImage prom/snmp-exporter:v0.26.0
+        command: ["cp", "/etc/snmp_exporter/snmp.yml", "/config/snmp.yml"]
+        volumeMounts:
+          - name: generated-config
+            mountPath: /config
+      - name: snmp-exporter-merge-config
+        image: mikefarah/yq:4
+        command: ["/bin/sh", "-ec"]
+        args:
+        - |
+          ORIG=/config/snmp.yml
+          NEW=/new/snmp.merge.yml
+          yq --inplace '. *n load("'"$NEW"'")' "$ORIG"
+        volumeMounts:
+          - name: generated-config
+            mountPath: /config
+          - name: snmp-exporter-config
+            mountPath: /new
+      containers:
+      - name: snmp-exporter
+        image: *snmpExporterImage
+        ports:
+        - containerPort: 9116
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 100m
+          limits:
+            memory: 128Mi
+            cpu: 250m
+        volumeMounts:
+        - name: generated-config
+          mountPath: /etc/snmp_exporter
+      volumes:
+      - name: generated-config
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Mi
+      - name: snmp-exporter-config
+        secret:
+          secretName: snmp-exporter-config
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: snmp-exporter
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app: snmp-exporter
+  endpoints:
+  - targetPort: &targetPort 9116
+    path: &path /snmp
+    interval: &interval 10s
+    relabelings: &relabelings
+      - sourceLabels: [__param_target]
+        targetLabel: instance
+      - regex: '(container|endpoint)'
+        action: labeldrop
+    params:
+      auth: [home-ap]
+      target: ["172.16.1.10"]
+      module: [if_mib,ip_mib,eap]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [tor-switch]
+      target: ["172.16.1.6"]
+      module: [if_mib,mikrotik]
