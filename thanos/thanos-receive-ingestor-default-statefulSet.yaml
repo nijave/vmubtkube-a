@@ -163,7 +163,9 @@ spec:
         hostPath:
           path: /etc/kubernetes/pki
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       labels:
         app.kubernetes.io/component: database-write-hashring
         app.kubernetes.io/instance: thanos-receive-ingestor-default

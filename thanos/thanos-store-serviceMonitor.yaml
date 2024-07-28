@@ -13,7 +13,8 @@ spec:
   endpoints:
   - port: http
     relabelings:
-    - separator: /
+    - action: replace
+      separator: /
       sourceLabels:
       - namespace
       - pod

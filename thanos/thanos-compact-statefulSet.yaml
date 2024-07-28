@@ -133,7 +133,9 @@ spec:
         hostPath:
           path: /etc/kubernetes/pki
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       labels:
         app.kubernetes.io/component: database-compactor
         app.kubernetes.io/instance: thanos-compact
