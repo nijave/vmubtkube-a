@@ -42,13 +42,11 @@ spec:
   - secretKey: torSwitchCommunity
     remoteRef:
       key: snmp-tor-switch-community
-      conversionStategy: Default
       decodingStrategy: None
       metadataPolicy: None
   - secretKey: homeApCommunity
     remoteRef:
       key: snmp-home-ap-community
-      conversionStategy: Default
       decodingStrategy: None
       metadataPolicy: None
 

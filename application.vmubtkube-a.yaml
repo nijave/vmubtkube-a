@@ -17,12 +17,12 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
     retry:
       backoff:
         duration: 5s
         factor: 2
         maxDuration: 3m0s
       limit: 2
-    syncOptions:
-    - PruneLast=true
-    - ServerSideApply=true

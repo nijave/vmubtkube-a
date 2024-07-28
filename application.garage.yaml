@@ -14,6 +14,9 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
   source:
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
     path: garage/

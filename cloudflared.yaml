@@ -14,7 +14,6 @@ spec:
   - secretKey: token
     remoteRef:
       key: cloudflared-token
-      conversionStategy: Default
       decodingStrategy: None
       metadataPolicy: None
 
