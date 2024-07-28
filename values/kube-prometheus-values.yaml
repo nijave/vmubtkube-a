@@ -1,0 +1,120 @@
+nameOverride: kp
+grafana:
+  service:
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
+  persistence:
+    enabled: true
+    storageClassName: libvirt
+  sidecar:
+    datasources:
+      url: http://thanos-query.thanos.svc.cluster.local.:9090
+  additionalDataSources:
+  - name: prometheus_vmubtkube-a
+    type: prometheus
+    url: http://{{ printf "%s-kp-prometheus.monitoring.svc" .Release.Name }}:9090
+prometheusOperator:
+  verticalPodAutoscaler:
+    enabled: true
+additionalPrometheusRulesMap:
+  blackbox-exporter-alerts:
+    groups:
+    - name: ./smoke-test.rules
+      rules:
+      - alert: BlackboxServiceProbeFailing
+        expr: max by (instance, target) (probe_success) != 1
+        for: 10m
+        annotations:
+          summary: A service is failing blackbox probing.
+    - name: ./certificates.rules
+      rules:
+      - alert: CertificatesNearExpiry
+        expr: |
+          ( probe_ssl_last_chain_expiry_timestamp_seconds - time() ) / 60 / 60 / 24 < 30
+        for: 5m
+        annotations:
+          summary: Certificates are nearing expiration.
+  deluge:
+    groups:
+    - name: ./deluge.rules
+      rules:
+      - alert: TooManyPausedTorrents
+        expr: |
+          max(deluge_torrents{state="paused"}) / max(deluge_torrents{state="total"}) > 0.25
+        for: 10m
+        annotations:
+          summary: Too many torrents are paused at the same time.
+
+prometheus:
+  service:
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
+  prometheusSpec:
+    image:
+      sha: "b1af68dd8294e71031a379ad312f2749724e2ad21c236009a1819fdb5573a72f"
+    prometheusExternalLabelNameClear: true
+    externalLabels:
+      cluster: vmubtkube-a
+      prometheus: vmubtkube-a
+    retention: 7d
+    retentionSize: 15GB
+    scrapeInterval: 15s
+    remoteWrite:
+    - url: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
+      # remoteTimeout: 90s
+      remoteTimeout: 300s
+      # writeRelabelConfigs:
+      #   - sourceLabels: ["__name__"]
+      #     targetLabel: cluster
+      #     replacement: vmubtkube-a
+      headers:
+        THANOS-TENANT: vmubtkube-a
+      metadataConfig:
+        send: false
+      sendNativeHistograms: true
+      queueConfig:
+        batchSendDeadline: 30s
+        # maxSamplesPerSend: 5000
+        maxSamplesPerSend: 2500
+        minBackoff: 25ms
+        maxBackoff: 500ms
+        retryOnRateLimit: true
+        sampleAgeLimit: 5m
+      writeRelabelConfigs:
+        - sourceLabels: [pod, server, job]
+          targetLabel: job
+          # Require ; and at least 1 other character (both pod and server can't be empty)
+          regex: '.{2,};minio|scrapeConfig/minio-tenant/minio.*'
+          replacement: minio-default-minio-job
+    resources:
+      limits:
+        memory: 4Gi
+        cpu: 2000m
+      requests:
+        memory: 3Gi
+        cpu: 1250m
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests:
+              storage: 20Gi
+          storageClassName: libvirt-xfs
+    scrapeConfigSelector:
+      matchLabels:
+        release: prom
+    additionalScrapeConfigs:
+    - job_name: 'deluge'
+      static_configs:
+      - targets: ['vmcent74deluge.homelab.somemissing.info:9354']
+    - job_name: jellyfin
+      static_configs:
+      - targets: ['jellyfin.apps.somemissing.info:80']
+    - job_name: 'opnsense'
+      scrape_interval: 10s
+      static_configs:
+      - targets:
+        - 'opnsense.homelab.somemissing.info:9100'
+        - 'opnsense.homelab.somemissing.info:9273'
+          
+    

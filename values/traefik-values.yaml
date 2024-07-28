@@ -1,0 +1,28 @@
+deployment:
+  enabled: true
+  replicas: 2
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+service:
+  enabled: true
+  # type: ClusterIP
+  type: LoadBalancer
+
+topologySpreadConstraints:
+ - labelSelector:
+     matchLabels:
+       app: '{{ template "traefik.name" . }}'
+   maxSkew: 1
+   topologyKey: kubernetes.io/hostname
+   whenUnsatisfiable: DoNotSchedule
+
+providers:
+  kubernetesIngress:
+    enabled: true
+    allowExternalNameServices: true
+    publishedService:
+      enabled: true
+      # pathOverride: traefik-v2/traefik

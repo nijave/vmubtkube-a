@@ -1,0 +1,177 @@
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    add: ["NET_RAW"]
+podSecurityContext:
+  sysctls:
+    - name: net.ipv4.ping_group_range
+      value: "0 2147483647"
+serviceMonitor:
+  enabled: true
+  selfMonitor:
+    enabled: true
+    labels:
+      release: prom
+  defaults:
+    labels:
+      release: prom
+    interval: 10s
+    scrapeTimeout: 5s
+  targets:
+    # DNS
+    - name: dns-opnsense
+      url: 172.16.3.254
+      module: opnsense.homelab.somemissing.info
+    - name: dns-mysql
+      url: 172.16.3.254
+      module: mysql.apps.somemissing.info
+    - name: dns-web
+      url: 172.16.3.254
+      module: web.apps.somemissing.info
+    # Email (IMAP, SMTP)
+    - name: imap.somemissing.info
+      url: imap.somemissing.info:143
+      module: imap_starttls
+    - name: smtp.somemissing.info
+      url: smtp.somemissing.info:25
+      module: smtp_starttls
+    # Web (HTTP)
+    - name: nickv.me
+      url: https://nickv.me
+      module: http_3xx
+    - name: rss.nickv.me
+      url: https://rss.nickv.me
+      module: http_2xx
+    - name: jellyfin
+      url: http://jellyfin.apps.somemissing.info/web/
+      module: http_2xx
+    - name: somemissing.info
+      url: https://somemissing.info
+      module: http_2xx
+    - name: web.apps.somemissing.info
+      url: https://web.apps.somemissing.info
+      module: http_2xx
+verticalPodAutoscaler:
+  enabled: true
+configReloader:
+  enabled: true
+config:
+  modules:
+    # Custom modules
+    opnsense.homelab.somemissing.info:
+      prober: dns
+      dns:
+        query_name: opnsense.homelab.somemissing.info
+        query_type: A
+    mysql.apps.somemissing.info:
+      prober: dns
+      dns:
+        query_name: mysql.apps.somemissing.info
+        query_type: A
+    web.apps.somemissing.info:
+      prober: dns
+      dns:
+        query_name: web.apps.somemissing.info
+        query_type: A
+    
+    http_3xx:
+      prober: http
+      http:
+        follow_redirects: false
+        preferred_ip_protocol: "ip4"
+        valid_status_codes: [301, 302, 303, 304, 307, 308]
+    icmp_ipv4:
+      prober: icmp
+      icmp:
+        preferred_ip_protocol: ip4
+
+    # Modules from examples
+    imap_starttls:
+      prober: tcp
+      timeout: 5s
+      tcp:
+        query_response:
+          - expect: "OK.*STARTTLS"
+          - send: ". STARTTLS"
+          - expect: "OK"
+          - starttls: true
+          - send: ". capability"
+          - expect: "CAPABILITY IMAP4rev1"
+    smtp_starttls:
+      prober: tcp
+      timeout: 5s
+      tcp:
+        query_response:
+          - expect: "^220 ([^ ]+) ESMTP (.+)$"
+          - send: "EHLO prober\r"
+          - expect: "^250-STARTTLS"
+          - send: "STARTTLS\r"
+          - expect: "^220"
+          - starttls: true
+          - send: "EHLO prober\r"
+          - expect: "^250-AUTH"
+          - send: "QUIT\r"
+    irc_banner:
+      prober: tcp
+      timeout: 5s
+      tcp:
+        query_response:
+          - send: "NICK prober"
+          - send: "USER prober prober prober :prober"
+          - expect: "PING :([^ ]+)"
+            send: "PONG ${1}"
+          - expect: "^:[^ ]+ 001"
+  
+    # Default modules
+    http_2xx:
+      prober: http
+      http:
+        preferred_ip_protocol: "ip4"
+    http_post_2xx:
+      prober: http
+      http:
+        method: POST
+        preferred_ip_protocol: "ip4"
+    tcp_connect:
+      prober: tcp
+    pop3s_banner:
+      prober: tcp
+      tcp:
+        query_response:
+        - expect: "^+OK"
+        tls: true
+        tls_config:
+          insecure_skip_verify: false
+    grpc:
+      prober: grpc
+      grpc:
+        tls: true
+        preferred_ip_protocol: "ip4"
+    grpc_plain:
+      prober: grpc
+      grpc:
+        tls: false
+        service: "service1"
+    ssh_banner:
+      prober: tcp
+      tcp:
+        query_response:
+        - expect: "^SSH-2.0-"
+        - send: "SSH-2.0-blackbox-ssh-check"
+    irc_banner:
+      prober: tcp
+      tcp:
+        query_response:
+        - send: "NICK prober"
+        - send: "USER prober prober prober :prober"
+        - expect: "PING :([^ ]+)"
+          send: "PONG ${1}"
+        - expect: "^:[^ ]+ 001"
+    icmp:
+      prober: icmp
+    icmp_ttl5:
+      prober: icmp
+      timeout: 5s
+      icmp:
+        ttl: 5

@@ -1,0 +1,78 @@
+mode: deployment
+image:
+  repository: docker.io/otel/opentelemetry-collector-k8s
+
+presets:
+  kubernetesAttributes:
+    enabled: true
+
+config:
+  processors:
+    batch:
+      send_batch_size: 512
+      timeout: 5s
+    tail_sampling:
+      decision_wait: 60s
+      policies:
+      - name: random
+        type: probabilistic
+        probabilistic: {sampling_percentage: 10}
+      - name: error
+        type: status_code
+        status_code: {status_codes: [ERROR]}
+
+  receivers:
+    jaeger: null
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+    prometheus: null
+    zipkin: null
+
+  exporters:
+    debug: {}
+    otlp:
+      endpoint: jaeger-collector.monitoring:4317
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      logs: null
+      metrics: null
+      traces:
+        receivers: [otlp]
+        exporters: 
+          - debug
+          - otlp
+          # - otlphttp
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 10m
+    memory: 128Mi
+
+rollout:
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 100%
+
+service:
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
