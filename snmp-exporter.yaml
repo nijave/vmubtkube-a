@@ -143,7 +143,8 @@ spec:
     path: &path /snmp
     interval: &interval 10s
     relabelings: &relabelings
-      - sourceLabels: [__param_target]
+      - action: replace
+        sourceLabels: [__param_target]
         targetLabel: instance
       - regex: '(container|endpoint)'
         action: labeldrop
