@@ -1,0 +1,113 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provision-bucket
+  namespace: garage
+
+# Pod exec
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: garage-exec
+  namespace: garage
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: garage-exec-role-binding
+  namespace: garage
+subjects:
+- kind: ServiceAccount
+  name: provision-bucket
+  namespace: garage
+roleRef:
+  kind: Role
+  name: garage-exec
+  apiGroup: rbac.authorization.k8s.io
+
+# Secret create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: provision-secret-role
+  namespace: thanos
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: provision-secret-role-binding
+  namespace: thanos
+subjects:
+- kind: ServiceAccount
+  name: provision-bucket
+  namespace: garage
+roleRef:
+  kind: Role
+  name: provision-secret-role
+  apiGroup: rbac.authorization.k8s.io
+
+
+# Job
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-thanos-bucket
+  namespace: garage
+spec:
+  template:
+    spec:
+      serviceAccountName: provision-bucket
+      containers:
+      - name: kubectl
+        image: docker.io/bitnami/kubectl:1.29
+        command: [/bin/bash, -c]
+        args:
+        - |
+          ENDPOINT=obj.k8s.somemissing.info.
+
+          set -e
+
+          if ! kubectl exec --stdin --tty -n garage garage-0 -- ./garage key list | grep "^ " | grep -q thanos-app-key ; then
+            kubectl exec --stdin --tty -n garage garage-0 -- ./garage key create thanos-app-key
+          fi
+
+          THANOS_CREDS=$(kubectl exec --stdin --tty -n garage garage-0 -- ./garage key info --show-secret thanos-app-key)
+
+          cat <<EOF | kubectl create -f - || true
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: thanos-objectstorage
+            namespace: thanos
+          type: Opaque
+          stringData:
+            thanos.yaml: |
+              type: S3
+              config:
+                endpoint: $ENDPOINT:80
+                insecure: true
+                bucket: thanos
+                access_key: $(echo "$THANOS_CREDS" | grep "Key ID:" | awk -F": " '{print $2}')
+                secret_key: $(echo "$THANOS_CREDS" | grep "Secret key:" | awk -F": " '{print $2}')
+                http_config:
+                  tls_config:
+                    ca_file: /etc/kubernetes/pki/ca.crt
+          EOF
+
+          exit 0
+      restartPolicy: OnFailure
