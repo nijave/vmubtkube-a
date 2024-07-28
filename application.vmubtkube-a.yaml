@@ -6,9 +6,9 @@ metadata:
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
+  project: default
   destination:
     server: https://kubernetes.default.svc
-  project: default
   source:
     path: ./
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git

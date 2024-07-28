@@ -1,0 +1,39 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "garage.fullname" . }}-provision-secret
+  labels:
+    {{- include "garage.labels" . | nindent 4 }}
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ include "garage.serviceAccountName" . }}
+      restartPolicy: OnFailure
+      containers:
+      - name: kubectl
+        image: docker.io/bitnami/kubectl:1.29
+        command: [/bin/bash, -c]
+        args:
+        - |
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "garage.rpcSecretName" . }}
+          data:
+            rpcSecret: $(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 | base64 -w 0)
+          EOF
+
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: {{ include "garage.adminTokenSecretName" . }}
+          data:
+            adminToken: $(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32 | base64 -w 0)
+          EOF
+
+          exit 0

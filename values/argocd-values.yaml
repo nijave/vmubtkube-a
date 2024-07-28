@@ -7,17 +7,6 @@ redis-ha:
 applicationSet:
   replicas: 2
 
-# configs:
-#   clusterCredentials:
-#     vmubtkuba-a:
-#       server: https://...
-
-# configs:
-#   repositories:
-#     vmubtkube-a:
-#       url: ssh://git@github.com/nijave/vmubtkube-a.git
-#       name: vmubtkube-a
-
 controller:
   replicas: 1
   metrics:

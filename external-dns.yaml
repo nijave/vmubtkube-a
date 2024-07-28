@@ -67,6 +67,9 @@ spec:
   - secretKey: tsig-secret
     remoteRef:
       key: external-dns-opnsense
+      conversionStategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: garage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+  source:
+    repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    path: garage/
+    targetRevision: HEAD
+    helm:
+      releaseName: garage
+      valuesObject:
+        garage:
+          # consistencyMode: "degraded"
+          replicationFactor: 3
+        deployment:
+          replicaCount: 5
+        persistence:
+          meta:
+            storageClass: libvirt-high
+            size: 16Gi
+          data:
+            storageClass: libvirt-low
+            size: 500Gi
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: 1000m
+          requests:
+            memory: 512Mi
+            cpu: 100m
+        service:
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: obj.k8s.somemissing.info
+        monitoring:
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+              labels:
+                release: prom
+          tracing:
+            sink: http://otel-collector-opentelemetry-collector.monitoring:4317
