@@ -1,0 +1,102 @@
+# helm repo add argo https://argoproj.github.io/argo-helm
+# helm install -n argocd argocd argo/argo-cd -f values/argocd-values.yaml
+# helm upgrade -n argocd argocd argo/argo-cd --reset-values -f values/argocd-values.yaml
+redis-ha:
+  enabled: true
+
+applicationSet:
+  replicas: 2
+
+# configs:
+#   clusterCredentials:
+#     vmubtkuba-a:
+#       server: https://...
+
+# configs:
+#   repositories:
+#     vmubtkube-a:
+#       url: ssh://git@github.com/nijave/vmubtkube-a.git
+#       name: vmubtkube-a
+
+controller:
+  replicas: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prom
+    # rules:
+    #   enabled: true
+    #   additionalLabels:
+    #     release: prom
+
+dex:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prom
+
+redis:
+  exporter:
+    enabled: true
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prom
+
+server:
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prom
+
+repoServer:
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: prom
+
+extraObjects:
+- apiVersion: external-secrets.io/v1beta1
+  kind: ExternalSecret
+  metadata:
+    name: argocd-repo-vmubtkube-a
+    namespace: argocd
+  spec:
+    refreshInterval: 300s
+    secretStoreRef:
+      name: default
+      kind: ClusterSecretStore
+    target:
+      name: argocd-repo-vmubtkube-a
+      template:
+        engineVersion: v2
+        metadata:
+          labels:
+            argocd.argoproj.io/secret-type: repository
+        data:
+          name: vmubtkube-a
+          url: ssh://git@github.com/nijave/vmubtkube-a.git
+          sshPrivateKey: |
+            {{ `{{ .sshPrivateKey }}` }}
+          insecure: "false"
+          enableLfs: "true"
+    data:
+    - secretKey: sshPrivateKey
+      remoteRef:
+        key: github-vmubtkube-a-deploy-key
