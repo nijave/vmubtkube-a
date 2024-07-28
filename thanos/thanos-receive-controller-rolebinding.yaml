@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: thanos-receive-controller
+  namespace: thanos
+subjects:
+- kind: ServiceAccount
+  name: thanos-receive-controller
+  namespace: thanos
+roleRef:
+  kind: Role
+  name: thanos-receive-controller
+  apiGroup: rbac.authorization.k8s.io

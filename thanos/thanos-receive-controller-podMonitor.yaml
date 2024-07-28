@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    app.kubernetes.io/name: thanos-receive-controller
+  name: thanos-receive-controller
+  namespace: thanos
+spec:
+  podMetricsEndpoints:
+  - port: internal
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thanos-receive-controller

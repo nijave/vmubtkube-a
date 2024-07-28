@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: thanos-receive-router
+    app.kubernetes.io/instance: thanos-receive
+    app.kubernetes.io/name: thanos-receive
+    app.kubernetes.io/version: v0.35.1
+  name: thanos-receive-router
+  namespace: thanos
+spec:
+  strategy:  
+    type: RollingUpdate  
+    rollingUpdate:  
+      maxSurge: 2
+  minReadySeconds: 15
+  # replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: thanos-receive-router
+      app.kubernetes.io/instance: thanos-receive
+      app.kubernetes.io/name: thanos-receive
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: thanos-receive-router
+        app.kubernetes.io/instance: thanos-receive
+        app.kubernetes.io/name: thanos-receive
+        app.kubernetes.io/version: v0.35.1
+    spec:
+      containers:
+      - args:
+        - receive
+        - --log.level=info
+        - --log.format=logfmt
+        - --grpc-grace-period=15s
+        - --http-grace-period=15s
+        - --grpc-address=0.0.0.0:10901
+        - --http-address=0.0.0.0:10902
+        - --remote-write.address=0.0.0.0:19291
+        - --receive.replication-factor=3
+        - --receive.forward.async-workers=100
+        - --receive.hashrings-algorithm=ketama
+        - --receive.hashrings-file=/var/lib/thanos-receive/hashrings.json
+        - --receive.hashrings-file-refresh-interval=5s
+        - --receive-forward-timeout=5m
+        - --receive-forward-max-backoff=15s
+        - --label=thanos_replica="$(NAME)"
+        - --label=receive="true"
+        - --tracing.config=$(TRACING_CONFIG)
+        env:
+        - name: NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: HOST_IP_ADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: TRACING_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: thanos-tracing
+              key: tracing.yaml
+        image: registry.apps.nickv.me/thanos:v0.35.1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 8
+          httpGet:
+            path: /-/healthy
+            port: 10902
+            scheme: HTTP
+          periodSeconds: 30
+        name: thanos-receive
+        ports:
+        - containerPort: 10901
+          name: grpc
+        - containerPort: 10902
+          name: http
+        - containerPort: 19291
+          name: remote-write
+        readinessProbe:
+          failureThreshold: 20
+          httpGet:
+            path: /-/ready
+            port: 10902
+            scheme: HTTP
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 2Gi
+            cpu: 750m
+          requests:
+            memory: 200Mi
+            cpu: 500m
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /var/lib/thanos-receive
+          name: hashring-config
+      nodeSelector:
+        kubernetes.io/os: linux
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+      serviceAccountName: thanos-receive-router
+      terminationGracePeriodSeconds: 65
+      volumes:
+      - configMap:
+          name: thanos-receive-generated
+        name: hashring-config

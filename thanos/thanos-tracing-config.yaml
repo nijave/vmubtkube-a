@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: thanos-tracing
+  namespace: thanos
+data:
+  tracing.yaml: |
+    type: OTLP
+    config:
+      client_type: "grpc"
+      service_name: "thanos"
+      resource_attributes: {}
+      reconnection_period: 0s
+      compression: ""
+      insecure: true
+      endpoint: otel-collector-opentelemetry-collector.monitoring:4317
+      timeout: 0s
+      retry_config:
+        retry_enabled: true
+        # retry_initial_interval: 0s
+        # retry_max_interval: 0s
+        # retry_max_elapsed_time: 0s
+      sampler_type: "alwayssample"
+      sampler_param: ""
+  

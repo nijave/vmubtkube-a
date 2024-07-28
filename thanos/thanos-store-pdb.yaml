@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: thanos-store
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: object-store-gateway
+      app.kubernetes.io/instance: thanos-store
+      app.kubernetes.io/name: thanos-store

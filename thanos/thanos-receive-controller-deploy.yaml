@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thanos-receive-controller
+  labels:
+    app.kubernetes.io/name: thanos-receive-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thanos-receive-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thanos-receive-controller
+    spec:
+      serviceAccount: thanos-receive-controller
+      containers:
+      - name: thanos-receive-controller
+        args:
+        - --namespace=thanos
+        - --configmap-name=thanos-receive
+        - --configmap-generated-name=thanos-receive-generated
+        - --file-name=hashrings.json
+        - --allow-only-ready-replicas
+        - --allow-dynamic-scaling
+        - --scale-timeout=15s
+        # Newer version seems to have an RBAC error creating configmap
+        image: quay.io/observatorium/thanos-receive-controller:main-2023-11-06-c57219e 
+        ports:
+          - containerPort: 8080
+            name: internal

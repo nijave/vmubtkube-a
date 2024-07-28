@@ -1,0 +1,22 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: thanos
+  name: thanos-receive-controller
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["thanos-receive", "thanos-receive-generated"]
+  verbs: ["get", "watch", "create", "update"]
+
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+
+- apiGroups: ["apps"]
+  resources: ["statefulsets"]
+  verbs: ["get", "list", "watch"]
