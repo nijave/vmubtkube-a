@@ -107,6 +107,7 @@ kind: Secret
 apiVersion: v1
 metadata:
   name: es-roles
+  namespace: elasticsearch
 stringData:
   roles.yml: |-
     jaeger-role:
