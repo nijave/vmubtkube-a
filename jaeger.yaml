@@ -32,6 +32,8 @@ spec:
           enabled: true
           skip-host-verify: true
         server-urls: https://default-es-http.elasticsearch.svc.cluster.local.:9200
+  ingress:
+    enabled: false
 ---
 apiVersion: v1
 kind: Service
