@@ -17,6 +17,7 @@ spec:
     syncOptions:
     - PruneLast=true
     - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
   source:
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
     path: garage/

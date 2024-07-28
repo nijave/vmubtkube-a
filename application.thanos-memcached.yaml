@@ -17,6 +17,7 @@ spec:
     syncOptions:
     - PruneLast=true
     - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
   source:
     chart: memcached
     repoURL: https://charts.bitnami.com/bitnami
