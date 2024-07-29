@@ -27,3 +27,8 @@ spec:
         factor: 2
         maxDuration: 3m0s
       limit: 2
+  ignoreDifferences:
+  - group: external-secrets.io
+    kind: ExternalSecret
+    jqPathExpressions:
+    - ".spec.data.remoteRef[].conversionStrategy"
