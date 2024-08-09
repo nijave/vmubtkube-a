@@ -1,8 +1,18 @@
+---
+apiVersion: operators.coreos.com/v1alpha2
+kind: OperatorGroup
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  targetNamespaces:
+  - minio-tenant
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: minio
-  namespace: operators
+  namespace: minio
 spec:
   channel: stable
   name: minio-operator

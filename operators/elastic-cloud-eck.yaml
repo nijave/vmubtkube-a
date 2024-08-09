@@ -1,8 +1,18 @@
+---
+apiVersion: operators.coreos.com/v1alpha2
+kind: OperatorGroup
+metadata:
+  name: elasticsearch
+  namespace: elasticsearch
+spec:
+  targetNamespaces:
+  - elasticsearch
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: elastic-cloud-kubernetes
-  namespace: operators
+  namespace: elasticsearch
 spec:
   channel: stable
   name: elastic-cloud-eck
