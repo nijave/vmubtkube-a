@@ -50,6 +50,10 @@ garage:
     consistency_mode = "{{ .Values.garage.consistencyMode }}"
     replication_factor = {{ .Values.garage.replicationFactor }}
 
+    metadata_fsync = true
+    data_fsync = true
+    metadata_auto_snapshot_interval = "1h"
+
     compression_level = {{ .Values.garage.compressionLevel }}
 
     rpc_bind_addr = "{{ .Values.garage.rpcBindAddr }}"
