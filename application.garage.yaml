@@ -30,6 +30,7 @@ spec:
           replicationFactor: 3
         deployment:
           replicaCount: 5
+          podManagementPolicy: Parallel
         persistence:
           meta:
             storageClass: libvirt-high

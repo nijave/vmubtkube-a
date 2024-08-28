@@ -27,6 +27,29 @@ spec:
       name: http-admin
   selector:
     {{- include "garage.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "garage.fullname" . }}-discovery
+  annotations:
+    {{- .Values.service.annotations | toYaml | nindent 4 }}
+  labels:
+    {{- include "garage.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # Instances are only ready once they're able to form a quorum.
+  # As such, there needs to be a service that will publish all running
+  # instances so they can find reach other before they're ready
+  publishNotReadyAddresses: true
+  ports:
+    - port: 80
+      targetPort: 3900
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "garage.selectorLabels" . | nindent 4 }}
 {{- if .Values.monitoring.metrics.enabled }}
 ---
 apiVersion: v1
