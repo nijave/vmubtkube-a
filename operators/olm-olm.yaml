@@ -49,7 +49,7 @@ metadata:
 spec:
   strategy:
     type: RollingUpdate
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: olm-operator
@@ -108,7 +108,7 @@ metadata:
 spec:
   strategy:
     type: RollingUpdate
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: catalog-operator
@@ -273,7 +273,7 @@ spec:
             rollingUpdate:
               maxUnavailable: 1
               maxSurge: 1
-          replicas: 2
+          replicas: 0
           selector:
             matchLabels:
               app: packageserver
