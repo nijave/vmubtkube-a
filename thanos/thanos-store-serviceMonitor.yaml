@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: object-store-gateway
     app.kubernetes.io/instance: thanos-store
     app.kubernetes.io/name: thanos-store
-    app.kubernetes.io/version: v0.35.1
+    app.kubernetes.io/version: v0.36.1
     release: prom
   name: thanos-store
   namespace: thanos

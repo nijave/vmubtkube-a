@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: database-write-hashring
     app.kubernetes.io/instance: thanos-receive-ingestor-default
     app.kubernetes.io/name: thanos-receive
-    app.kubernetes.io/version: v0.35.1
+    app.kubernetes.io/version: v0.36.1
     controller.receive.thanos.io: thanos-receive-controller
     controller.receive.thanos.io/hashring: default
   name: thanos-receive-ingestor-default
@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/component: database-write-hashring
         app.kubernetes.io/instance: thanos-receive-ingestor-default
         app.kubernetes.io/name: thanos-receive
-        app.kubernetes.io/version: v0.35.1
+        app.kubernetes.io/version: v0.36.1
         controller.receive.thanos.io: thanos-receive-controller
         controller.receive.thanos.io/hashring: default
     spec:
@@ -76,7 +76,7 @@ spec:
         - --remote-write.address=0.0.0.0:19291
         - --tsdb.path=/var/thanos/receive
         - --tsdb.retention=8h
-        - --tsdb.max-retention-bytes=16GB
+        - --tsdb.max-retention-bytes=15GB
         - --tsdb.memory-snapshot-on-shutdown
         - --tsdb.enable-native-histograms
         - --tsdb.too-far-in-future.time-window=30s
@@ -111,7 +111,7 @@ spec:
             configMapKeyRef:
               name: thanos-tracing
               key: tracing.yaml
-        image: registry.apps.nickv.me/thanos:v0.35.1
+        image: registry.apps.nickv.me/thanos:v0.36.1
         imagePullPolicy: IfNotPresent
         name: thanos-receive
         ports:
