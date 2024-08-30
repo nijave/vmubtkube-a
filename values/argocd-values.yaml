@@ -48,6 +48,12 @@ server:
       enabled: true
       additionalLabels:
         release: prom
+  service:
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: argocd.k8s.somemissing.info
+  certificate:
+    additionalHosts:
+    - argocd.k8s.somemissing.info
 
 repoServer:
   autoscaling:
