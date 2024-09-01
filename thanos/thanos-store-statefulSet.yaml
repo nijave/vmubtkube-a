@@ -84,6 +84,12 @@ spec:
               key: tracing.yaml
         image: registry.apps.nickv.me/thanos:v0.36.1
         imagePullPolicy: IfNotPresent
+        name: thanos-store
+        ports:
+        - containerPort: 10901
+          name: grpc
+        - containerPort: 10902
+          name: http
         livenessProbe:
           failureThreshold: 20
           httpGet:
@@ -92,14 +98,8 @@ spec:
             scheme: HTTP
           periodSeconds: 15
           timeoutSeconds: 3
-        name: thanos-store
-        ports:
-        - containerPort: 10901
-          name: grpc
-        - containerPort: 10902
-          name: http
         readinessProbe:
-          failureThreshold: 20
+          failureThreshold: 3
           httpGet:
             path: /-/ready
             port: 10902
