@@ -39,14 +39,14 @@ spec:
         args:
         - /run.sh
         - -m
-        - "256"
+        - "512"
         resources:
           requests:
             cpu: 50m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
             memory: 512Mi
+          limits:
+            cpu: 750m
+            memory: 600Mi
         pdb:
           create: true
           minAvailable: 0 # not HA
