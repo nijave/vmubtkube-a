@@ -45,7 +45,7 @@ spec:
             cpu: 50m
             memory: 512Mi
           limits:
-            cpu: 750m
+            cpu: 1250m
             memory: 600Mi
         pdb:
           create: true
