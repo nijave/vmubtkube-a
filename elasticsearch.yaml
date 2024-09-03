@@ -195,7 +195,7 @@ spec:
                   cpu: 300m
                 limits:
                   memory: 2Gi
-                  cpu: 600m
+                  cpu: 750m
 ---
 apiVersion: kibana.k8s.elastic.co/v1
 kind: Kibana
