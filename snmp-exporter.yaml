@@ -156,11 +156,11 @@ spec:
       auth: [home-ap]
       target: ["172.16.1.10"]
       module: [if_mib,ip_mib,eap]
-  - targetPort: *targetPort
-    path: *path
-    interval: *interval
-    relabelings: *relabelings
-    params:
-      auth: [tor-switch]
-      target: ["172.16.1.6"]
-      module: [if_mib,mikrotik]
+  # - targetPort: *targetPort
+  #   path: *path
+  #   interval: *interval
+  #   relabelings: *relabelings
+  #   params:
+  #     auth: [tor-switch]
+  #     target: ["172.16.1.6"]
+  #     module: [if_mib,mikrotik]
