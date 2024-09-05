@@ -21,12 +21,14 @@ controller:
     #     release: prom
 
 dex:
-  metrics:
-    enabled: true
-    serviceMonitor:
-      enabled: true
-      additionalLabels:
-        release: prom
+  # Not sure why this is enabled by default... https://github.com/argoproj/argo-helm/issues/615
+  enabled: false
+  # metrics:
+  #   enabled: true
+  #   serviceMonitor:
+  #     enabled: true
+  #     additionalLabels:
+  #       release: prom
 
 redis:
   exporter:
