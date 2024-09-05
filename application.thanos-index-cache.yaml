@@ -39,11 +39,11 @@ spec:
         args:
         - /run.sh
         - -m
-        - "512"
+        - "256"
         resources:
           requests:
             cpu: 50m
-            memory: 512Mi
+            memory: 256Mi
           limits:
             cpu: 1250m
             memory: 600Mi

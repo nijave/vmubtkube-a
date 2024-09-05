@@ -67,7 +67,7 @@ spec:
           valueFrom:
             secretKeyRef:
               key: cache.yaml
-              name: thanos-store-cachingbucket
+              name: thanos-store-caching-bucket
         - name: INDEX_CACHE_CONFIG
           valueFrom:
             secretKeyRef:

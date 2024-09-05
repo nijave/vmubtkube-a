@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: thanos-memcached
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: thanos
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: memcached
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: 7.4.9
+    helm:
+      releaseName: caching-bucket
+      valuesObject:
+        architecture: standalone
+        # architecture: high-availability
+        # autoscaling:
+        #   enabled: true
+        #   minReplicas: 1
+        #   maxReplicas: 3
+        #   targetCPU: 400
+        #   targetMemory: 200
+        service:
+          type: ClusterIP
+          clusterIP: None
+        args:
+        - /run.sh
+        - -m
+        - "256"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: 1250m
+            memory: 600Mi
+        pdb:
+          create: true
+          minAvailable: 0 # not HA
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
+            interval: 10s
+            labels:
+              release: prom
