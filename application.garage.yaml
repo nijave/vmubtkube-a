@@ -29,7 +29,7 @@ spec:
           repository: registry.apps.nickv.me/garage
           tag: v1.0.0-615698df
         garage:
-          # consistencyMode: "degraded"
+          consistencyMode: "degraded"
           replicationFactor: 3
         deployment:
           replicaCount: 5
