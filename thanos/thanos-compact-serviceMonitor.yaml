@@ -6,6 +6,7 @@ metadata:
     app.kubernetes.io/instance: thanos-compact
     app.kubernetes.io/name: thanos-compact
     app.kubernetes.io/version: v0.36.1
+    release: prom
   name: thanos-compact
   namespace: thanos
 spec:
