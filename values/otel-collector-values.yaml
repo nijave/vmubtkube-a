@@ -12,7 +12,7 @@ config:
       send_batch_size: 512
       timeout: 5s
     tail_sampling:
-      decision_wait: 60s
+      decision_wait: 300s
       policies:
       - name: random
         type: probabilistic
