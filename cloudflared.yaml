@@ -13,6 +13,7 @@ spec:
   data:
   - secretKey: token
     remoteRef:
+      conversionStrategy: Default
       key: cloudflared-token
       decodingStrategy: None
       metadataPolicy: None
