@@ -66,6 +66,7 @@ spec:
   data:
   - secretKey: tsig-secret
     remoteRef:
+      conversionStrategy: Default
       key: external-dns-opnsense
       decodingStrategy: None
       metadataPolicy: None

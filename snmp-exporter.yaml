@@ -32,20 +32,22 @@ spec:
       data:
         snmp.merge.yml: |
           auths:
-            tor-switch:
-              community: {{ .torSwitchCommunity }}
-              version: 2
+            #tor-switch:
+            #  community: {{ .torSwitchCommunity }}
+            #  version: 2
             home-ap:
               community: {{ .homeApCommunity }}
               version: 2
   data:
   - secretKey: torSwitchCommunity
     remoteRef:
+      conversionStrategy: Default
       key: snmp-tor-switch-community
       decodingStrategy: None
       metadataPolicy: None
   - secretKey: homeApCommunity
     remoteRef:
+      conversionStrategy: Default
       key: snmp-home-ap-community
       decodingStrategy: None
       metadataPolicy: None
