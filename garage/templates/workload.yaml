@@ -62,6 +62,10 @@ spec:
               secretKeyRef:
                 name: {{ include "garage.adminTokenSecretName" . }}
                 key: adminToken
+          - name: OTEL_BSP_MAX_QUEUE_SIZE
+            value: "8192"
+          - name: OTEL_BSP_SCHEDULE_DELAY
+            value: "250" # ms
           ports:
             - containerPort: 3900
               name: s3-api
