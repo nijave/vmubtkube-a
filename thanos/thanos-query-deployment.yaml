@@ -59,7 +59,7 @@ spec:
         - --query.auto-downsampling
         - --enable-auto-gomemlimit
         - --query.timeout=5m
-        - --query.max-concurrent=20
+        - --query.max-concurrent=10
         - --tracing.config=$(TRACING_CONFIG)
         env:
         - name: HOST_IP_ADDRESS
