@@ -1,6 +1,24 @@
 # helm repo add argo https://argoproj.github.io/argo-helm
 # helm install -n argocd argocd argo/argo-cd -f values/argocd-values.yaml
 # helm upgrade -n argocd argocd argo/argo-cd --reset-values -f values/argocd-values.yaml
+configs:
+  cm:
+    resource.customizations.knownTypeFields.jaegertracing.io_Jaeger: |
+      - field: spec.agent.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.allInOne.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.collector.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.ingester.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.ingress.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.query.resources
+        type: core/v1/ResourceRequirements
+      - field: spec.resources
+        type: core/v1/ResourceRequirements
+
 redis-ha:
   enabled: true
 
