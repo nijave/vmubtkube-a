@@ -62,10 +62,13 @@ spec:
               secretKeyRef:
                 name: {{ include "garage.adminTokenSecretName" . }}
                 key: adminToken
+          # https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
           - name: OTEL_BSP_MAX_QUEUE_SIZE
-            value: "8192"
+            value: "65536"
           - name: OTEL_BSP_SCHEDULE_DELAY
-            value: "250" # ms
+            value: "25" # ms
+          - name: OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+            value: "1024"
           ports:
             - containerPort: 3900
               name: s3-api
