@@ -9,6 +9,7 @@ grafana:
   sidecar:
     datasources:
       url: http://thanos-query.thanos.svc.cluster.local.:9090
+      timeout: 300
   additionalDataSources:
   - name: prometheus_vmubtkube-a
     type: prometheus
