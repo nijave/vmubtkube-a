@@ -54,7 +54,7 @@ spec:
         - --objstore.config=$(OBJSTORE_CONFIG)
         - --index-cache.config=$(INDEX_CACHE_CONFIG)
         - --store.caching-bucket.config=$(BUCKET_CACHE_CONFIG)
-        - --chunk-pool-size=1GB
+        - --chunk-pool-size=128MB
         - --max-time=-4h
         - --tracing.config=$(TRACING_CONFIG)
         env:
@@ -108,7 +108,7 @@ spec:
         resources:
           limits:
             cpu: 1500m
-            memory: 4Gi
+            memory: 6Gi
           requests:
             cpu: 250m
             memory: 512Mi
