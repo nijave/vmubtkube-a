@@ -37,7 +37,7 @@ spec:
         persistence:
           meta:
             storageClass: libvirt-high
-            size: 16Gi
+            size: 8Gi
           data:
             storageClass: libvirt-mid-nr
             size: 500Gi
