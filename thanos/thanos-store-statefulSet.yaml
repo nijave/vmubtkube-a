@@ -51,6 +51,7 @@ spec:
         - --grpc-address=0.0.0.0:10901
         - --http-address=0.0.0.0:10902
         - --ignore-deletion-marks-delay=24h
+        - --enable-auto-gomemlimit
         - --objstore.config=$(OBJSTORE_CONFIG)
         - --index-cache.config=$(INDEX_CACHE_CONFIG)
         - --store.caching-bucket.config=$(BUCKET_CACHE_CONFIG)
