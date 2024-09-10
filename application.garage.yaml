@@ -32,7 +32,7 @@ spec:
           # consistencyMode: "degraded"
           replicationFactor: 3
         deployment:
-          replicaCount: 6
+          replicaCount: 5
           podManagementPolicy: Parallel
         persistence:
           meta:
