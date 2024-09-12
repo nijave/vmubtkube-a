@@ -55,7 +55,7 @@ spec:
         - --objstore.config=$(OBJSTORE_CONFIG)
         - --index-cache.config=$(INDEX_CACHE_CONFIG)
         - --store.caching-bucket.config=$(BUCKET_CACHE_CONFIG)
-        - --chunk-pool-size=128MB
+        - --chunk-pool-size=512MB
         - --max-time=-4h
         - --tracing.config=$(TRACING_CONFIG)
         env:
@@ -112,7 +112,7 @@ spec:
             memory: 2Gi
           requests:
             cpu: 250m
-            memory: 512Mi
+            memory: 768Mi
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /var/thanos/store
