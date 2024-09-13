@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: operators
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: operator
+    repoURL: https://operator.min.io
+    targetRevision: 6.0.3
+    helm:
+      releaseName: minio-operator
+      valuesObject: {}
