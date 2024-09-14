@@ -1,0 +1,43 @@
+---
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  name: minio
+  namespace: default
+spec:
+  configuration:
+    name: storage-configuration
+  ## Specification for MinIO Pool(s) in this Tenant.
+  pools:
+    ## Servers specifies the number of MinIO Tenant Pods / Servers in this pool.
+    ## For standalone mode, supply 1. For distributed mode, supply 4 or more.
+    ## Note that the operator does not support upgrading from standalone to distributed mode.
+    - servers: 5
+      ## custom pool name
+      name: pool-0
+      ## volumesPerServer specifies the number of volumes attached per MinIO Tenant Pod / Server.
+      volumesPerServer: 1
+      ## This VolumeClaimTemplate is used across all the volumes provisioned for MinIO Tenant in this Pool.
+      volumeClaimTemplate:
+        metadata:
+          name: data
+        spec:
+          storageClassName: libvirt-mid-nr
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 250Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-configuration
+  namespace: default
+type: Opaque
+stringData:
+  config.env: |-
+    export MINIO_ROOT_USER="minio"
+    export MINIO_ROOT_PASSWORD="minio123"
+    export MINIO_STORAGE_CLASS_STANDARD="EC:2"
+    export MINIO_BROWSER="on"
