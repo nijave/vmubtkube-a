@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: minio-operator-ext
-  namespace: minio
+  namespace: operators
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -59,13 +59,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: minio-operator-ext
-    namespace: minio
+    namespace: operators
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minio-operator-ext
-  namespace: minio
+  namespace: operators
 spec:
   replicas: 1
   selector:
