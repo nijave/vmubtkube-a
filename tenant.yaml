@@ -5,6 +5,7 @@ metadata:
   name: minio
   namespace: minio
 spec:
+  requestAutoCert: true
   configuration:
     name: storage-configuration
   pools:
