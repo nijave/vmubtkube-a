@@ -24,4 +24,6 @@ spec:
     targetRevision: 6.0.3
     helm:
       releaseName: minio-operator
-      valuesObject: {}
+      valuesObject:
+        operator:
+          replicaCount: 1
