@@ -22,6 +22,19 @@ spec:
           resources:
             requests:
               storage: 250Gi
+    - servers: 5
+      name: pool-1
+      volumesPerServer: 1
+      volumeClaimTemplate:
+        metadata:
+          name: data
+        spec:
+          storageClassName: libvirt-xfs
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 250Gi
 # ---
 # apiVersion: v1
 # kind: Secret
