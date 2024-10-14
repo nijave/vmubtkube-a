@@ -10,19 +10,6 @@ spec:
     name: storage-configuration
   pools:
     - servers: 5
-      name: pool-0
-      volumesPerServer: 1
-      volumeClaimTemplate:
-        metadata:
-          name: data
-        spec:
-          storageClassName: libvirt-mid-nr
-          accessModes:
-            - ReadWriteOnce
-          resources:
-            requests:
-              storage: 250Gi
-    - servers: 5
       name: pool-1
       volumesPerServer: 1
       volumeClaimTemplate:
