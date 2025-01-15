@@ -42,7 +42,7 @@ spec:
             value: "0 2147483647"
       containers:
       - name: cloudflared
-        image: cloudflare/cloudflared:latest
+        image: docker.io/cloudflare/cloudflared:latest
         command:
         - cloudflared
         - tunnel
