@@ -27,7 +27,7 @@ spec:
       releaseName: caching-bucket
       valuesObject:
         global:
-          imageRegistry: registry.apps.nickv.me/memcached
+          imageRegistry: registry.apps.nickv.me
         architecture: standalone
         # architecture: high-availability
         # autoscaling:
