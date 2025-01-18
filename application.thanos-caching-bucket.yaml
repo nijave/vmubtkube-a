@@ -21,10 +21,12 @@ spec:
   source:
     chart: memcached
     repoURL: https://charts.bitnami.com/bitnami
-    targetRevision: 7.4.9
+    targetRevision: 7.6.1
     helm:
       releaseName: caching-bucket
       valuesObject:
+        global:
+          imageRegistry: registry.apps.nickv.me/memcached
         architecture: standalone
         # architecture: high-availability
         # autoscaling:
