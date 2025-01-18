@@ -20,7 +20,8 @@ spec:
     - ApplyOutOfSyncOnly=true
   source:
     chart: memcached
-    repoURL: https://charts.bitnami.com/bitnami
+    # repoURL: https://charts.bitnami.com/bitnami
+    repoURL: registry-1.docker.io/bitnamicharts
     targetRevision: 7.6.1
     helm:
       releaseName: caching-bucket
