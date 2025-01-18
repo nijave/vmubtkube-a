@@ -27,6 +27,8 @@ spec:
       releaseName: index-cache
       valuesObject:
         global:
+          security:
+            allowInsecureImages: true
           imageRegistry: registry.apps.nickv.me
         architecture: standalone
         # architecture: high-availability
