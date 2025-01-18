@@ -42,7 +42,8 @@ spec:
             value: "0 2147483647"
       containers:
       - name: cloudflared
-        image: docker.io/cloudflare/cloudflared:latest
+        # docker pull docker.io/cloudflare/cloudflared:latest && docker tag docker.io/cloudflare/cloudflared:latest registry.apps.nickv.me/cloudflared:latest && docker push registry.apps.nickv.me/cloudflared:latest
+        image: registry.apps.nickv.me/cloudflared:latest
         command:
         - cloudflared
         - tunnel
