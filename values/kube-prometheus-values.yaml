@@ -51,8 +51,8 @@ prometheus:
     annotations:
       external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
   prometheusSpec:
-    image:
-      sha: "b1af68dd8294e71031a379ad312f2749724e2ad21c236009a1819fdb5573a72f"
+    #image:
+    #  sha: "b1af68dd8294e71031a379ad312f2749724e2ad21c236009a1819fdb5573a72f"
     prometheusExternalLabelNameClear: true
     externalLabels:
       cluster: vmubtkube-a
