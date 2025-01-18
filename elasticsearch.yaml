@@ -124,7 +124,7 @@ metadata:
   name: &esClusterName default
   namespace: elasticsearch
 spec:
-  version: &esVersion 8.17.1
+  version: &esVersion 8.17.0
   volumeClaimDeletePolicy: DeleteOnScaledownOnly
   auth:
     roles:
@@ -203,7 +203,7 @@ metadata:
   name: dashboard
   namespace: elasticsearch
 spec:
-  version: 8.17.1
+  version: 8.17.0
   count: 1
   elasticsearchRef:
     name: default
