@@ -84,15 +84,15 @@ spec:
             - name: etc
               mountPath: /etc/garage.toml
               subPath: garage.toml
-          livenessProbe:
-            exec:
-              command:
-              - ./garage
-              - status
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 9
+          # livenessProbe:
+          #   exec:
+          #     command:
+          #     - ./garage
+          #     - status
+          #   initialDelaySeconds: 60
+          #   periodSeconds: 10
+          #   timeoutSeconds: 5
+          #   failureThreshold: 9
           readinessProbe:
             httpGet:
               path: /health
