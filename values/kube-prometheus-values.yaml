@@ -117,5 +117,6 @@ prometheus:
       - targets:
         - 'opnsense.homelab.somemissing.info:9100'
         - 'opnsense.homelab.somemissing.info:9273'
-          
-    
+    - job_name: node-exporter
+      static_configs:
+      - targets: ['vmubttorrent01.homelab.somemissing.info:9100']
