@@ -132,7 +132,7 @@ spec:
     fileRealm:
       - secretName: jaeger-basic-auth
   nodeSets:
-    - name: controllers01
+    - name: controllers02
       count: 3
       config:
         node.roles:
@@ -171,7 +171,7 @@ spec:
                 limits:
                   memory: 1536Mi
                   cpu: 1
-    - name: data02
+    - name: data01
       count: 3
       config:
         node.roles:
