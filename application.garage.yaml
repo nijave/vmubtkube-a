@@ -39,7 +39,7 @@ spec:
             storageClass: libvirt-high
             size: 8Gi
           data:
-            storageClass: libvirt-mid-nr
+            storageClass: libvirt-mid
             size: 500Gi
         resources:
           limits:
