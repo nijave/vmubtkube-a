@@ -20,10 +20,10 @@ configs:
         type: core/v1/ResourceRequirements
 
 redis-ha:
-  enabled: true
+  enabled: false
 
 applicationSet:
-  replicas: 2
+  replicas: 0
 
 controller:
   replicas: 1
