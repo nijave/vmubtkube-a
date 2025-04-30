@@ -53,14 +53,14 @@ spec:
         - --tracing.config=$(TRACING_CONFIG)
         - --data-dir=/var/thanos/compact
         - --debug.accept-malformed-index
-        - --retention.resolution-raw=1d
+        - --retention.resolution-raw=2d
         - --retention.resolution-5m=14d
         - --retention.resolution-1h=395d
         - --delete-delay=8h
         - --block-files-concurrency=2
         - --compact.concurrency=8
         - --compact.blocks-fetch-concurrency=2
-        - --downsample.concurrency=4
+        - --downsample.concurrency=8
         - --compact.enable-vertical-compaction
         # - --downsampling.disable
         - --deduplication.replica-label=prometheus_replica
