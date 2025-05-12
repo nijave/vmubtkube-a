@@ -198,6 +198,15 @@ spec:
                 limits:
                   memory: 3Gi
                   cpu: 750m
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      elasticsearch.k8s.elastic.co/cluster-name: *esClusterName
+                  topologyKey: kubernetes.io/hostname
 ---
 apiVersion: kibana.k8s.elastic.co/v1
 kind: Kibana
