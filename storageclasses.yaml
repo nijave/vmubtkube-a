@@ -68,8 +68,8 @@ volumeBindingMode: Immediate
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
+  # annotations:
+  #   storageclass.kubernetes.io/is-default-class: "true"
   name: libvirt-mid
   labels:
     class: ssd
