@@ -1,3 +1,5 @@
+# helm upgrade blackbox-exporter prometheus-community/prometheus-blackbox-exporter --reset-values --values values/prometheus-blackbox-exporter-values.yaml
+
 securityContext:
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false

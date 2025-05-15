@@ -1,3 +1,5 @@
+# helm upgrade -n monitoring prom prometheus-community/kube-prometheus-stack --reset-values -f values/kube-prometheus-values.yaml
+
 nameOverride: kp
 grafana:
   service:
@@ -93,7 +95,7 @@ prometheus:
         cpu: 2000m
       requests:
         memory: 3Gi
-        cpu: 1250m
+        cpu: 1000m
     storageSpec:
       volumeClaimTemplate:
         spec:

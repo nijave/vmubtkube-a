@@ -1,3 +1,5 @@
+# helm upgrade otel-collector open-telemetry/opentelemetry-collector --reset-values --values values/otel-collector-values.yaml
+
 mode: deployment
 image:
   repository: docker.io/otel/opentelemetry-collector-k8s
@@ -16,7 +18,7 @@ config:
       policies:
       - name: random
         type: probabilistic
-        probabilistic: {sampling_percentage: 10}
+        probabilistic: {sampling_percentage: 5}
       - name: error
         type: status_code
         status_code: {status_codes: [ERROR]}
