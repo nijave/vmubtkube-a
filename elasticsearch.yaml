@@ -124,7 +124,7 @@ metadata:
   name: &esClusterName default
   namespace: elasticsearch
 spec:
-  version: &esVersion 8.17.0
+  version: &esVersion 8.18.1
   volumeClaimDeletePolicy: DeleteOnScaledownOnly
   auth:
     roles:
@@ -160,7 +160,7 @@ spec:
             - sh
             - -c
             - |
-              bin/elasticsearch-plugin install -b https://github.com/mindw/elasticsearch-prometheus-exporter/releases/download/8.17.0.0/prometheus-exporter-8.17.0.0.zip
+              bin/elasticsearch-plugin install -b https://github.com/mindw/elasticsearch-prometheus-exporter/releases/download/8.18.1.0/prometheus-exporter-8.18.1.0.zip
               bin/elasticsearch-plugin list
           containers:
             - name: elasticsearch
