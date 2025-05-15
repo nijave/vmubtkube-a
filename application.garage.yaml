@@ -43,11 +43,11 @@ spec:
             size: 500Gi
         resources:
           limits:
-            memory: 1Gi
+            memory: 768Mi
             cpu: 1000m
           requests:
-            memory: 512Mi
-            cpu: 100m
+            memory: 256Mi
+            cpu: 25m
         service:
           annotations:
             external-dns.alpha.kubernetes.io/hostname: obj.k8s.somemissing.info
