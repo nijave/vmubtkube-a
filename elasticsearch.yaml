@@ -206,6 +206,44 @@ spec:
                   labelSelector:
                     matchLabels:
                       elasticsearch.k8s.elastic.co/cluster-name: *esClusterName
+                      elasticsearch.k8s.elastic.co/statefulset-name: default-es-data01
+                topologyKey: kubernetes.io/hostname
+    - name: data02
+      count: 3
+      config:
+        node.roles:
+          - data
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            storageClassName: zfs-generic-iscsi-csi
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 225Gi                  
+      podTemplate:
+        spec:
+          initContainers: *nodeInitContainers
+          containers:
+            - name: elasticsearch
+              resources:
+                requests:
+                  memory: 3Gi
+                  cpu: 350m
+                limits:
+                  memory: 3Gi
+                  cpu: 850m
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      elasticsearch.k8s.elastic.co/cluster-name: *esClusterName
+                      elasticsearch.k8s.elastic.co/statefulset-name: default-es-data02
                 topologyKey: kubernetes.io/hostname
 ---
 apiVersion: kibana.k8s.elastic.co/v1
