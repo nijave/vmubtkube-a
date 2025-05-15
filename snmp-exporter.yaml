@@ -90,7 +90,7 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       initContainers:
       - name: snmp-exporter-copy-config
-        image: &snmpExporterImage prom/snmp-exporter:v0.26.0
+        image: &snmpExporterImage prom/snmp-exporter:v0.29.0
         command: ["cp", "/etc/snmp_exporter/snmp.yml", "/config/snmp.yml"]
         volumeMounts:
           - name: generated-config
@@ -116,7 +116,7 @@ spec:
         resources:
           requests:
             memory: 64Mi
-            cpu: 100m
+            cpu: 50m
           limits:
             memory: 128Mi
             cpu: 250m
