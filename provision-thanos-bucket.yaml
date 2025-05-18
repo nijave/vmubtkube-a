@@ -74,11 +74,11 @@ spec:
       serviceAccountName: provision-bucket
       containers:
       - name: kubectl
-        image: docker.io/bitnami/kubectl:1.29
+        image: docker.io/bitnami/kubectl:1.32
         command: [/bin/bash, -c]
         args:
         - |
-          ENDPOINT=obj.k8s.somemissing.info.
+          ENDPOINT=nas.apps.somemissing.info.:9001
 
           set -e
 
@@ -99,7 +99,7 @@ spec:
             thanos.yaml: |
               type: S3
               config:
-                endpoint: $ENDPOINT:80
+                endpoint: $ENDPOINT
                 insecure: true
                 bucket: thanos
                 access_key: $(echo "$THANOS_CREDS" | grep "Key ID:" | awk -F": " '{print $2}')

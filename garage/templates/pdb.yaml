@@ -1,9 +1,0 @@
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: garage
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      {{- include "garage.selectorLabels" . | nindent 6 }}
