@@ -8,6 +8,8 @@ grafana:
   persistence:
     enabled: true
     storageClassName: libvirt
+  initChownData:
+    enabled: false
   sidecar:
     datasources:
       url: http://thanos-query.thanos.svc.cluster.local.:9090
