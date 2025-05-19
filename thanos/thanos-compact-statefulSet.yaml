@@ -58,7 +58,7 @@ spec:
         - --retention.resolution-1h=395d
         - --delete-delay=8h
         - --block-files-concurrency=2
-        - --compact.concurrency=8
+        - --compact.concurrency=2
         - --compact.blocks-fetch-concurrency=2
         - --downsample.concurrency=8
         - --compact.enable-vertical-compaction
