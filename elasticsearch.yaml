@@ -215,7 +215,7 @@ metadata:
   name: dashboard
   namespace: elasticsearch
 spec:
-  version: 8.17.0
+  version: 8.18.1
   count: 1
   elasticsearchRef:
     name: default
