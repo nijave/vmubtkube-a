@@ -145,6 +145,7 @@ spec:
     spec:
       accessModes:
       - ReadWriteOnce
+      storageClassName: zfs-generic-iscsi-csi
       resources:
         requests:
-          storage: 60Gi
+          storage: 150Gi
