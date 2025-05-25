@@ -7,7 +7,7 @@ grafana:
       external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
   persistence:
     enabled: true
-    storageClassName: libvirt
+    storageClassName: zfs-generic-iscsi-csi
   initChownData:
     enabled: false
   sidecar:
@@ -104,7 +104,7 @@ prometheus:
           resources:
             requests:
               storage: 20Gi
-          storageClassName: libvirt-xfs
+          storageClassName: zfs-generic-iscsi-csi
     scrapeConfigSelector:
       matchLabels:
         release: prom
@@ -124,3 +124,13 @@ prometheus:
     - job_name: node-exporter
       static_configs:
       - targets: ['vmubttorrent01.homelab.somemissing.info:9100']
+    - job_name: minio-hdd
+      metrics_path: /minio/metrics/v3
+      static_configs:
+      - targets:
+          - nas.apps.somemissing.info.:9000
+    - job_name: minio-midline
+      metrics_path: /minio/metrics/v3
+      static_configs:
+      - targets:
+          - nas.apps.somemissing.info.:9001
