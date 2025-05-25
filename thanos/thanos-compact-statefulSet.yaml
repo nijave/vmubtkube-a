@@ -56,7 +56,7 @@ spec:
         - --retention.resolution-raw=2d
         - --retention.resolution-5m=14d
         - --retention.resolution-1h=395d
-        - --delete-delay=8h
+        - --delete-delay=1h
         - --block-files-concurrency=2
         - --compact.concurrency=2
         - --compact.blocks-fetch-concurrency=2
