@@ -201,13 +201,11 @@ spec:
           affinity:
             podAntiAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      elasticsearch.k8s.elastic.co/cluster-name: *esClusterName
-                      elasticsearch.k8s.elastic.co/statefulset-name: default-es-data02
-                topologyKey: kubernetes.io/hostname
+                - labelSelector:
+                    matchExpressions:
+                      - {key: elasticsearch.k8s.elastic.co/cluster-name, operator: In, values: [*esClusterName]}
+                      - {key: elasticsearch.k8s.elastic.co/statefulset-name, operator: In, values: [default-es-data02]}
+                  topologyKey: kubernetes.io/hostname
 ---
 apiVersion: kibana.k8s.elastic.co/v1
 kind: Kibana
