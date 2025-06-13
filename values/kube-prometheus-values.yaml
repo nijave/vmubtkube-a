@@ -49,6 +49,16 @@ additionalPrometheusRulesMap:
         for: 10m
         annotations:
           summary: Too many torrents are paused at the same time.
+  frigate:
+    groups:
+    - name: ./frigate.rules
+      rules:
+      - alert: FrigateNotProcessing
+        expr: |
+          sum by (instance) (frigate_process_fps) < 1
+        for: 5m
+        annotations:
+          summary: Frigate doesn't appear to be doing any work.
 
 prometheus:
   service:
@@ -134,3 +144,13 @@ prometheus:
       static_configs:
       - targets:
           - nas.apps.somemissing.info.:9001
+    - job_name: homeassistant
+      metrics_path: /api/prometheus
+      static_configs:
+      - targets:
+        - 172.16.2.1:8123
+    - job_name: frigate
+      metrics_path: /api/metrics
+      scheme: https
+      static_configs:
+      - targets: ['frigate.apps.somemissing.info']
