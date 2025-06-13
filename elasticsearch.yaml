@@ -167,7 +167,7 @@ spec:
               resources:
                 requests:
                   memory: 1536Mi
-                  cpu: 100m
+                  cpu: 150m
                 limits:
                   memory: 1536Mi
                   cpu: 1
@@ -194,10 +194,10 @@ spec:
               resources:
                 requests:
                   memory: 3Gi
-                  cpu: 200m
+                  cpu: 350m
                 limits:
                   memory: 3Gi
-                  cpu: 850m
+                  cpu: 1000m
           affinity:
             podAntiAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
