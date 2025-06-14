@@ -1,0 +1,117 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: drone-envvars
+  namespace: drone
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  data:
+  - secretKey: DRONE_RPC_SECRET
+    remoteRef:
+      key: drone-server-rpc-secret
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: DRONE_GITHUB_CLIENT_ID
+    remoteRef:
+      key: drone-server-github-client-id
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: DRONE_GITHUB_CLIENT_SECRET
+    remoteRef:
+      key: drone-server-github-client-secret
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: drone
+spec:
+  selfSigned: {}
+---
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: drone-self-signed
+  namespace: drone
+spec:
+  secretName: drone-self-signed
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  commonName: drone.drone.svc.cluster.local
+  dnsNames:
+    - drone
+    - drone.drone
+    - drone.drone.svc
+    - drone.drone.svc.cluster.local
+    - drone.k8s.somemissing.info
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+---
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: drone-server
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: drone
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    # chart: drone
+    # repoURL: https://charts.drone.io
+    # targetRevision: 0.6.5
+    repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    path: drone/
+    targetRevision: HEAD
+    helm:
+      releaseName: drone
+      valuesObject:
+        env:
+          DRONE_SERVER_PROTO: https
+          DRONE_SERVER_HOST: drone.k8s.somemissing.info
+          # DRONE_TLS_AUTOCERT: "true"
+          DRONE_TLS_CERT: /etc/certs/tls.crt
+          DRONE_TLS_KEY: /etc/certs/tls.key
+        extraSecretNamesForEnvFrom:
+        - drone-envvars
+        service:
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: drone.k8s.somemissing.info
+          port: 443
+          targetPort: https
+        extraVolumes:
+        - name: tls-certs
+          secret:
+            secretName: drone-self-signed
+        extraVolumeMounts:
+        - name: tls-certs
+          mountPath: /etc/certs
+          readOnly: true
+---
