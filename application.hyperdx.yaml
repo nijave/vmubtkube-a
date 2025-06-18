@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hyperdx
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: hyperdx
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: hdx-oss-v2
+    repoURL: https://hyperdxio.github.io/helm-charts
+    targetRevision: 0.6.3
+    helm:
+      releaseName: hyperdx
+      valuesObject:
+        global:
+          storageClassName: zfs-generic-iscsi-csi
+        hyperdx:
+          appUrl: http://hyperdx.k8s.somemissing.info
+          # appPort: 80
+          appPort: 3000
+        clickhouse:
+          config:
+            clusterCidrs:
+              - 192.168.224.0/20
+        ingress:
+          enabled: false
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: hyperdx-app
+  namespace: hyperdx
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: hyperdx.k8s.somemissing.info
+spec:
+  type: ClusterIP
+  ports:
+  - name: app
+    port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: hyperdx-hdx-oss-v2
+    app.kubernetes.io/instance: hyperdx
+    app.kubernetes.io/name: hdx-oss-v2
+---
