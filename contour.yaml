@@ -1,3 +1,5 @@
+# https://github.com/projectcontour/contour/raw/refs/heads/release-1.32/examples/render/contour.yaml
+
 # This file is generated from the individual YAML files by generate-deployment.sh. Do not
 # edit this file directly but instead edit the source files and re-render.
 #
@@ -9266,7 +9268,6 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
     external-dns.alpha.kubernetes.io/hostname: contour.k8s.somemissing.info
 spec:
-  externalTrafficPolicy: Local
   ports:
   - port: 80
     name: http
@@ -9279,6 +9280,7 @@ spec:
   selector:
     app: envoy
   # type: LoadBalancer
+  # externalTrafficPolicy: Local
   type: ClusterIP
 
 ---
