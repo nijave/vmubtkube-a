@@ -36,8 +36,15 @@ config:
 
   exporters:
     debug: {}
+    # otlp:
+      # endpoint: jaeger-collector.monitoring:4317
+      # tls:
+        # insecure: true
     otlp:
-      endpoint: jaeger-collector.monitoring:4317
+      endpoint: hyperdx-hdx-oss-v2-otel-collector.hyperdx:4317
+      compression: gzip
+      headers:
+        authorization: ee42ac01-9495-456e-adfc-9e81908e5d1f
       tls:
         insecure: true
 
