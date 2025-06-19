@@ -1,0 +1,126 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: opentelemetry-collector
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    targetRevision: 0.126.0
+    helm:
+      releaseName: otel-collector
+      valuesObject:
+        mode: deployment
+        image:
+          repository: docker.io/otel/opentelemetry-collector-k8s
+
+        presets:
+          kubernetesAttributes:
+            enabled: true
+
+        config:
+          processors:
+            batch:
+              send_batch_size: 1024
+              timeout: 5s
+            tail_sampling:
+              decision_wait: 300s
+              policies:
+              - name: random
+                type: probabilistic
+                probabilistic: {sampling_percentage: 5}
+              - name: error
+                type: status_code
+                status_code: {status_codes: [ERROR]}
+
+          receivers:
+            jaeger: null
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: ${env:MY_POD_IP}:4317
+                http:
+                  endpoint: ${env:MY_POD_IP}:4318
+            prometheus: null
+            zipkin: null
+
+          exporters:
+            debug: {}
+            # otlp:
+              # endpoint: jaeger-collector.monitoring:4317
+              # tls:
+                # insecure: true
+            otlp:
+              endpoint: hyperdx-hdx-oss-v2-otel-collector.hyperdx:4317
+              compression: gzip
+              headers:
+                authorization: ee42ac01-9495-456e-adfc-9e81908e5d1f
+              tls:
+                insecure: true
+
+          service:
+            pipelines:
+              logs: null
+              metrics: null
+              traces:
+                receivers: [otlp]
+                exporters: 
+                  # - debug
+                  - otlp
+                  # - otlphttp
+
+        ports:
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+          metrics:
+            enabled: true
+
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 10m
+            memory: 128Mi
+
+        rollout:
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 100%
+
+        service:
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
+
+        serviceMonitor:
+          enabled: true
+          extraLabels:
+            release: prom
+
+        prometheusRule:
+          enabled: true
+          defaultRules:
+            enabled: true
+          extraLabels:
+            release: prom
