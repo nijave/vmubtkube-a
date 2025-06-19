@@ -31,10 +31,14 @@ spec:
           appUrl: http://hyperdx.k8s.somemissing.info
           # appPort: 80
           appPort: 3000
+          apiKey: c58fcf6d-fda1-4100-bbba-3ef6ceed8a7f
         clickhouse:
           config:
             clusterCidrs:
               - 192.168.224.0/20
+          persistence:
+            dataSize: 250Gi
+            logSize: 20Gi
         ingress:
           enabled: false
 ---
