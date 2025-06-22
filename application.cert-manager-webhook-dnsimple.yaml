@@ -1,0 +1,55 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: dnsimple-api-token
+  namespace: cert-manager
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  data:
+  - secretKey: token
+    remoteRef:
+      key: dnsimple-api-token
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-webhook-dnsimple
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: cert-manager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: cert-manager-webhook-dnsimple
+    repoURL: https://puzzle.github.io/cert-manager-webhook-dnsimple
+    targetRevision: 0.1.6
+    helm:
+      releaseName: cert-manager-webhook-dnsimple
+      valuesObject:
+        dnsimple:
+          existingTokenSecret: true
+          tokenSecretName: dnsimple-api-token
+        clusterIssuer:
+          email: admin@somemissing.info
+          staging:
+            enabled: true
+          production:
+            enabled: true
+---
