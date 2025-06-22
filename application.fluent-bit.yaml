@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fluent-bit
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: fluent-bit
+    repoURL: https://fluent.github.io/helm-charts
+    targetRevision: 0.49.1
+    helm:
+      releaseName: fluent-bit
+      valuesObject:
+        serviceMonitor:
+          enabled: true
+          selector:
+            release: prom
+        prometheusRule:
+          enabled: true
+          additionalLabels:
+            release: prom
+          rules:
+          - alert: NoOutputBytesProcessed
+            expr: rate(fluentbit_output_proc_bytes_total[5m]) == 0
+            annotations:
+              message: |
+                Fluent Bit instance {{ $labels.instance }}'s output plugin {{ $labels.name }} has not processed any
+                bytes for at least 15 minutes.
+              summary: No Output Bytes Processed
+            for: 15m
+            # labels:
+            #   severity: critical
+        config:
+          outputs: |
+            [OUTPUT]
+                Name         opentelemetry
+                Match        *
+                Host         hyperdx-hdx-oss-v2-otel-collector.hyperdx.svc.cluster.local.
+                Port         4317
+                Grpc         on
+                Header       authorization ee42ac01-9495-456e-adfc-9e81908e5d1f
+                # logs_uri     /v1/logs
+                # traces_uri   /v1/traces
+                tls          off
+                tls.verify   off
+---
