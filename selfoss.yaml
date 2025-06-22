@@ -1,0 +1,44 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rss-nickv-me-cert
+  namespace: default
+spec:
+  secretName: rss-nickv-me-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-staging
+    kind: ClusterIssuer
+  commonName: rss.nickv.me
+  dnsNames:
+    - rss.nickv.me
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: rss-nickv-me
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: rss.nickv.me
+    tls:
+      secretName: rss-nickv-me-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: selfoss
+          port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: selfoss
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: vmcent74docker.homelab.somemissing.info
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+---
