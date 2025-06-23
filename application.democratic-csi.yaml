@@ -1,0 +1,154 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
+  namespace: kube-system
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        node-db.node.session.auth.authmethod: CHAP
+        node-db.node.session.auth.username: k8s
+        node-db.node.session.auth.password: "{{ .password }}"
+  data:
+  - secretKey: password
+    remoteRef:
+      key: democratic-csi-iscsi-password
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: democratic-csi-driver-config
+  namespace: kube-system
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        driver-config-file.yaml: |-
+          driver: zfs-generic-iscsi
+          sshConnection:
+            host: nas.apps.somemissing.info
+            port: 22
+            username: k8s-storage
+            privateKey: |
+              {{ .privateKey }}
+          zfs:
+            cli:
+              sudoEnabled: true
+          
+            # can be used to set arbitrary values on the dataset/zvol
+            # can use handlebars templates with the parameters from the storage class/CO
+            #datasetProperties:
+            #  "org.freenas:description": "{{ parameters.[csi.storage.k8s.io/pvc/namespace] }}/{{ parameters.[csi.storage.k8s.io/pvc/name] }}"
+          
+            datasetParentName: midline/k8s/pvs
+            detachedSnapshotsDatasetParentName: midline/k8s/snaps
+            zvolCompression: zstd-3
+            zvolDedup: off
+            zvolEnableReservation: false
+            # 512, 1K, 2K, 4K, 8K, 16K, 64K, 128K default is 16K
+            zvolBlocksize: 16K
+          
+          iscsi:
+            shareStrategy: targetCli
+            shareStrategyTargetCli:
+              sudoEnabled: true
+              basename: "iqn.2025-04.info.somemissing.homelab:ubthv01"
+              tpg:
+                attributes:
+                  authentication: 1
+                  generate_node_acls: 1
+                  cache_dynamic_acls: 1
+                  demo_mode_write_protect: 0
+                auth:
+                  userid: k8s
+                  password: {{ .password }}
+                  # mutual CHAP
+                  #mutual_userid: "baz"
+                  #mutual_password: "bar"
+              block:
+                attributes:
+                  # set to 1 to enable Thin Provisioning Unmap
+                  emulate_tpu: 1
+            targetPortal: "172.16.1.118:3260"
+            targetPortals: []       
+  data:
+  - secretKey: privateKey
+    remoteRef:
+      key: democratic-csi-ssh-private-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: password
+    remoteRef:
+      key: democratic-csi-iscsi-password
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: democratic-csi
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: democratic-csi
+    repoURL: https://democratic-csi.github.io/charts/
+    targetRevision: 0.15.0
+    helm:
+      releaseName: democratic-csi
+      valuesObject:
+        csiDriver:
+          name: "org.democratic-csi.iscsi"
+        volumeSnapshotClasses: []
+        driver:
+          existingConfigSecret: democratic-csi-driver-config
+          config:
+            driver: ""
+        storageClasses:
+          - name: zfs-generic-iscsi-csi
+            defaultClass: true
+            reclaimPolicy: Delete
+            volumeBindingMode: Immediate
+            allowVolumeExpansion: true
+            parameters:
+              fsType: ext4
+            mountOptions: []
+            parameters:
+              csi.storage.k8s.io/node-stage-secret-name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
+              csi.storage.k8s.io/node-stage-secret-namespace: kube-system
+            secrets:
+              provisioner-secret:
+              controller-publish-secret:
+              # manually create Secret and parameter for this one
+              # node-stage-secret:
+              node-publish-secret:
+              controller-expand-secret:
