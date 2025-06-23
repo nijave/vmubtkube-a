@@ -52,7 +52,7 @@ spec:
             # can be used to set arbitrary values on the dataset/zvol
             # can use handlebars templates with the parameters from the storage class/CO
             #datasetProperties:
-            #  "org.freenas:description": "{{ parameters.[csi.storage.k8s.io/pvc/namespace] }}/{{ parameters.[csi.storage.k8s.io/pvc/name] }}"
+            #  "org.freenas:description": "{{`{{ parameters.[csi.storage.k8s.io/pvc/namespace] }}/{{ parameters.[csi.storage.k8s.io/pvc/name] }}`}}"
           
             datasetParentName: midline/k8s/pvs
             detachedSnapshotsDatasetParentName: midline/k8s/snaps
