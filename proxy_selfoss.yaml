@@ -6,11 +6,11 @@ metadata:
 spec:
   secretName: rss-nickv-me-tls
   issuerRef:
-    name: cert-manager-webhook-dnsimple-staging
+    name: cert-manager-webhook-dnsimple-production
     kind: ClusterIssuer
-  commonName: rss.nickv.me
+  commonName: &cn rss.nickv.me
   dnsNames:
-    - rss.nickv.me
+    - *cn
 ---
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy

@@ -1,0 +1,44 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: somemissing-info-cert
+  namespace: default
+spec:
+  secretName: somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn somemissing.info
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: somemissing-info
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: somemissing.info
+    tls:
+      secretName: somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: somemissing-info
+          port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: somemissing-info
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: vmcent74web02.homelab.somemissing.info
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+---
