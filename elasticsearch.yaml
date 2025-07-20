@@ -193,10 +193,10 @@ spec:
             - name: elasticsearch
               resources:
                 requests:
-                  memory: 4Gi
+                  memory: 5Gi
                   cpu: 350m
                 limits:
-                  memory: 4Gi
+                  memory: 5Gi
                   cpu: 1250m
           affinity:
             podAntiAffinity:
