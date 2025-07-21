@@ -133,6 +133,22 @@ spec:
           existingConfigSecret: democratic-csi-driver-config
           config:
             driver: ""
+        controller:
+          driver:
+            image:
+              registry: registry.apps.nickv.me/democraticcsi/democratic-csi
+        node:
+          cleanup:
+            image:
+              registry: registry.apps.nickv.me/busybox
+              tag: 1.37.0
+          driver:
+            image:
+              registry: registry.apps.nickv.me/democraticcsi/democratic-csi
+        csiProxy:
+          image:
+            registry: registry.apps.nickv.me/democraticcsi/csi-grpc-proxy
+            tag: v0.5.6
         storageClasses:
           - name: zfs-generic-iscsi-csi
             defaultClass: true
