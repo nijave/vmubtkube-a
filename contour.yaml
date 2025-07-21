@@ -9432,8 +9432,8 @@ spec:
         - --log-level info
         command:
         - envoy
-        image: docker.io/envoyproxy/envoy:v1.34.1
         imagePullPolicy: IfNotPresent
+        image: registry.apps.nickv.me/envoyproxy/envoy:v1.34.1
         name: envoy
         env:
         - name: CONTOUR_NAMESPACE
