@@ -171,6 +171,14 @@ spec:
                 limits:
                   memory: 1536Mi
                   cpu: 1
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - {key: elasticsearch.k8s.elastic.co/cluster-name, operator: In, values: [*esClusterName]}
+                      - {key: elasticsearch.k8s.elastic.co/statefulset-name, operator: In, values: [default-es-controllers01]}
+                  topologyKey: kubernetes.io/hostname
     - name: data02
       count: 3
       config:
