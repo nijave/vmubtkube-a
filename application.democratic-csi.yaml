@@ -43,8 +43,7 @@ spec:
             host: nas.apps.somemissing.info
             port: 22
             username: k8s-storage
-            privateKey: |
-              {{ .privateKey }}
+            privateKey: {{ .privateKey | toYaml | indent 2 }}
           zfs:
             cli:
               sudoEnabled: true
