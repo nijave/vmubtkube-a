@@ -1,4 +1,4 @@
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
@@ -23,7 +23,7 @@ spec:
       decodingStrategy: None
       metadataPolicy: None
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: democratic-csi-driver-config
