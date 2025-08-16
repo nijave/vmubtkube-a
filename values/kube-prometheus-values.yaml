@@ -2,6 +2,7 @@
 
 nameOverride: kp
 grafana:
+  useStatefulSet: true
   service:
     annotations:
       external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
@@ -14,6 +15,12 @@ grafana:
     datasources:
       url: http://thanos-query.thanos.svc.cluster.local.:9090
       timeout: 300
+      jsonData:
+        customQueryParameters: max_source_resolution=1h
+        cacheLevel:	Medium
+        prometheusType: "Thanos"
+        prometheusVersion: "0.31.1"
+        queryTimeout: "300s"
   additionalDataSources:
   - name: prometheus_vmubtkube-a
     type: prometheus
