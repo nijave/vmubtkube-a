@@ -66,10 +66,6 @@ spec:
                 Read_From_Tail On
           filters: |
             [FILTER]
-              Name record_modifier
-              Match *
-              Record service.name vmubtkube-a
-            [FILTER]
                 Name kubernetes
                 Match kube.*
                 Buffer_Size 1MB
@@ -88,6 +84,8 @@ spec:
                 Header       authorization ee42ac01-9495-456e-adfc-9e81908e5d1f
                 tls          off
                 tls.verify   off
+                logs_body_key log
+                logs_body_key_attributes on
         hotReload:
           enabled: true
 ---
