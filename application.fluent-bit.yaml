@@ -66,6 +66,10 @@ spec:
                 Read_From_Tail On
           filters: |
             [FILTER]
+              Name record_modifier
+              Match *
+              Record service.name vmubtkube-a
+            [FILTER]
                 Name kubernetes
                 Match kube.*
                 Buffer_Size 1MB
