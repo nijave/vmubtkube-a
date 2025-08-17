@@ -25,6 +25,10 @@ spec:
     helm:
       releaseName: fluent-bit
       valuesObject:
+        rbac:
+          create: true
+          nodeAccess: true
+          eventsAccess: true
         serviceMonitor:
           enabled: true
           selector:
@@ -42,9 +46,34 @@ spec:
                 bytes for at least 15 minutes.
               summary: No Output Bytes Processed
             for: 15m
-            # labels:
-            #   severity: critical
+        autoscaling:
+          enabled: true
+          vpa:
+            enabled: true
         config:
+          inputs: |
+            [INPUT]
+                Name tail
+                Path /var/log/containers/*.log
+                multiline.parser cri
+                Tag kube.*
+                Mem_Buf_Limit 8MB
+                Skip_Long_Lines On
+            [INPUT]
+                Name systemd
+                Tag host.*
+                Systemd_Filter _SYSTEMD_UNIT=kubelet.service
+                Read_From_Tail On
+          filters: |
+            [FILTER]
+                Name kubernetes
+                Match kube.*
+                Buffer_Size 1MB
+                Merge_Log On
+                Keep_Log Off
+                K8S-Logging.Parser On
+                K8S-Logging.Exclude On
+                Owner_References on
           outputs: |
             [OUTPUT]
                 Name         opentelemetry
@@ -53,8 +82,8 @@ spec:
                 Port         4317
                 Grpc         on
                 Header       authorization ee42ac01-9495-456e-adfc-9e81908e5d1f
-                # logs_uri     /v1/logs
-                # traces_uri   /v1/traces
                 tls          off
                 tls.verify   off
+        hotReload:
+          enabled: true
 ---
