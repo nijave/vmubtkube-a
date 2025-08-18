@@ -68,7 +68,7 @@ spec:
                 Read_From_Tail On
           customParsers: |
             [PARSER]
-                Name        app_json
+                Name        k8s_json
                 Format      json
                 Time_Key    timestamp
                 Time_Format %Y-%m-%dT%H:%M:%S.%L
@@ -77,10 +77,18 @@ spec:
                 Decode_Field_As json message
             
             [PARSER]
-                Name        app_logfmt
+                Name        k8s_logfmt
                 Format      logfmt
                 Time_Key    ts
                 Time_Format %Y-%m-%dT%H:%M:%S.%L
+                Time_Keep   On
+
+            [PARSER]
+                Name        k8s_glog
+                Format      regex
+                Regex       ^(?<severity>[IWEF])(?<date>\d{4}) (?<time>\d{2}:\d{2}:\d{2}\.\d{6})\s+(?<thread_id>\d+)\s+(?<source_file>[^:]+):(?<line>\d+)\]\s*(?<message>.*)$
+                Time_Key    time
+                Time_Format %H:%M:%S.%L
                 Time_Keep   On
           filters: |
             [FILTER]
@@ -97,17 +105,25 @@ spec:
                 Name                parser
                 Match               kube.*
                 Key_Name            log
-                Parser              app_json
+                Parser              k8s_json
                 Reserve_Data        On
                 Preserve_Key        On
 
             [FILTER]
                 Name                parser
                 Match               kube.*
-                Key_Name            message
-                Parser              app_logfmt
+                Key_Name            log
+                Parser              k8s_logfmt
                 Reserve_Data        On
                 Preserve_Key        On
+
+            [FILTER]
+                Name              parser
+                Match             kube.*
+                Key_Name          log
+                Parser            k8s_glog
+                Reserve_Data      On
+                Preserve_Key      On
           outputs: |
             [OUTPUT]
                 Name         opentelemetry
