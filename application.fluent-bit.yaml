@@ -61,11 +61,14 @@ spec:
                 Tag kube.*
                 Mem_Buf_Limit 8MB
                 Skip_Long_Lines On
+                db /var/log/fluentbit-containers.db
+
             [INPUT]
                 Name systemd
                 Tag host.*
                 Systemd_Filter _SYSTEMD_UNIT=kubelet.service
-                Read_From_Tail On
+                DB /var/log/fluentbit-systemd.db
+                DB.Sync Normal
           customParsers: |
             [PARSER]
                 Name        k8s_json
