@@ -50,6 +50,8 @@ spec:
           enabled: true
           vpa:
             enabled: true
+        podAnnotations:
+          fluentbit.io/exclude: "true"
         config:
           inputs: |
             [INPUT]
@@ -64,6 +66,22 @@ spec:
                 Tag host.*
                 Systemd_Filter _SYSTEMD_UNIT=kubelet.service
                 Read_From_Tail On
+          customParsers: |
+            [PARSER]
+                Name        app_json
+                Format      json
+                Time_Key    timestamp
+                Time_Format %Y-%m-%dT%H:%M:%S.%L
+                Time_Keep   On
+                Decode_Field_As escaped_utf8 message do_next
+                Decode_Field_As json message
+            
+            [PARSER]
+                Name        app_logfmt
+                Format      logfmt
+                Time_Key    ts
+                Time_Format %Y-%m-%dT%H:%M:%S.%L
+                Time_Keep   On
           filters: |
             [FILTER]
                 Name kubernetes
@@ -74,6 +92,22 @@ spec:
                 K8S-Logging.Parser On
                 K8S-Logging.Exclude On
                 Owner_References on
+                    
+            [FILTER]
+                Name                parser
+                Match               kube.*
+                Key_Name            log
+                Parser              app_json
+                Reserve_Data        On
+                Preserve_Key        On
+
+            [FILTER]
+                Name                parser
+                Match               kube.*
+                Key_Name            message
+                Parser              app_logfmt
+                Reserve_Data        On
+                Preserve_Key        On
           outputs: |
             [OUTPUT]
                 Name         opentelemetry
