@@ -84,6 +84,14 @@ spec:
                   emulate_tpu: 1
             targetPortal: "172.16.1.118:3260"
             targetPortals: []       
+          node:
+            mount:
+              checkFileSystem:
+                enabled: true
+                ext4:
+                  enabled: true
+                xfs:
+                  enabled: true
   data:
   - secretKey: privateKey
     remoteRef:
