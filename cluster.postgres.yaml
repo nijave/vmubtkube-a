@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    kubernetes.io/metadata.name: postgres
+  name: postgres
+---
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-immich-user
+  namespace: postgres
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: immich
+---
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-superuser
+  namespace: postgres
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: postgres
+---
+apiVersion: secretgenerator.mittwald.de/v1alpha1
+kind: StringSecret
+metadata:
+  name: backup-creds
+  namespace: postgres
+spec:
+  forceRegenerate: false
+  # data:
+  #   username: "testuser"
+  fields:
+    - fieldName: ACCESS_KEY_ID
+      encoding: hex
+      length: "16"
+    - fieldName: ACCESS_SECRET_KEY
+      encoding: base32
+      length: "32"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: postgres
+spec:
+  # imageName: ghcr.io/cloudnative-pg/postgresql:18.0-system-trixie
+  instances: 2
+  startDelay: 300
+  stopDelay: 300
+  primaryUpdateStrategy: unsupervised
+
+  postgresql:
+    parameters:
+      shared_buffers: 256MB
+      pg_stat_statements.max: '10000'
+      pg_stat_statements.track: all
+      auto_explain.log_min_duration: '10s'
+
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: postgres-superuser
+
+  storage:
+    size: 50Gi
+
+  # backup:
+  #   barmanObjectStore:
+  #     destinationPath: s3://postgres/
+  #     endpointURL: http://nas.apps.somemissing.info.:9001
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: backup-creds
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: backup-creds
+  #         key: ACCESS_SECRET_KEY
+  #     wal:
+  #       compression: gzip
+  #       encryption: AES256
+  #     data:
+  #       compression: gzip
+  #       encryption: AES256
+  #       immediateCheckpoint: false
+  #       jobs: 2
+  #   retentionPolicy: "30d"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "1"
+    limits:
+      memory: "1Gi"
+      cpu: "2"
+
+  affinity:
+    enablePodAntiAffinity: true
+    # topologyKey: failure-domain.beta.kubernetes.io/zone
+    topologyKey: kubernetes.io/hostname
+
+  enablePDB: true
+  
+  managed:
+    roles:
+    - name: immich
+      ensure: present
+      login: true
+      superuser: false
+      passwordSecret:
+        name: postgres-immich-user
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: postgres-pool
+  namespace: postgres
+spec:
+  cluster:
+    name: postgres
+  instances: 2
+  type: rw
+  pgbouncer:
+    poolMode: session
+    parameters:
+      max_client_conn: "1000"
+      default_pool_size: "10"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: postgres-immich
+spec:
+  name: immich
+  owner: immich
+  cluster:
+    name: postgres
+---
