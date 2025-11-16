@@ -52,6 +52,13 @@ spec:
       labels:
         app: python-envoy-authz
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: python-envoy-authz
+              topologyKey: "kubernetes.io/hostname"
       containers:
       - name: python-envoy-authz
         image: registry.apps.nickv.me/python-envoy-authz
