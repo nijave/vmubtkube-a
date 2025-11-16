@@ -59,9 +59,10 @@ spec:
   postgresql:
     parameters:
       shared_buffers: 256MB
+      random_page_cost: '1.1'
       pg_stat_statements.max: '10000'
       pg_stat_statements.track: all
-      auto_explain.log_min_duration: '10s'
+      auto_explain.log_min_duration: '5s'
 
   enableSuperuserAccess: true
   superuserSecret:
@@ -130,6 +131,19 @@ spec:
     parameters:
       max_client_conn: "1000"
       default_pool_size: "10"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: postgres
+  podMetricsEndpoints:
+  - port: metrics
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
