@@ -1,0 +1,87 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: frigate-apps-somemissing-info-cert
+  namespace: default
+spec:
+  secretName: frigate-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn frigate.apps.somemissing.info
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1alpha1
+kind: ExtensionService
+metadata:
+  name: python-envoy-authz
+  namespace: projectcontour
+spec:
+  protocol: h2
+  services:
+  - name: python-envoy-authz
+    port: 443
+  validation:
+    caSecret: cert-manager/k8s-ca
+    subjectName: python-envoy-authz
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ca-ha-homelab-somemissing-info-tls
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  data:
+  - secretKey: ca.crt
+    remoteRef:
+      conversionStrategy: Default
+      key: ca-ha.apps.somemissing.info
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: frigate-apps-somemissing-info
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: frigate.apps.somemissing.info
+    tls:
+      secretName: frigate-apps-somemissing-info-tls
+      clientValidation:
+        caSecret: ca-ha-homelab-somemissing-info-tls
+        optionalClientCertificate: true
+    authorization:
+      extensionRef:
+        name: python-envoy-authz
+        namespace: projectcontour
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: hassio-homelab-somemissing-info
+          port: 8081
+      timeoutPolicy:
+        response: 24h
+      enableWebsockets: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hassio-homelab-somemissing-info
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: hassio.homelab.somemissing.info
+  ports:
+    - name: https
+      port: 8081
+      targetPort: 8081
+      protocol: TCP
+---
