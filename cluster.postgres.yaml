@@ -136,6 +136,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: postgres
+  namespace: postgres
   labels:
     release: prom
 spec:
@@ -149,6 +150,7 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: postgres-immich
+  namespace: postgres
 spec:
   name: immich
   owner: immich
