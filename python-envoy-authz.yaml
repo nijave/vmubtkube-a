@@ -119,3 +119,17 @@ spec:
     - python-envoy-authz.projectcontour
     - python-envoy-authz.projectcontour.svc.cluster.local.
 ---
+apiVersion: projectcontour.io/v1alpha1
+kind: ExtensionService
+metadata:
+  name: python-envoy-authz
+  namespace: projectcontour
+spec:
+  protocol: h2
+  services:
+  - name: python-envoy-authz
+    port: 443
+  validation:
+    caSecret: cert-manager/k8s-ca
+    subjectName: python-envoy-authz
+---
