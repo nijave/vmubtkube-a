@@ -3,6 +3,9 @@
 # helm upgrade -n argocd argocd argo/argo-cd --reset-values -f values/argocd-values.yaml
 configs:
   cm:
+    resource.customizations.ignoreDifferences.apps_StatefulSet: |
+      jqPathExpressions:
+      - .spec.volumeClaimTemplates[].metadata.creationTimestamp
     resource.customizations.knownTypeFields.jaegertracing.io_Jaeger: |
       - field: spec.agent.resources
         type: core/v1/ResourceRequirements

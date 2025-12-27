@@ -68,6 +68,9 @@ spec:
     remoteRef:
       key: k8s-ca-tls
       property: tls.crt
+      conversationStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
 ---
 apiVersion: projectcontour.io/v1
 kind: TLSCertificateDelegation
