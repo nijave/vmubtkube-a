@@ -21,7 +21,7 @@ spec:
   source:
     chart: hdx-oss-v2
     repoURL: https://hyperdxio.github.io/helm-charts
-    targetRevision: 0.6.3
+    targetRevision: 0.8.4
     helm:
       releaseName: hyperdx
       valuesObject:
