@@ -32,6 +32,8 @@ spec:
           # appPort: 80
           appPort: 3000
           apiKey: c58fcf6d-fda1-4100-bbba-3ef6ceed8a7f
+          service:
+            type: ClusterIP
         clickhouse:
           config:
             clusterCidrs:
