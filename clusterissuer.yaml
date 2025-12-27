@@ -68,7 +68,7 @@ spec:
     remoteRef:
       key: k8s-ca-tls
       property: tls.crt
-      conversationStrategy: Default
+      conversionStrategy: Default
       decodingStrategy: None
       metadataPolicy: None
 ---
