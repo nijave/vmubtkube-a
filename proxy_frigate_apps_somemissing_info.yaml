@@ -32,6 +32,12 @@ spec:
   routes:
     - conditions:
         - prefix: /
+      requestHeadersPolicy:
+        set:
+        - name: x-forwarded-user
+          value: admin
+        - name: x-forwarded-groups
+          value: admin
       services:
         - name: hassio-homelab-somemissing-info
           port: 8081
