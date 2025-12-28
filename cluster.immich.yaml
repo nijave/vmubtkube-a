@@ -10,7 +10,7 @@ type: kubernetes.io/basic-auth
 kind: Secret
 metadata:
   name: postgres-immich-user
-  namespace: postgres
+  namespace: immich
   annotations:
     secret-generator.v1.mittwald.de/autogenerate: password
 stringData:
@@ -21,7 +21,7 @@ type: kubernetes.io/basic-auth
 kind: Secret
 metadata:
   name: postgres-superuser
-  namespace: postgres
+  namespace: immich
   annotations:
     secret-generator.v1.mittwald.de/autogenerate: password
 stringData:
@@ -31,7 +31,7 @@ apiVersion: secretgenerator.mittwald.de/v1alpha1
 kind: StringSecret
 metadata:
   name: backup-creds
-  namespace: postgres
+  namespace: immich
 spec:
   forceRegenerate: false
   # data:
@@ -47,15 +47,16 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: postgres
-  namespace: postgres
+  name: immich
+  namespace: immich
 spec:
   # imageName: ghcr.io/cloudnative-pg/postgresql:18.0-system-trixie
-  instances: 2
+  instances: 1
   startDelay: 300
   stopDelay: 300
   primaryUpdateStrategy: unsupervised
 
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:17.7
   postgresql:
     parameters:
       shared_buffers: 256MB
@@ -63,13 +64,14 @@ spec:
       pg_stat_statements.max: '10000'
       pg_stat_statements.track: all
       auto_explain.log_min_duration: '5s'
+      shared_preload_libraries: "vchord.so"
 
   enableSuperuserAccess: true
   superuserSecret:
     name: postgres-superuser
 
   storage:
-    size: 50Gi
+    size: 25Gi
 
   # backup:
   #   barmanObjectStore:
@@ -122,23 +124,23 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Pooler
 metadata:
   name: postgres-pool
-  namespace: postgres
+  namespace: immich
 spec:
   cluster:
-    name: postgres
+    name: immich
   instances: 2
   type: rw
   pgbouncer:
     poolMode: session
     parameters:
-      max_client_conn: "1000"
-      default_pool_size: "10"
+      max_client_conn: "250"
+      default_pool_size: "5"
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: postgres
-  namespace: postgres
+  namespace: immich
   labels:
     release: prom
 spec:
@@ -152,10 +154,10 @@ apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
   name: postgres-immich
-  namespace: postgres
+  namespace: immich
 spec:
   name: immich
   owner: immich
   cluster:
-    name: postgres
+    name: immich
 ---
