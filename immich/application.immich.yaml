@@ -42,11 +42,15 @@ spec:
             main:
               containers:
                 main:
-                  image:
-                    tag: v2.4.1
                   envFrom:
                     - secretRef:
                         name: immich-postgres
+        controllers:
+          main:
+            containers:
+              main:
+                image:
+                  tag: v2.4.1
         immich:
           metrics:
             enabled: true
