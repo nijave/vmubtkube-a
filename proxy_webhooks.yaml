@@ -1,0 +1,44 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: webhooks-somemissing-info-cert
+  namespace: default
+spec:
+  secretName: webhooks-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn webhooks.somemissing.info
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: webhooks-somemissing-info
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: webhooks.somemissing.info
+    tls:
+      secretName: webhooks-somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: wehooks
+          port: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhooks
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: vmcent74docker.homelab.somemissing.info
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+---
