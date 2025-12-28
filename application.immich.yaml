@@ -2,6 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: immich
+  namespace: immich
 spec:
   accessModes:
     - ReadWriteOnce
@@ -36,6 +37,14 @@ spec:
     helm:
       releaseName: immich
       valuesObject:
+        common:
+          controllers:
+            main:
+              containers:
+                main:
+                  envFrom:
+                    - secretRef:
+                        name: immich-postgres
         immich:
           metrics:
             enabled: true
