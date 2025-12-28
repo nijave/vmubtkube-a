@@ -1,0 +1,32 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: immich-apps-somemissing-info-cert
+  namespace: immich
+spec:
+  secretName: immich-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn immich.apps.somemissing.info
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: somemissing-info
+  namespace: immich
+spec:
+  virtualhost:
+    fqdn: immich.apps.somemissing.info
+    tls:
+      secretName: immich-apps-somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: immich-server
+          port: 2283
+      enableWebsockets: true
+---
