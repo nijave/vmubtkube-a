@@ -26,7 +26,7 @@ spec:
     - conditions:
         - prefix: /
       services:
-        - name: wehooks
+        - name: webhooks
           port: 80
 ---
 apiVersion: v1
