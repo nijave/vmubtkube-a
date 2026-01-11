@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: thanos-receive-router
     app.kubernetes.io/instance: thanos-receive
     app.kubernetes.io/name: thanos-receive
-    app.kubernetes.io/version: v0.37.2
+    app.kubernetes.io/version: v0.39.2
   name: thanos-receive-router
   namespace: thanos
 spec:
@@ -26,7 +26,7 @@ spec:
         app.kubernetes.io/component: thanos-receive-router
         app.kubernetes.io/instance: thanos-receive
         app.kubernetes.io/name: thanos-receive
-        app.kubernetes.io/version: v0.37.2
+        app.kubernetes.io/version: v0.39.2
     spec:
       containers:
       - args:
@@ -66,7 +66,7 @@ spec:
             configMapKeyRef:
               name: thanos-tracing
               key: tracing.yaml
-        image: registry.apps.nickv.me/thanos:v0.37.2
+        image: registry.apps.nickv.me/thanos:v0.39.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
