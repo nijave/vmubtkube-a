@@ -52,10 +52,14 @@ spec:
         - --http-address=0.0.0.0:10902
         - --ignore-deletion-marks-delay=24h
         - --enable-auto-gomemlimit
+        - --auto-gomemlimit.ratio=0.9
         - --objstore.config=$(OBJSTORE_CONFIG)
         - --index-cache.config=$(INDEX_CACHE_CONFIG)
         - --store.caching-bucket.config=$(BUCKET_CACHE_CONFIG)
-        - --chunk-pool-size=512MB
+        # default 2Gi, try to limit memory usage
+        - --chunk-pool-size=256MB
+        # default 20, try to limit memory usage
+        - --store.grpc.series-max-concurrency=2
         - --max-time=-4h
         - --tracing.config=$(TRACING_CONFIG)
         env:
@@ -109,7 +113,7 @@ spec:
         resources:
           limits:
             cpu: 1500m
-            memory: 2Gi
+            memory: 3Gi
           requests:
             cpu: 250m
             memory: 768Mi

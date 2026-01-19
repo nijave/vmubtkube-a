@@ -49,17 +49,25 @@ spec:
         - --http-address=0.0.0.0:9090
         - --log.level=info
         - --log.format=logfmt
+
         - --query.replica-label=prometheus_replica
         - --query.replica-label=rule_replica
         - --query.replica-label=replica
         - --query.replica-label=ingestor_replica
         - --query.replica-label=thanos_replica
-        - --store=dnssrv+_grpc._tcp.thanos-store.thanos.svc.cluster.local:10901
-        - --store=dnssrv+_grpc._tcp.thanos-receive-ingestor-default.thanos.svc.cluster.local:10901
+
+        - --endpoint=dnssrv+_grpc._tcp.thanos-receive-ingestor-default.thanos.svc.cluster.local:10901
+        - --endpoint=dnssrv+_grpc._tcp.thanos-store.thanos.svc.cluster.local:10901
+        - --endpoint.sd-config-reload-interval=15s
+
         - --query.auto-downsampling
-        - --enable-auto-gomemlimit
         - --query.timeout=5m
-        - --query.max-concurrent=10
+        - --query.max-concurrent=2
+        - --query.max-concurrent-select=2
+        - --query.promql-engine=thanos
+
+        - --enable-auto-gomemlimit
+        - --auto-gomemlimit.ratio=0.9
         - --tracing.config=$(TRACING_CONFIG)
         env:
         - name: HOST_IP_ADDRESS
