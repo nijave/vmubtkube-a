@@ -51,6 +51,9 @@ spec:
               main:
                 image:
                   tag: v2.4.1
+              resources:
+                requests:
+                  cpu: 50m
         immich:
           metrics:
             enabled: true
