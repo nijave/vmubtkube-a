@@ -1,0 +1,155 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-media
+spec:
+  capacity:
+    storage: 10Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nfs:
+    server: nas.apps.somemissing.info
+    path: /media/av
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-media
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Ti
+  volumeName: jellyfin-media
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-data
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 40Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: jellyfin.apps.somemissing.info
+  labels:
+    app.kubernetes.io/component: jellyfin-server
+    app.kubernetes.io/name: jellyfin
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  - name: https
+    port: 443
+    targetPort: https
+  selector:
+    app.kubernetes.io/component: jellyfin-server
+    app.kubernetes.io/name: jellyfin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  namespace: media
+  labels:
+    app.kubernetes.io/component: jellyfin-server
+    app.kubernetes.io/name: jellyfin
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: jellyfin-server
+      app.kubernetes.io/name: jellyfin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: jellyfin-server
+        app.kubernetes.io/name: jellyfin
+    spec:
+      hostNetwork: true  # required for DLNA
+      securityContext:
+        runAsUser: 1009
+        runAsGroup: 1001
+      containers:
+      - name: jellyfin
+        image: registry.apps.nickv.me/jellyfin:v10.11.5-nv-hdr-patch
+        # command: [sleep, infinity]
+        env:
+        - name: TZ
+          value: "UTC"
+        - name: JELLYFIN_CACHE_DIR
+          value: /var/lib/jellyfin/cache
+        - name: JELLYFIN_CONFIG_DIR
+          value: /var/lib/jellyfin/config
+        - name: JELLYFIN_DATA_DIR
+          value: /var/lib/jellyfin
+        - name: JELLYFIN_LOG_DIR
+          value: /var/lib/jellyfin/logs
+        ports:
+        - containerPort: 8096
+          name: http
+          protocol: TCP
+        - containerPort: 8920
+          name: https
+          protocol: TCP
+        - containerPort: 7359
+          name: discovery
+          protocol: UDP
+        - containerPort: 1900
+          name: dlna
+          protocol: UDP
+        startupProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /var/lib/jellyfin
+        - name: media
+          mountPath: /media
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "100m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: jellyfin-data
+      - name: media
+        persistentVolumeClaim:
+          claimName: jellyfin-media
+---
