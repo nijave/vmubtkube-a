@@ -51,9 +51,9 @@ spec:
               main:
                 image:
                   tag: v2.4.1
-              resources:
-                requests:
-                  cpu: 50m
+                resources:
+                  requests:
+                    cpu: 50m
         immich:
           metrics:
             enabled: true
@@ -62,4 +62,12 @@ spec:
               existingClaim: immich
         valkey:
           enabled: true
+          controllers:
+            main:
+              containers:
+                main:
+                  image:
+                    repository: docker.io/valkey/valkey
+                    tag: 9.0-alpine@sha256:1be494495248d53e3558b198a1c704e6b559d5e99fe4c926e14a8ad24d76c6fa
+                    pullPolicy: IfNotPresent
 ---

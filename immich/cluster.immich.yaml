@@ -191,22 +191,22 @@ spec:
       passwordSecret:
         name: postgres-immich-user
 ---
-apiVersion: postgresql.cnpg.io/v1
-kind: Pooler
-metadata:
-  name: postgres-pool
-  namespace: immich
-spec:
-  cluster:
-    name: immich
-  instances: 2
-  type: rw
-  pgbouncer:
-    poolMode: session
-    parameters:
-      max_client_conn: "250"
-      default_pool_size: "5"
----
+# apiVersion: postgresql.cnpg.io/v1
+# kind: Pooler
+# metadata:
+#   name: postgres-pool
+#   namespace: immich
+# spec:
+#   cluster:
+#     name: immich
+#   instances: 2
+#   type: rw
+#   pgbouncer:
+#     poolMode: session
+#     parameters:
+#       max_client_conn: "250"
+#       default_pool_size: "5"
+# ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
