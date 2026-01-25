@@ -89,7 +89,7 @@ spec:
     schedule: "*/30 * * * *"
   restic:
     pruneIntervalDays: 14
-    repository: restic-repo
+    repository: restic-repo-prowlarr
     retain:
       hourly: 6
       daily: 5
