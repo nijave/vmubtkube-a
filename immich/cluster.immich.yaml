@@ -147,6 +147,10 @@ spec:
   restic:
     pruneIntervalDays: 14
     repository: restic-repo-pg
+    moverSecurityContext:
+      runAsUser: 26
+      runAsGroup: 26
+      fsGroup: 26
     retain:
       hourly: 6
       daily: 5
