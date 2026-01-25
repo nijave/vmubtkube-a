@@ -97,22 +97,63 @@ metadata:
 stringData:
   username: postgres
 ---
-apiVersion: secretgenerator.mittwald.de/v1alpha1
-kind: StringSecret
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
 metadata:
-  name: backup-creds
+  name: restic-repo-pg
   namespace: immich
 spec:
-  forceRegenerate: false
-  # data:
-  #   username: "testuser"
-  fields:
-    - fieldName: ACCESS_KEY_ID
-      encoding: hex
-      length: "16"
-    - fieldName: ACCESS_SECRET_KEY
-      encoding: base32
-      length: "32"
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        RESTIC_REPOSITORY: s3:https://vmubthh01.s.nickv.me:/volsync-postgres-immich
+        RESTIC_PASSWORD: "{{ .password }}"
+        AWS_ACCESS_KEY_ID: "{{ .accessKey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: password
+    remoteRef:
+      key: volsync-restic-password-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: postgres-data
+  namespace: immich
+spec:
+  sourcePVC: immich-1
+  trigger:
+    schedule: "*/30 * * * *"
+  restic:
+    pruneIntervalDays: 14
+    repository: restic-repo-pg
+    retain:
+      hourly: 6
+      daily: 5
+      weekly: 4
+      monthly: 3
+      yearly: 0
+    copyMethod: Clone
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -143,27 +184,6 @@ spec:
 
   storage:
     size: 25Gi
-
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://postgres/
-  #     endpointURL: http://nas.apps.somemissing.info.:9001
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: backup-creds
-  #         key: ACCESS_KEY_ID
-  #       secretAccessKey:
-  #         name: backup-creds
-  #         key: ACCESS_SECRET_KEY
-  #     wal:
-  #       compression: gzip
-  #       encryption: AES256
-  #     data:
-  #       compression: gzip
-  #       encryption: AES256
-  #       immediateCheckpoint: false
-  #       jobs: 2
-  #   retentionPolicy: "30d"
 
   resources:
     requests:
