@@ -90,6 +90,10 @@ spec:
   restic:
     pruneIntervalDays: 14
     repository: restic-repo-radarr
+    moverSecurityContext:
+      runAsUser: 1002
+      runAsGroup: 1001
+      fsGroup: 1001
     retain:
       hourly: 6
       daily: 5
