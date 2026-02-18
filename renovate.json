@@ -8,6 +8,33 @@
     "fileMatch": ["^application\\..*\\.yaml$"]
   },
   "kubernetes": {
-    "fileMatch": ["^(immich|operators|thanos)/.+\\.yaml$"]
-  }
+    "fileMatch": [
+      "^(immich|operators|thanos)/.+\\.yaml$",
+      "^(cloudflared|contour|jellyfin|python-envoy-authz)\\.yaml$"
+    ]
+  },
+  "registryAliases": {
+    "registry.apps.nickv.me": "index.docker.io"
+  },
+  "packageRules": [
+    {
+      "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
+      "matchPackageNames": ["registry.apps.nickv.me/thanos"],
+      "registryUrls": ["https://quay.io"],
+      "packageName": "thanos/thanos"
+    },
+    {
+      "description": "cloudflared is mirrored from cloudflare/cloudflared on DockerHub",
+      "matchPackageNames": ["registry.apps.nickv.me/cloudflared"],
+      "packageName": "cloudflare/cloudflared"
+    },
+    {
+      "description": "Custom/patched images - not tracking upstream",
+      "matchPackageNames": [
+        "registry.apps.nickv.me/jellyfin",
+        "registry.apps.nickv.me/python-envoy-authz"
+      ],
+      "enabled": false
+    }
+  ]
 }
