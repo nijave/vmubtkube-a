@@ -9433,7 +9433,7 @@ spec:
         command:
         - envoy
         imagePullPolicy: IfNotPresent
-        image: registry.apps.nickv.me/envoyproxy/envoy:v1.34.1
+        image: registry.apps.nickv.me/envoyproxy/envoy:v1.37.0
         name: envoy
         env:
         - name: CONTOUR_NAMESPACE
