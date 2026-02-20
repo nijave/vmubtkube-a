@@ -12,6 +12,8 @@ spec:
   source:
     path: ./
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    directory:
+      exclude: renovate.json
     targetRevision: HEAD
   syncPolicy:
     automated:
