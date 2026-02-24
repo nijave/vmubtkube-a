@@ -187,7 +187,7 @@ spec:
     name: postgres-superuser
 
   storage:
-    size: 25Gi
+    size: 50Gi
 
   resources:
     requests:
