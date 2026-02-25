@@ -182,6 +182,12 @@ spec:
     shared_preload_libraries:
     - "vchord.so"
 
+  plugins:
+  - name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: true
+    parameters:
+      barmanObjectName: immich-s3
+
   enableSuperuserAccess: true
   superuserSecret:
     name: postgres-superuser
@@ -264,4 +270,73 @@ spec:
       ensure: present
     - name: vchord
       ensure: present
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: barman-s3-creds
+  namespace: immich
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: barman-s3-creds
+    template:
+      type: Opaque
+      data:
+        ACCESS_KEY_ID: "{{ .accessKey }}"
+        ACCESS_SECRET_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: immich-s3
+  namespace: immich
+spec:
+  configuration:
+    destinationPath: s3://cnpg-immich/
+    endpointURL: https://vmubthh01.s.nickv.me
+    s3Credentials:
+      accessKeyId:
+        name: barman-s3-creds
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: barman-s3-creds
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+  retentionPolicy: "90d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: immich-daily-backup
+  namespace: immich
+spec:
+  schedule: "0 0 3 * * *"
+  backupOwnerReference: self
+  method: plugin
+  cluster:
+    name: immich
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
 ---
