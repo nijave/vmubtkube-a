@@ -28,6 +28,24 @@ spec:
         app.kubernetes.io/name: thanos-receive
         app.kubernetes.io/version: v0.41.0
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - thanos-receive
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                  - thanos-receive-router
+              namespaces:
+              - thanos
+              topologyKey: kubernetes.io/hostname
+            weight: 100
       containers:
       - args:
         - receive

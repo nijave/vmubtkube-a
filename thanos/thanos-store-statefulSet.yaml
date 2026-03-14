@@ -60,7 +60,7 @@ spec:
         - --chunk-pool-size=256MB
         # default 20, try to limit memory usage
         - --store.grpc.series-max-concurrency=2
-        - --max-time=-4h
+        - --max-time=-2h
         - --store.grpc.touched-series-limit=50000
         - --tracing.config=$(TRACING_CONFIG)
         env:
