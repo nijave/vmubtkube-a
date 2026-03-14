@@ -6,12 +6,12 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["configmaps"]
-  verbs: ["list", "watch"]
+  verbs: ["list", "watch", "create"]
 
 - apiGroups: [""]
   resources: ["configmaps"]
   resourceNames: ["thanos-receive", "thanos-receive-generated"]
-  verbs: ["get", "watch", "create", "update"]
+  verbs: ["get", "watch", "update"]
 
 - apiGroups: [""]
   resources: ["pods"]

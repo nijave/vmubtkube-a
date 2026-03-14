@@ -47,6 +47,7 @@ spec:
         - --receive-forward-max-backoff=15s
         - --label=thanos_replica="$(NAME)"
         - --label=receive="true"
+        - --enable-auto-gomemlimit
         - --tracing.config=$(TRACING_CONFIG)
         env:
         - name: NAME

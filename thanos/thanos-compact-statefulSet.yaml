@@ -51,9 +51,10 @@ spec:
         - --log.format=logfmt
         - --objstore.config=$(OBJSTORE_CONFIG)
         - --tracing.config=$(TRACING_CONFIG)
+        - --enable-auto-gomemlimit
         - --data-dir=/var/thanos/compact
         - --debug.accept-malformed-index
-        - --retention.resolution-raw=2d
+        - --retention.resolution-raw=14d
         - --retention.resolution-5m=14d
         - --retention.resolution-1h=395d
         - --delete-delay=1h

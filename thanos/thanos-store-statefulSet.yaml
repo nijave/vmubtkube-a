@@ -61,6 +61,7 @@ spec:
         # default 20, try to limit memory usage
         - --store.grpc.series-max-concurrency=2
         - --max-time=-4h
+        - --store.grpc.touched-series-limit=50000
         - --tracing.config=$(TRACING_CONFIG)
         env:
         - name: OBJSTORE_CONFIG

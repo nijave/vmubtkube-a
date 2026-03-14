@@ -67,7 +67,7 @@ spec:
       containers:
       - args:
         - receive
-        - --log.level=debug
+        - --log.level=info
         - --log.format=logfmt
         - --grpc-grace-period=15s
         - --http-grace-period=15s
@@ -79,7 +79,7 @@ spec:
         - --tsdb.max-retention-bytes=15GB
         - --tsdb.memory-snapshot-on-shutdown
         - --tsdb.enable-native-histograms
-        - --tsdb.too-far-in-future.time-window=30s
+        - --tsdb.too-far-in-future.time-window=5m
         - --tsdb.out-of-order.time-window=30m
         - --tsdb.wal-compression
         # - --label=prometheus_replica="$(NAME)"

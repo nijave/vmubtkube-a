@@ -19,7 +19,7 @@ grafana:
         customQueryParameters: max_source_resolution=1h
         cacheLevel:	Medium
         prometheusType: "Thanos"
-        prometheusVersion: "0.31.1"
+        prometheusVersion: "0.41.0"
         queryTimeout: "300s"
   additionalDataSources:
   - name: prometheus_vmubtkube-a
