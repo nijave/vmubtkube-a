@@ -75,11 +75,13 @@ spec:
         - --http-address=0.0.0.0:10902
         - --remote-write.address=0.0.0.0:19291
         - --tsdb.path=/var/thanos/receive
-        - --tsdb.retention=8h
+        - --tsdb.retention=4h
         - --tsdb.max-retention-bytes=15GB
         - --tsdb.memory-snapshot-on-shutdown
         - --tsdb.enable-native-histograms
         - --tsdb.too-far-in-future.time-window=30s
+        - --tsdb.out-of-order.time-window=30m
+        - --tsdb.wal-compression
         # - --label=prometheus_replica="$(NAME)"
         - --label=thanos_replica="$(NAME)"
         - --label=receive="true"
@@ -121,6 +123,13 @@ spec:
           name: http
         - containerPort: 19291
           name: remote-write
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: 10902
+            scheme: HTTP
+          failureThreshold: 180
+          periodSeconds: 5
         readinessProbe:
           failureThreshold: 12
           httpGet:
@@ -179,4 +188,4 @@ spec:
       storageClassName: zfs-generic-iscsi-csi
       resources:
         requests:
-          storage: 20Gi
+          storage: 35Gi

@@ -43,7 +43,7 @@ spec:
         - --receive.hashrings-algorithm=ketama
         - --receive.hashrings-file=/var/lib/thanos-receive/hashrings.json
         - --receive.hashrings-file-refresh-interval=5s
-        - --receive-forward-timeout=5m
+        - --receive-forward-timeout=30s
         - --receive-forward-max-backoff=15s
         - --label=thanos_replica="$(NAME)"
         - --label=receive="true"
