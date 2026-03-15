@@ -21,7 +21,7 @@ spec:
   source:
     chart: clickstack
     repoURL: https://hyperdxio.github.io/helm-charts
-    targetRevision: 1.1.0
+    targetRevision: 1.1.1
     helm:
       releaseName: hyperdx
       valuesObject:
