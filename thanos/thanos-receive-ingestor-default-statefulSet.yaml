@@ -150,8 +150,8 @@ spec:
             memory: 6Gi
             cpu: 1250m
           requests:
-            memory: 1536Mi
-            cpu: 300m
+            memory: 1024Mi
+            cpu: 200m
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /var/thanos/receive
