@@ -41,6 +41,8 @@ spec:
         service:
           type: ClusterIP
           clusterIP: None
+        command:
+        - memcached
         args:
         - -m
         - "256"
