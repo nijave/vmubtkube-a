@@ -26,10 +26,10 @@ spec:
     helm:
       releaseName: index-cache
       valuesObject:
-        global:
-          security:
-            allowInsecureImages: true
-          imageRegistry: registry.apps.nickv.me
+        image:
+          registry: docker.io
+          repository: memcached
+          tag: "1.6-alpine"
         architecture: standalone
         # architecture: high-availability
         # autoscaling:
@@ -42,7 +42,6 @@ spec:
           type: ClusterIP
           clusterIP: None
         args:
-        - /run.sh
         - -m
         - "256"
         resources:
