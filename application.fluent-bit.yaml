@@ -131,7 +131,7 @@ spec:
             [OUTPUT]
                 Name         opentelemetry
                 Match        *
-                Host         hyperdx-hdx-oss-v2-otel-collector.hyperdx.svc.cluster.local.
+                Host         hyperdx-clickstack-otel-collector.hyperdx.svc.cluster.local.
                 Port         4317
                 Grpc         on
                 Header       authorization ee42ac01-9495-456e-adfc-9e81908e5d1f
