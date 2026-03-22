@@ -43,6 +43,16 @@ spec:
             logSize: 20Gi
         ingress:
           enabled: false
+    kustomize:
+      patches:
+        - target:
+            kind: Deployment
+            name: hyperdx-clickstack-mongodb
+          patch: |
+            - op: add
+              path: /spec/strategy
+              value:
+                type: Recreate
 ---
 
 apiVersion: v1
