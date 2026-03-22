@@ -15,7 +15,7 @@ spec:
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy
 metadata:
-  name: somemissing-info
+  name: immich-apps-somemissing-info
   namespace: immich
 spec:
   virtualhost:
@@ -29,4 +29,7 @@ spec:
         - name: immich-server
           port: 2283
       enableWebsockets: true
+      timeoutPolicy:
+        response: "0s"
+        idle: "300s"
 ---
