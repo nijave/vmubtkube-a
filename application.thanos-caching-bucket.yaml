@@ -26,6 +26,9 @@ spec:
     helm:
       releaseName: caching-bucket
       valuesObject:
+        global:
+          security:
+            allowInsecureImages: true
         image:
           registry: docker.io
           repository: memcached
