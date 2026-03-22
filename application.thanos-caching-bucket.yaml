@@ -58,6 +58,10 @@ spec:
           minAvailable: 0 # not HA
         metrics:
           enabled: true
+          image:
+            registry: docker.io
+            repository: prom/memcached-exporter
+            tag: "v0.15.0"
           serviceMonitor:
             enabled: true
             interval: 10s
