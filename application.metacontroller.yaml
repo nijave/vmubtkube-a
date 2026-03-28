@@ -21,7 +21,7 @@ spec:
   source:
     repoURL: ghcr.io/metacontroller
     chart: metacontroller-helm
-    targetRevision: 4.13.1
+    targetRevision: 4.15.0
     helm:
       releaseName: metacontroller
       valuesObject: {}
