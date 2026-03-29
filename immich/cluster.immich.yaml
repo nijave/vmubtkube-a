@@ -183,7 +183,8 @@ spec:
     - "vchord.so"
 
   plugins:
-  - name: barman-cloud.cloudnative-pg.io
+  - enabled: true
+    name: barman-cloud.cloudnative-pg.io
     isWALArchiver: true
     parameters:
       barmanObjectName: immich-s3
