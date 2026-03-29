@@ -64,7 +64,7 @@ spec:
           image:
             registry: docker.io
             repository: prom/memcached-exporter
-            tag: "v0.15.0"
+            tag: "v0.15.5"
           serviceMonitor:
             enabled: true
             interval: 10s
