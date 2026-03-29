@@ -129,16 +129,10 @@ spec:
                 Preserve_Key      On
           outputs: |
             [OUTPUT]
-                Name         opentelemetry
+                Name         forward
                 Match        *
                 Host         hyperdx-clickstack-otel-collector.hyperdx.svc.cluster.local.
-                Port         4317
-                Grpc         on
-                Header       authorization ee42ac01-9495-456e-adfc-9e81908e5d1f
-                tls          off
-                tls.verify   off
-                logs_body_key log
-                logs_body_key_attributes on
+                Port         24225
         hotReload:
           enabled: true
 ---
