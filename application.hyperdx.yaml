@@ -66,11 +66,11 @@ spec:
   type: ClusterIP
   ports:
   - name: app
-    port: 3000
+    port: 80
     protocol: TCP
     targetPort: 3000
   selector:
-    app: hyperdx-hdx-oss-v2
+    app: hyperdx-clickstack
     app.kubernetes.io/instance: hyperdx
-    app.kubernetes.io/name: hdx-oss-v2
+    app.kubernetes.io/name: clickstack
 ---
