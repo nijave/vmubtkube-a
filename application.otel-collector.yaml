@@ -69,7 +69,7 @@ spec:
               endpoint: hyperdx-clickstack-otel-collector.hyperdx:4317
               compression: gzip
               headers:
-                authorization: ee42ac01-9495-456e-adfc-9e81908e5d1f
+                authorization: 67591567-eca7-43b1-b218-4af3992e5e9b
               tls:
                 insecure: true
 
