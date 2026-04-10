@@ -190,18 +190,6 @@ spec:
                   memory: 1Gi
                 limits:
                   memory: 8Gi
-              lifecycle:
-                postStart:
-                  exec:
-                    command:
-                      - bash
-                      - -c
-                      - |
-                        for i in $(seq 1 60); do
-                          clickhouse-client --query "SELECT 1" >/dev/null 2>&1 && break
-                          sleep 2
-                        done
-                        clickhouse-client --query "CREATE DATABASE IF NOT EXISTS otel ENGINE = Replicated('/clickhouse/databases/otel', '{shard}', '{replica}')"
     volumeClaimTemplates:
       - name: data
         reclaimPolicy: Retain
@@ -267,3 +255,115 @@ spec:
             - namespace
             - pod
           targetLabel: instance
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-schema-seed
+  namespace: hyperdx
+data:
+  seed.sh: |
+    #!/bin/sh
+    set -eu
+
+    SQL_REF="${SQL_REF:?}"
+    DATABASE="${DATABASE:?}"
+    TABLES_TTL="${TABLES_TTL:?}"
+    CH_HOST="${CH_HOST:?}"
+    CH_REPLICAS="${CH_REPLICAS:?}"
+
+    # Wait for every replica to be reachable so the Replicated DB engine
+    # can propagate DDL to the full cluster on the first attempt.
+    for host in $CH_REPLICAS; do
+      until clickhouse-client --host "$host" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "SELECT 1" >/dev/null 2>&1; do
+        echo "waiting for $host..."
+        sleep 3
+      done
+      echo "$host ready"
+    done
+
+    clickhouse-client --host "$CH_HOST" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" \
+      --query "CREATE DATABASE IF NOT EXISTS $DATABASE ENGINE = Replicated('/clickhouse/databases/$DATABASE', '{shard}', '{replica}')"
+
+    BASE_URL="https://raw.githubusercontent.com/hyperdxio/hyperdx/${SQL_REF}/docker/otel-collector/schema/seed"
+    for f in 00002_otel_logs.sql 00003_otel_metrics.sql 00004_hyperdx_sessions.sql 00005_otel_traces.sql; do
+      echo "applying $f"
+      wget -qO- "$BASE_URL/$f" \
+        | sed -e "s|\${DATABASE}|$DATABASE|g" \
+              -e "s|\${TABLES_TTL}|$TABLES_TTL|g" \
+              -e 's|ENGINE = MergeTree|ENGINE = ReplicatedMergeTree|g' \
+        | clickhouse-client --host "$CH_HOST" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --multiquery
+    done
+
+    # The OTel ClickHouse exporter creates these auxiliary trace lookup
+    # objects on first write; pre-create them as Replicated so the
+    # exporter's CREATE IF NOT EXISTS becomes a no-op.
+    clickhouse-client --host "$CH_HOST" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --multiquery <<SQL
+    CREATE TABLE IF NOT EXISTS $DATABASE.otel_traces_trace_id_ts (
+      TraceId String CODEC(ZSTD(1)),
+      Start DateTime CODEC(Delta(4), ZSTD(1)),
+      End DateTime CODEC(Delta(4), ZSTD(1)),
+      INDEX idx_trace_id TraceId TYPE bloom_filter(0.01) GRANULARITY 1
+    ) ENGINE = ReplicatedMergeTree
+    PARTITION BY toDate(Start)
+    ORDER BY (TraceId, Start)
+    TTL toDateTime(Start) + $TABLES_TTL
+    SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1;
+
+    CREATE MATERIALIZED VIEW IF NOT EXISTS $DATABASE.otel_traces_trace_id_ts_mv
+    TO $DATABASE.otel_traces_trace_id_ts
+    AS SELECT TraceId, min(Timestamp) AS Start, max(Timestamp) AS End
+    FROM $DATABASE.otel_traces
+    WHERE TraceId != ''
+    GROUP BY TraceId;
+    SQL
+
+    echo "schema seed complete"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-schema-seed
+  namespace: hyperdx
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: clickhouse/clickhouse-server:25.7-alpine
+          command: ["/bin/sh", "/seed/seed.sh"]
+          env:
+            - name: SQL_REF
+              value: "@hyperdx/otel-collector@2.23.1"
+            - name: DATABASE
+              value: otel
+            - name: TABLES_TTL
+              value: toIntervalDay(30)
+            - name: CH_HOST
+              value: clickhouse-hyperdx
+            - name: CH_REPLICAS
+              value: chi-hyperdx-replicated-0-0 chi-hyperdx-replicated-0-1
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-app-credentials
+                  key: username
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-app-credentials
+                  key: password
+          volumeMounts:
+            - name: seed
+              mountPath: /seed
+      volumes:
+        - name: seed
+          configMap:
+            name: clickhouse-schema-seed
