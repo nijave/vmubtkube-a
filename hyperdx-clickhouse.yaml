@@ -1,0 +1,269 @@
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/basic-auth
+metadata:
+  name: clickhouse-app-credentials
+  namespace: hyperdx
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: app
+---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/basic-auth
+metadata:
+  name: clickhouse-otelcollector-credentials
+  namespace: hyperdx
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: otelcollector
+---
+apiVersion: clickhouse-keeper.altinity.com/v1
+kind: ClickHouseKeeperInstallation
+metadata:
+  name: hyperdx
+  namespace: hyperdx
+spec:
+  configuration:
+    clusters:
+      - name: keeper
+        layout:
+          replicasCount: 3
+    settings:
+      logger/level: information
+      logger/console: "true"
+      listen_host: "0.0.0.0"
+      keeper_server/four_letter_word_white_list: "*"
+      keeper_server/coordination_settings/raft_logs_level: information
+      prometheus/endpoint: /metrics
+      prometheus/port: "7000"
+      prometheus/metrics: "true"
+      prometheus/events: "true"
+      prometheus/asynchronous_metrics: "true"
+  defaults:
+    templates:
+      podTemplate: default
+      dataVolumeClaimTemplate: default
+      serviceTemplate: keeper-service
+  templates:
+    serviceTemplates:
+      - name: keeper-service
+        generateName: keeper-{chk}
+        spec:
+          ports:
+            - name: client
+              port: 2181
+            - name: raft
+              port: 9444
+            - name: metrics
+              port: 7000
+          type: ClusterIP
+    podTemplates:
+      - name: default
+        metadata:
+          labels:
+            app: clickhouse-keeper
+        spec:
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchLabels:
+                        app: clickhouse-keeper
+                    topologyKey: kubernetes.io/hostname
+          containers:
+            - name: clickhouse-keeper
+              image: clickhouse/clickhouse-keeper:25.7-alpine
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+    volumeClaimTemplates:
+      - name: default
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: zfs-generic-iscsi-csi
+          resources:
+            requests:
+              storage: 10Gi
+---
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: hyperdx
+  namespace: hyperdx
+spec:
+  defaults:
+    templates:
+      podTemplate: clickhouse
+      dataVolumeClaimTemplate: data
+      logVolumeClaimTemplate: logs
+      replicaServiceTemplate: clickhouse-replica-service
+  configuration:
+    zookeeper:
+      nodes:
+        - host: keeper-hyperdx
+          port: 2181
+    users:
+      app/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-app-credentials
+            key: password
+      app/networks/ip:
+        - 127.0.0.1/32
+        - 192.168.224.0/20
+      app/profile: default
+      app/quota: default
+      app/access_management: "1"
+      app/named_collection_control: "1"
+      app/show_named_collections: "1"
+      app/show_named_collections_secrets: "1"
+      otelcollector/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-otelcollector-credentials
+            key: password
+      otelcollector/networks/ip:
+        - 127.0.0.1/32
+        - 192.168.224.0/20
+      otelcollector/profile: default
+      otelcollector/quota: default
+    profiles:
+      default/allow_experimental_database_replicated: "1"
+      default/allow_experimental_object_type: "1"
+      default/distributed_ddl_entry_format_version: "5"
+    settings:
+      prometheus/endpoint: /metrics
+      prometheus/port: "9363"
+      prometheus/metrics: "true"
+      prometheus/events: "true"
+      prometheus/asynchronous_metrics: "true"
+    clusters:
+      - name: replicated
+        layout:
+          shardsCount: 1
+          replicasCount: 2
+  templates:
+    serviceTemplates:
+      - name: clickhouse-replica-service
+        generateName: chi-{chi}-{cluster}-{shard}-{replica}
+        spec:
+          ports:
+            - name: http
+              port: 8123
+            - name: tcp
+              port: 9000
+            - name: interserver
+              port: 9009
+            - name: metrics
+              port: 9363
+          clusterIP: None
+          type: ClusterIP
+    podTemplates:
+      - name: clickhouse
+        spec:
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  podAffinityTerm:
+                    labelSelector:
+                      matchLabels:
+                        clickhouse.altinity.com/chi: hyperdx
+                    topologyKey: kubernetes.io/hostname
+          containers:
+            - name: clickhouse
+              image: clickhouse/clickhouse-server:25.7-alpine
+              imagePullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  memory: 8Gi
+              lifecycle:
+                postStart:
+                  exec:
+                    command:
+                      - bash
+                      - -c
+                      - |
+                        for i in $(seq 1 60); do
+                          clickhouse-client --query "SELECT 1" >/dev/null 2>&1 && break
+                          sleep 2
+                        done
+                        clickhouse-client --query "CREATE DATABASE IF NOT EXISTS otel ENGINE = Replicated('/clickhouse/databases/{uuid}', '{shard}', '{replica}')"
+    volumeClaimTemplates:
+      - name: data
+        reclaimPolicy: Retain
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: zfs-generic-iscsi-csi
+          resources:
+            requests:
+              storage: 250Gi
+      - name: logs
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: zfs-generic-iscsi-csi
+          resources:
+            requests:
+              storage: 20Gi
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-hyperdx
+  namespace: hyperdx
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      clickhouse.altinity.com/chi: hyperdx
+      clickhouse.altinity.com/Service: host
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - action: replace
+          separator: /
+          sourceLabels:
+            - namespace
+            - pod
+          targetLabel: instance
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-keeper-hyperdx
+  namespace: hyperdx
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      clickhouse-keeper.altinity.com/chk: hyperdx
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - action: replace
+          separator: /
+          sourceLabels:
+            - namespace
+            - pod
+          targetLabel: instance
