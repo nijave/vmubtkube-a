@@ -3,6 +3,9 @@
 nameOverride: kp
 grafana:
   useStatefulSet: true
+  serviceMonitor:
+    interval: 30s
+    scrapeTimeout: 30s
   service:
     annotations:
       external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
@@ -78,6 +81,11 @@ prometheus:
     externalLabels:
       cluster: vmubtkube-a
       prometheus: vmubtkube-a
+    tracingConfig:
+      clientType: grpc
+      endpoint: otel-collector-opentelemetry-collector.monitoring:4317
+      insecure: true
+      samplingFraction: "0.01"
     retention: 7d
     retentionSize: 15GB
     scrapeInterval: 15s
