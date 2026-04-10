@@ -25,6 +25,8 @@ spec:
     namespace: operators
     managedFieldsManagers:
     - clickhouse-operator
+    jqPathExpressions:
+    - .spec.template.spec.containers[].env[].valueFrom.resourceFieldRef.divisor
   source:
     chart: altinity-clickhouse-operator
     repoURL: https://helm.altinity.com
