@@ -1,0 +1,101 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-contour
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: projectcontour
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: opentelemetry-collector
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    targetRevision: 0.148.0
+    helm:
+      releaseName: otel-collector
+      valuesObject:
+        fullnameOverride: otel-collector
+        mode: deployment
+        image:
+          repository: docker.io/otel/opentelemetry-collector-k8s
+
+        config:
+          processors:
+            batch:
+              send_batch_size: 1024
+              timeout: 5s
+
+          receivers:
+            jaeger: null
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: ${env:MY_POD_IP}:4317
+                http: null
+            prometheus: null
+            zipkin: null
+
+          exporters:
+            otlp:
+              endpoint: otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317
+              tls:
+                insecure: true
+
+          service:
+            pipelines:
+              logs: null
+              metrics: null
+              traces:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [otlp]
+
+        ports:
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+          otlp-http:
+            enabled: false
+          metrics:
+            enabled: true
+
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+
+        rollout:
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 100%
+
+        serviceMonitor:
+          enabled: true
+          extraLabels:
+            release: prom
+
+        prometheusRule:
+          enabled: true
+          defaultRules:
+            enabled: true
+          extraLabels:
+            release: prom
