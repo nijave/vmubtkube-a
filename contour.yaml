@@ -195,7 +195,14 @@ data:
         set:
           # example: Envoy flags that provide additional details about the response or connection
           X-Envoy-Response-Flags: '%RESPONSE_FLAGS%'
-    
+
+    tracing:
+      extensionService: projectcontour/otel-collector
+      serviceName: envoy
+      overallSampling: "100"
+      includePodDetail: true
+      maxPathTagLength: 256
+
     metrics:
      contour:
        address: 0.0.0.0

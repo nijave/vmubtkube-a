@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: projectcontour
+spec:
+  type: ExternalName
+  externalName: otel-collector-opentelemetry-collector.monitoring.svc.cluster.local
+  ports:
+  - port: 4317
+    protocol: TCP
+---
+apiVersion: projectcontour.io/v1alpha1
+kind: ExtensionService
+metadata:
+  name: otel-collector
+  namespace: projectcontour
+spec:
+  protocol: h2c
+  services:
+  - name: otel-collector
+    port: 4317
