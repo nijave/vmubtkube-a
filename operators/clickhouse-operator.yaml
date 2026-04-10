@@ -18,6 +18,13 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    name: clickhouse-operator-altinity-clickhouse-operator
+    namespace: operators
+    managedFieldsManagers:
+    - clickhouse-operator
   source:
     chart: altinity-clickhouse-operator
     repoURL: https://helm.altinity.com
