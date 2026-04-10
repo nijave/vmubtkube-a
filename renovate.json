@@ -35,6 +35,14 @@
         "registry.apps.nickv.me/python-envoy-authz"
       ],
       "enabled": false
+    },
+    {
+      "description": "Bump altinity-clickhouse-operator chart and CRD git ref together",
+      "matchPackageNames": [
+        "altinity-clickhouse-operator",
+        "Altinity/clickhouse-operator"
+      ],
+      "groupName": "altinity-clickhouse-operator"
     }
   ]
 }
