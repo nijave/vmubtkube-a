@@ -38,15 +38,19 @@ spec:
             batch:
               send_batch_size: 1024
               timeout: 5s
+            filter/thanos:
+              traces:
+                span:
+                - 'resource.attributes["service.name"] == "thanos" and status.code != STATUS_CODE_ERROR'
             tail_sampling:
               decision_wait: 300s
               policies:
-              - name: random
-                type: probabilistic
-                probabilistic: {sampling_percentage: 5}
               - name: error
                 type: status_code
                 status_code: {status_codes: [ERROR]}
+              - name: random
+                type: probabilistic
+                probabilistic: {sampling_percentage: 5}
 
           receivers:
             jaeger: null
@@ -79,7 +83,8 @@ spec:
               metrics: null
               traces:
                 receivers: [otlp]
-                exporters: 
+                processors: [filter/thanos, tail_sampling]
+                exporters:
                   # - debug
                   - otlp
                   # - otlphttp

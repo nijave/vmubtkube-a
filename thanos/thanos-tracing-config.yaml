@@ -20,6 +20,6 @@ data:
         # retry_initial_interval: 0s
         # retry_max_interval: 0s
         # retry_max_elapsed_time: 0s
-      sampler_type: "alwayssample"
-      sampler_param: ""
+      sampler_type: "probabilistic"
+      sampler_param: "0.25"
   
