@@ -201,7 +201,7 @@ spec:
                           clickhouse-client --query "SELECT 1" >/dev/null 2>&1 && break
                           sleep 2
                         done
-                        clickhouse-client --query "CREATE DATABASE IF NOT EXISTS otel ENGINE = Replicated('/clickhouse/databases/{uuid}', '{shard}', '{replica}')"
+                        clickhouse-client --query "CREATE DATABASE IF NOT EXISTS otel ENGINE = Replicated('/clickhouse/databases/otel', '{shard}', '{replica}')"
     volumeClaimTemplates:
       - name: data
         reclaimPolicy: Retain
