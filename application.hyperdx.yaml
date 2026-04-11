@@ -277,7 +277,7 @@ spec:
     spec:
       containers:
         - name: otel-collector
-          image: docker.hyperdx.io/hyperdx/hyperdx-otel-collector:2.8.0
+          image: docker.hyperdx.io/hyperdx/hyperdx-otel-collector:2.23.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: health
