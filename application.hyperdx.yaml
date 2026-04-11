@@ -248,7 +248,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: render
-          image: bitnami/kubectl:1.30
+          image: bitnamilegacy/kubectl:1.33.4
           command: ["/bin/sh", "/render/render.sh"]
           env:
             - name: CH_PASSWORD
