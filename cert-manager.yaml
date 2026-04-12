@@ -13273,8 +13273,6 @@ spec:
           args:
           - --v=2
           - --leader-election-namespace=kube-system
-          - --tracing-enabled=true
-          - --tracing-endpoint=otel-collector-opentelemetry-collector.monitoring:4317
           ports:
           - containerPort: 9402
             name: http-metrics
@@ -13340,8 +13338,6 @@ spec:
           - --cluster-resource-namespace=$(POD_NAMESPACE)
           - --leader-election-namespace=kube-system
           - --max-concurrent-challenges=5
-          - --tracing-enabled=true
-          - --tracing-endpoint=otel-collector-opentelemetry-collector.monitoring:4317
           - --acme-http01-solver-image=quay.io/jetstack/cert-manager-acmesolver:v1.19.1
           - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
           ports:
@@ -13423,8 +13419,6 @@ spec:
           args:
           - --v=2
           - --secure-port=10250
-          - --tracing-enabled=true
-          - --tracing-endpoint=otel-collector-opentelemetry-collector.monitoring:4317
           - --dynamic-serving-ca-secret-namespace=$(POD_NAMESPACE)
           - --dynamic-serving-ca-secret-name=cert-manager-webhook-ca
           - --dynamic-serving-dns-names=cert-manager-webhook
