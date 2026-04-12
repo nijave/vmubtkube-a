@@ -20,43 +20,51 @@ spec:
     - ApplyOutOfSyncOnly=true
   source:
     chart: clickstack
-    repoURL: https://hyperdxio.github.io/helm-charts
-    targetRevision: 1.1.1
+    repoURL: https://clickhouse.github.io/ClickStack-helm-charts
+    targetRevision: 2.1.1
     helm:
       releaseName: hyperdx
       valuesObject:
-        global:
-          storageClassName: zfs-generic-iscsi-csi
         clickhouse:
           enabled: false
         mongodb:
           enabled: false
         hyperdx:
-          appUrl: http://hyperdx.k8s.somemissing.info
-          appPort: 3000
-          apiKey: c58fcf6d-fda1-4100-bbba-3ef6ceed8a7f
+          config:
+            FRONTEND_URL: "http://hyperdx.k8s.somemissing.info"
+            CLICKHOUSE_ENDPOINT: "tcp://clickhouse-hyperdx:9000?dial_timeout=10s"
+            CLICKHOUSE_SERVER_ENDPOINT: "clickhouse-hyperdx:9000"
+            CLICKHOUSE_PROMETHEUS_METRICS_ENDPOINT: "clickhouse-hyperdx:9363"
+            CLICKHOUSE_USER: "otelcollector"
+            HYPERDX_OTEL_EXPORTER_CLICKHOUSE_DATABASE: "otel"
+            MONGO_URI: "overridden-by-env"
+          secrets:
+            HYPERDX_API_KEY: "c58fcf6d-fda1-4100-bbba-3ef6ceed8a7f"
+            CLICKHOUSE_PASSWORD: "placeholder"
+            CLICKHOUSE_APP_PASSWORD: "placeholder"
+            MONGODB_PASSWORD: "placeholder"
+          deployment:
+            useExistingConfigSecret: true
+            existingConfigSecret: hyperdx-clickstack-config
+            existingConfigConnectionsKey: connections.json
+            existingConfigSourcesKey: sources.json
+            env:
+              - name: MONGO_URI
+                valueFrom:
+                  secretKeyRef:
+                    name: hyperdx-mongo-app-connection
+                    key: connectionString.standard
           service:
             type: ClusterIP
-          useExistingConfigSecret: true
-          existingConfigSecret: hyperdx-clickstack-config
-          existingConfigConnectionsKey: connections.json
-          existingConfigSourcesKey: sources.json
-          # Point app at our hand-written collector (chart's is disabled below)
-          otelExporterEndpoint: http://hyperdx-otel-collector:4318
-          env:
-            - name: MONGO_URI
+          ingress:
+            enabled: false
+        otel-collector:
+          extraEnvs:
+            - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: hyperdx-mongo-app-connection
-                  key: connectionString.standard
-        # Disable chart's otel-collector — its CLICKHOUSE_PASSWORD is rendered
-        # as a plaintext env value, and the `otel.env` append pattern produces
-        # duplicate env keys which Argo's SSA diff rejects. We run our own
-        # Deployment below with a single secretKeyRef entry.
-        otel:
-          enabled: false
-        ingress:
-          enabled: false
+                  name: clickhouse-otelcollector-credentials
+                  key: password
 ---
 apiVersion: v1
 kind: Service
@@ -257,101 +265,3 @@ spec:
         - name: render
           configMap:
             name: hyperdx-config-render
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: hyperdx-otel-collector
-  namespace: hyperdx
-  labels:
-    app: hyperdx-otel-collector
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: hyperdx-otel-collector
-  template:
-    metadata:
-      labels:
-        app: hyperdx-otel-collector
-    spec:
-      containers:
-        - name: otel-collector
-          image: docker.hyperdx.io/hyperdx/hyperdx-otel-collector:2.8.0
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: health
-              containerPort: 13133
-            - name: fluentd
-              containerPort: 24225
-            - name: otlp-grpc
-              containerPort: 4317
-            - name: otlp-http
-              containerPort: 4318
-            - name: metrics
-              containerPort: 8888
-          env:
-            - name: CLICKHOUSE_ENDPOINT
-              value: "tcp://clickhouse-hyperdx:9000?dial_timeout=10s"
-            - name: CLICKHOUSE_SERVER_ENDPOINT
-              value: "clickhouse-hyperdx:9000"
-            - name: CLICKHOUSE_PROMETHEUS_METRICS_ENDPOINT
-              value: "clickhouse-hyperdx:9363"
-            - name: OPAMP_SERVER_URL
-              value: "http://hyperdx-clickstack-app:4320"
-            - name: HYPERDX_LOG_LEVEL
-              value: info
-            - name: HYPERDX_OTEL_EXPORTER_CLICKHOUSE_DATABASE
-              value: otel
-            - name: HYPERDX_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: hyperdx-clickstack-app-secrets
-                  key: api-key
-            - name: CLICKHOUSE_USER
-              value: app
-            - name: CLICKHOUSE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: clickhouse-app-credentials
-                  key: password
-          livenessProbe:
-            httpGet:
-              path: /
-              port: health
-            initialDelaySeconds: 10
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /
-              port: health
-            initialDelaySeconds: 5
-            periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: hyperdx-otel-collector
-  namespace: hyperdx
-  labels:
-    app: hyperdx-otel-collector
-spec:
-  type: ClusterIP
-  selector:
-    app: hyperdx-otel-collector
-  ports:
-    - name: health
-      port: 13133
-      targetPort: health
-    - name: fluentd
-      port: 24225
-      targetPort: fluentd
-    - name: otlp-grpc
-      port: 4317
-      targetPort: otlp-grpc
-    - name: otlp-http
-      port: 4318
-      targetPort: otlp-http
-    - name: metrics
-      port: 8888
-      targetPort: metrics
