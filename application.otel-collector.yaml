@@ -28,6 +28,7 @@ spec:
         mode: deployment
         image:
           repository: docker.io/otel/opentelemetry-collector-k8s
+        enableConfigChecksumAnnotation: false
 
         presets:
           kubernetesAttributes:
