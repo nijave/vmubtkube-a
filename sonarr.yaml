@@ -118,6 +118,9 @@ spec:
   - name: http
     port: 80
     targetPort: http
+  - name: metrics
+    port: 9707
+    targetPort: metrics
   selector:
     app.kubernetes.io/component: sonarr
     app.kubernetes.io/name: arr
@@ -186,6 +189,30 @@ spec:
           limits:
             memory: 4Gi
             cpu: 750m
+      - name: exportarr
+        image: ghcr.io/onedr0p/exportarr:v2.2.0
+        args: [sonarr]
+        env:
+        - name: PORT
+          value: "9707"
+        - name: URL
+          value: http://localhost:8989
+        - name: CONFIG
+          value: /config/config.xml
+        ports:
+        - name: metrics
+          containerPort: 9707
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+        resources:
+          requests:
+            cpu: 5m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
       volumes:
       - name: config
         persistentVolumeClaim:
