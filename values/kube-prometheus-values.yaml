@@ -2,6 +2,9 @@
 
 nameOverride: kp
 grafana:
+  env:
+    GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector-opentelemetry-collector.monitoring:4317
+    GF_TRACING_OPENTELEMETRY_OTLP_PROPAGATION: w3c
   useStatefulSet: true
   serviceMonitor:
     interval: 30s
