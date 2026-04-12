@@ -10,7 +10,7 @@
   "kubernetes": {
     "fileMatch": [
       "^(immich|operators|thanos)/.+\\.yaml$",
-      "^(cloudflared|contour|jellyfin|python-envoy-authz)\\.yaml$"
+      "^(cert-manager|cloudflared|contour|jellyfin|python-envoy-authz)\\.yaml$"
     ]
   },
   "registryAliases": {
@@ -35,6 +35,16 @@
         "registry.apps.nickv.me/python-envoy-authz"
       ],
       "enabled": false
+    },
+    {
+      "description": "Group cert-manager images into a single PR (still requires re-downloading cert-manager.yaml from GitHub releases)",
+      "matchPackageNames": [
+        "quay.io/jetstack/cert-manager-controller",
+        "quay.io/jetstack/cert-manager-cainjector",
+        "quay.io/jetstack/cert-manager-webhook",
+        "quay.io/jetstack/cert-manager-acmesolver"
+      ],
+      "groupName": "cert-manager"
     },
     {
       "description": "Bump altinity-clickhouse-operator chart and CRD git ref together",
