@@ -70,7 +70,7 @@ spec:
               # tls:
                 # insecure: true
             otlp:
-              endpoint: hyperdx-clickstack-otel-collector.hyperdx:4317
+              endpoint: hyperdx-otel-collector.hyperdx:4317
               compression: gzip
               headers:
                 authorization: 67591567-eca7-43b1-b218-4af3992e5e9b

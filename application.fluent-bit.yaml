@@ -131,7 +131,7 @@ spec:
             [OUTPUT]
                 Name         forward
                 Match        *
-                Host         hyperdx-clickstack-otel-collector.hyperdx.svc.cluster.local.
+                Host         hyperdx-otel-collector.hyperdx.svc.cluster.local.
                 Port         24225
         hotReload:
           enabled: true
