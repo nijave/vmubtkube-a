@@ -12,21 +12,6 @@ configs:
     resource.customizations.ignoreDifferences.apps_StatefulSet: |
       jqPathExpressions:
       - .spec.volumeClaimTemplates[].metadata.creationTimestamp
-    resource.customizations.knownTypeFields.jaegertracing.io_Jaeger: |
-      - field: spec.agent.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.allInOne.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.collector.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.ingester.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.ingress.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.query.resources
-        type: core/v1/ResourceRequirements
-      - field: spec.resources
-        type: core/v1/ResourceRequirements
 
 redis-ha:
   enabled: false
