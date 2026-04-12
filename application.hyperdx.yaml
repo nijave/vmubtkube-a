@@ -52,8 +52,8 @@ spec:
               - name: MONGO_URI
                 valueFrom:
                   secretKeyRef:
-                    name: hyperdx-mongo-app-connection
-                    key: connectionString.standard
+                    name: hyperdx-clickstack-config
+                    key: mongo-uri
           service:
             type: ClusterIP
           ingress:
@@ -125,6 +125,10 @@ data:
     #!/bin/sh
     set -eu
     : "${CH_PASSWORD:?}"
+    : "${MONGO_PASSWORD:?}"
+
+    MONGO_HOSTS="hyperdx-0.hyperdx-svc.hyperdx.svc.cluster.local:27017,hyperdx-1.hyperdx-svc.hyperdx.svc.cluster.local:27017,hyperdx-2.hyperdx-svc.hyperdx.svc.cluster.local:27017"
+    MONGO_URI="mongodb://hyperdx:${MONGO_PASSWORD}@${MONGO_HOSTS}/hyperdx?replicaSet=hyperdx&authSource=admin"
 
     CONNECTIONS=$(cat <<JSON
     [
@@ -230,6 +234,7 @@ data:
     kubectl -n hyperdx create secret generic hyperdx-clickstack-config \
       --from-literal=connections.json="$CONNECTIONS" \
       --from-literal=sources.json="$SOURCES" \
+      --from-literal=mongo-uri="$MONGO_URI" \
       --dry-run=client -o yaml | kubectl apply -f -
 ---
 apiVersion: batch/v1
@@ -257,6 +262,11 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: clickhouse-app-credentials
+                  key: password
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hyperdx-mongo-app-credentials
                   key: password
           volumeMounts:
             - name: render
