@@ -38,10 +38,6 @@ spec:
             batch:
               send_batch_size: 1024
               timeout: 5s
-            filter/thanos:
-              traces:
-                span:
-                - 'resource.attributes["service.name"] == "thanos" and status.code != STATUS_CODE_ERROR'
             tail_sampling:
               decision_wait: 300s
               policies:
@@ -83,7 +79,7 @@ spec:
               metrics: null
               traces:
                 receivers: [otlp]
-                processors: [filter/thanos, tail_sampling]
+                processors: [tail_sampling]
                 exporters:
                   # - debug
                   - otlp
