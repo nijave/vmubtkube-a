@@ -2,6 +2,9 @@
 # helm install -n argocd argocd argo/argo-cd -f values/argocd-values.yaml
 # helm upgrade -n argocd argocd argo/argo-cd --reset-values -f values/argocd-values.yaml
 configs:
+  params:
+    otlp.address: otel-collector-opentelemetry-collector.monitoring:4317
+    otlp.insecure: "true"
   cm:
     resource.customizations.ignoreDifferences.apiextensions.k8s.io_CustomResourceDefinition: |
       jqPathExpressions:
