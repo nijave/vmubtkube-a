@@ -9065,8 +9065,10 @@ rules:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: contour-certgen-v1-32-0
+  name: contour-certgen
   namespace: projectcontour
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   template:
     metadata:
