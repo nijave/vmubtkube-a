@@ -190,7 +190,7 @@ spec:
             memory: 4Gi
             cpu: 250m
       - name: exportarr
-        image: ghcr.io/onedr0p/exportarr:v2.2.0
+        image: ghcr.io/onedr0p/exportarr:v2.3.0
         args: [prowlarr]
         env:
         - name: PORT
