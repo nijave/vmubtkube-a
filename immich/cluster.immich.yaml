@@ -166,7 +166,7 @@ metadata:
   namespace: immich
 spec:
   # imageName: ghcr.io/cloudnative-pg/postgresql:18.0-system-trixie
-  instances: 1
+  instances: 2
   startDelay: 300
   stopDelay: 300
   primaryUpdateStrategy: unsupervised
