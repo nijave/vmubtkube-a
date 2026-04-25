@@ -2,15 +2,19 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
   "argocd": {
-    "fileMatch": ["(^|/)application\\..*\\.yaml$"]
+    "managerFilePatterns": [
+      "/(^|/)application\\..*\\.yaml$/"
+    ]
   },
   "helm-values": {
-    "fileMatch": ["(^|/)application\\..*\\.yaml$"]
+    "managerFilePatterns": [
+      "/(^|/)application\\..*\\.yaml$/"
+    ]
   },
   "kubernetes": {
-    "fileMatch": [
-      "^(immich|operators|thanos)/.+\\.yaml$",
-      "^(cert-manager|cloudflared|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$"
+    "managerFilePatterns": [
+      "/^(immich|operators|thanos)/.+\\.yaml$/",
+      "/^(cert-manager|cloudflared|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
     ]
   },
   "registryAliases": {
@@ -23,14 +27,12 @@
   "packageRules": [
     {
       "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
-      "matchPackageNames": ["registry.apps.nickv.me/thanos"],
-      "registryUrls": ["https://quay.io"],
-      "packageName": "thanos/thanos"
+      "matchPackageNames": ["thanos/thanos"],
+      "registryUrls": ["https://quay.io"]
     },
     {
       "description": "cloudflared is mirrored from cloudflare/cloudflared on DockerHub",
-      "matchPackageNames": ["registry.apps.nickv.me/cloudflared"],
-      "packageName": "cloudflare/cloudflared"
+      "matchPackageNames": ["cloudflare/cloudflared"]
     },
     {
       "description": "Group cert-manager images into a single PR (still requires re-downloading cert-manager.yaml from GitHub releases)",
