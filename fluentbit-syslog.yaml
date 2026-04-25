@@ -58,7 +58,7 @@ spec:
     spec:
       containers:
         - name: fluent-bit
-          image: cr.fluentbit.io/fluent/fluent-bit:4.2
+          image: cr.fluentbit.io/fluent/fluent-bit:5.0
           args: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
           ports:
             - name: syslog-udp
