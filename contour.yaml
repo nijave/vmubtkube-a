@@ -9340,6 +9340,13 @@ spec:
         image: ghcr.io/projectcontour/contour:v1.33.4
         imagePullPolicy: IfNotPresent
         name: contour
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
         ports:
         - containerPort: 8001
           name: xds
@@ -9431,6 +9438,13 @@ spec:
                 - envoy
                 - shutdown
         name: shutdown-manager
+        resources:
+          requests:
+            cpu: 5m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
         volumeMounts:
           - name: envoy-admin
             mountPath: /admin
@@ -9445,6 +9459,13 @@ spec:
         imagePullPolicy: IfNotPresent
         image: registry.apps.nickv.me/envoyproxy/envoy:v1.38.0
         name: envoy
+        resources:
+          requests:
+            cpu: 50m
+            memory: 192Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
         env:
         - name: CONTOUR_NAMESPACE
           valueFrom:
@@ -9506,6 +9527,13 @@ spec:
         image: ghcr.io/projectcontour/contour:v1.33.4
         imagePullPolicy: IfNotPresent
         name: envoy-initconfig
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
         volumeMounts:
         - name: envoy-config
           mountPath: /config
