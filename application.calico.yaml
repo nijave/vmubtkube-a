@@ -1,0 +1,89 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: calico
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: tigera-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+    - CreateNamespace=true
+  source:
+    chart: tigera-operator
+    repoURL: https://docs.tigera.io/calico/charts
+    targetRevision: v3.31.0
+    helm:
+      releaseName: calico
+      valuesObject:
+        installation:
+          registry: quay.io
+---
+apiVersion: crd.projectcalico.org/v1
+kind: BGPConfiguration
+metadata:
+  name: default
+spec:
+  asNumber: 64512
+  serviceClusterIPs:
+  - cidr: 192.168.208.0/20
+  serviceLoadBalancerAggregation: Enabled
+---
+apiVersion: crd.projectcalico.org/v1
+kind: BGPPeer
+metadata:
+  name: router
+spec:
+  asNumber: 64512
+  peerIP: 172.16.3.254
+  filters:
+  - default
+---
+apiVersion: crd.projectcalico.org/v1
+kind: BGPFilter
+metadata:
+  name: default
+spec:
+  exportV4:
+  - action: Reject
+    cidr: 192.168.208.0/20
+    matchOperator: NotIn
+---
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+  name: contour-pool
+spec:
+  cidr: 172.16.1.32/28
+  blockSize: 32
+  ipipMode: Never
+  vxlanMode: Never
+  natOutgoing: true
+  nodeSelector: all()
+  assignmentMode: Manual
+  allowedUses:
+  - Workload
+  - Tunnel
+---
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: default
+spec:
+  bpfEnabled: false
+  bpfConnectTimeLoadBalancing: TCP
+  bpfHostNetworkedNATWithoutCTLB: Enabled
+  floatingIPs: Disabled
+  healthPort: 9099
+  logSeverityScreen: Info
+  nftablesMode: Disabled
