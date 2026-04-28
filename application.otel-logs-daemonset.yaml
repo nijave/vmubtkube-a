@@ -1,0 +1,121 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-logs-daemonset
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: opentelemetry-collector
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    targetRevision: 0.152.0
+    helm:
+      releaseName: otel-logs
+      valuesObject:
+        mode: daemonset
+        image:
+          repository: docker.io/otel/opentelemetry-collector-k8s
+        enableConfigChecksumAnnotation: true
+
+        presets:
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+          kubernetesAttributes:
+            enabled: true
+            extractAllPodLabels: true
+            extractAllPodAnnotations: true
+
+        config:
+          extensions:
+            file_storage/queue:
+              directory: /var/lib/otelcol/queue
+              timeout: 10s
+
+          processors:
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            batch:
+              send_batch_size: 1024
+              timeout: 5s
+
+          exporters:
+            otlp:
+              endpoint: hyperdx-otel-collector.hyperdx:4317
+              compression: gzip
+              headers:
+                authorization: 67591567-eca7-43b1-b218-4af3992e5e9b
+              tls:
+                insecure: true
+              sending_queue:
+                enabled: true
+                storage: file_storage/queue
+                num_consumers: 4
+                queue_size: 5000
+
+          service:
+            extensions: [health_check, file_storage/queue]
+            pipelines:
+              logs:
+                receivers: [filelog]
+                processors: [k8sattributes, memory_limiter, batch]
+                exporters: [otlp]
+              metrics: null
+              traces: null
+
+        extraVolumes:
+          - name: otelcol-state
+            hostPath:
+              path: /var/lib/otelcol
+              type: DirectoryOrCreate
+
+        extraVolumeMounts:
+          - name: otelcol-state
+            mountPath: /var/lib/otelcol
+
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+
+        tolerations:
+          - operator: Exists
+
+        ports:
+          jaeger-compact: { enabled: false }
+          jaeger-thrift:  { enabled: false }
+          jaeger-grpc:    { enabled: false }
+          zipkin:         { enabled: false }
+          otlp:           { enabled: false }
+          otlp-http:      { enabled: false }
+          metrics:        { enabled: true }
+
+        serviceMonitor:
+          enabled: true
+          extraLabels:
+            release: prom
+
+        prometheusRule:
+          enabled: true
+          defaultRules:
+            enabled: true
+          extraLabels:
+            release: prom
