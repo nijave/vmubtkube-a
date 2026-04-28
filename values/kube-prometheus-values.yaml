@@ -34,6 +34,10 @@ grafana:
 prometheusOperator:
   verticalPodAutoscaler:
     enabled: true
+kube-state-metrics:
+  replicas: 2
+  extraArgs:
+    - --enable-leader-election
 additionalPrometheusRulesMap:
   blackbox-exporter-alerts:
     groups:
