@@ -53,6 +53,23 @@ spec:
         podAnnotations:
           fluentbit.io/exclude: "true"
         config:
+          service: |
+            [SERVICE]
+                Daemon Off
+                Flush 1
+                Log_Level info
+                Parsers_File /fluent-bit/etc/parsers.conf
+                Parsers_File /fluent-bit/etc/conf/custom_parsers.conf
+                HTTP_Server On
+                HTTP_Listen 0.0.0.0
+                HTTP_Port 2020
+                Health_Check On
+                storage.path              /var/log/fluentbit-storage
+                storage.sync              normal
+                storage.checksum          off
+                storage.backlog.mem_limit 64M
+                storage.max_chunks_up     128
+                storage.metrics           on
           inputs: |
             [INPUT]
                 Name tail
@@ -62,6 +79,8 @@ spec:
                 Mem_Buf_Limit 8MB
                 Skip_Long_Lines On
                 db /var/log/fluentbit-containers.db
+                storage.type filesystem
+                storage.pause_on_chunks_overlimit on
 
             [INPUT]
                 Name systemd
@@ -69,6 +88,8 @@ spec:
                 Systemd_Filter _SYSTEMD_UNIT=kubelet.service
                 DB /var/log/fluentbit-systemd.db
                 DB.Sync Normal
+                storage.type filesystem
+                storage.pause_on_chunks_overlimit on
           customParsers: |
             [PARSER]
                 Name        k8s_json
@@ -129,10 +150,14 @@ spec:
                 Preserve_Key      On
           outputs: |
             [OUTPUT]
-                Name         forward
+                Name         opentelemetry
                 Match        *
-                Host         hyperdx-otel-collector.hyperdx.svc.cluster.local.
-                Port         24225
+                Host         otel-collector.monitoring.svc.cluster.local
+                Port         4318
+                Logs_uri     /v1/logs
+                Tls          Off
+                Retry_Limit              False
+                storage.total_limit_size 2G
         hotReload:
           enabled: true
 ---
