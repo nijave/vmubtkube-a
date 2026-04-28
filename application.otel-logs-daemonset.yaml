@@ -54,6 +54,17 @@ spec:
             batch:
               send_batch_size: 1024
               timeout: 5s
+            transform/service_name_fallback:
+              error_mode: ignore
+              log_statements:
+                - context: resource
+                  statements:
+                    - set(attributes["service.name"], attributes["k8s.deployment.name"])  where attributes["service.name"] == nil and attributes["k8s.deployment.name"]  != nil
+                    - set(attributes["service.name"], attributes["k8s.daemonset.name"])   where attributes["service.name"] == nil and attributes["k8s.daemonset.name"]   != nil
+                    - set(attributes["service.name"], attributes["k8s.statefulset.name"]) where attributes["service.name"] == nil and attributes["k8s.statefulset.name"] != nil
+                    - set(attributes["service.name"], attributes["k8s.job.name"])         where attributes["service.name"] == nil and attributes["k8s.job.name"]         != nil
+                    - set(attributes["service.name"], attributes["k8s.cronjob.name"])     where attributes["service.name"] == nil and attributes["k8s.cronjob.name"]     != nil
+                    - set(attributes["service.name"], attributes["k8s.container.name"])   where attributes["service.name"] == nil and attributes["k8s.container.name"]  != nil
 
           exporters:
             otlp:
@@ -74,7 +85,7 @@ spec:
             pipelines:
               logs:
                 receivers: [filelog]
-                processors: [k8sattributes, memory_limiter, batch]
+                processors: [k8sattributes, transform/service_name_fallback, memory_limiter, batch]
                 exporters: [otlp]
               metrics: null
               traces: null
