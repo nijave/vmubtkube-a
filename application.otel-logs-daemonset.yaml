@@ -79,6 +79,11 @@ spec:
               metrics: null
               traces: null
 
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          runAsNonRoot: false
+
         extraVolumes:
           - name: otelcol-state
             hostPath:
