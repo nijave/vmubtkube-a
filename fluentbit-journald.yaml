@@ -40,13 +40,15 @@ data:
     [OUTPUT]
         Name          opentelemetry
         Match         host.journal
-        Host          hyperdx-otel-collector.hyperdx.svc.cluster.local
+        Host          otel-collector-opentelemetry-collector.monitoring.svc.cluster.local
         Port          4318
         Logs_uri      /v1/logs
         Tls           Off
-        Header        authorization 67591567-eca7-43b1-b218-4af3992e5e9b
         Compress      gzip
         Log_response_payload False
+        # Without this, the entire record is serialized into Body and the other
+        # fields (service.name, host.name, etc.) never make it to LogAttributes.
+        Logs_body_key message
 
   parsers.conf: |
     # placeholder; systemd input does not require a parser

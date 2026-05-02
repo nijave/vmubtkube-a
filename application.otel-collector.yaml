@@ -52,6 +52,24 @@ spec:
               - name: random
                 type: probabilistic
                 probabilistic: {sampling_percentage: 5}
+            # Host log shippers (fluent-bit on cluster nodes, plus external hosts
+            # forwarding to otel-collector.k8s.somemissing.info) tag records with
+            # log.source=journald|syslog and put service.name / host.name in log
+            # attributes. Promote those to OTel resource attributes so HyperDX
+            # populates ServiceName and ResourceAttributes.
+            transform/promote_host_resource_attrs:
+              error_mode: ignore
+              log_statements:
+                - context: log
+                  conditions:
+                    - attributes["log.source"] == "journald" or attributes["log.source"] == "syslog"
+                  statements:
+                    - set(resource.attributes["service.name"], attributes["service.name"]) where attributes["service.name"] != nil
+                    - set(resource.attributes["host.name"],    attributes["host.name"])    where attributes["host.name"]    != nil
+                    - set(resource.attributes["log.source"],   attributes["log.source"])
+                    - delete_key(attributes, "service.name")
+                    - delete_key(attributes, "host.name")
+                    - delete_key(attributes, "log.source")
 
           receivers:
             jaeger: null
@@ -82,7 +100,7 @@ spec:
             pipelines:
               logs:
                 receivers: [otlp]
-                processors: [memory_limiter, batch]
+                processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
                 exporters: [otlp]
               metrics: null
               traces:
