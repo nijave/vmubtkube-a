@@ -1,0 +1,161 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: event-exporter
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: event-exporter
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: event-exporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: event-exporter
+subjects:
+- kind: ServiceAccount
+  name: event-exporter
+  namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-exporter-cfg
+  namespace: monitoring
+data:
+  config.yaml: |
+    logLevel: warn
+    logFormat: json
+    metricsNamePrefix: event_exporter_
+    leaderElection:
+      enabled: true
+    route:
+      routes:
+      - drop:
+        - reason: "LeaderElection"
+        - source:
+            component: "default-scheduler"
+            reason: "Scheduled"
+        match:
+        - receiver: "dump"
+    receivers:
+    - name: "dump"
+      stdout: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-exporter
+  namespace: monitoring
+  labels:
+    app: event-exporter
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: event-exporter
+  template:
+    metadata:
+      labels:
+        app: event-exporter
+      annotations:
+        checksum/config: placeholder
+    spec:
+      serviceAccountName: event-exporter
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: event-exporter
+        image: ghcr.io/resmoio/kubernetes-event-exporter:v1.7
+        imagePullPolicy: IfNotPresent
+        args:
+        - -conf=/data/config.yaml
+        ports:
+        - name: metrics
+          containerPort: 2112
+        volumeMounts:
+        - name: cfg
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+      volumes:
+      - name: cfg
+        configMap:
+          name: event-exporter-cfg
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-exporter
+  namespace: monitoring
+  labels:
+    app: event-exporter
+spec:
+  selector:
+    app: event-exporter
+  ports:
+  - name: metrics
+    port: 2112
+    targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: event-exporter
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app: event-exporter
+  endpoints:
+  - port: metrics
+    interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: event-exporter-rules
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: event-exporter
+    rules:
+    - alert: EventExporterDown
+      annotations:
+        summary: kubernetes-event-exporter has no ready pods.
+        description: Kubernetes events are not being shipped to HyperDX. Investigate the deployment in the monitoring namespace.
+      expr: |
+        kube_deployment_status_replicas_ready{deployment="event-exporter",namespace="monitoring"}
+          < kube_deployment_spec_replicas{deployment="event-exporter",namespace="monitoring"}
+      for: 30m
+      labels:
+        severity: warning
