@@ -80,7 +80,10 @@ spec:
 
           service:
             pipelines:
-              logs: null
+              logs:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [otlp]
               metrics: null
               traces:
                 receivers: [otlp]
