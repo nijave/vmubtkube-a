@@ -47,6 +47,9 @@ spec:
               timeout: 10s
 
           receivers:
+            filelog:
+              exclude:
+                - /var/log/pods/monitoring_fluent-bit-syslog-*/*/*.log
             journald:
               directory: /var/log/journal
               priority: info

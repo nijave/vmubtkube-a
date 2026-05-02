@@ -28,9 +28,15 @@ data:
         Parser        syslog-rfc5424
 
     [OUTPUT]
-        Name          stdout
+        Name          opentelemetry
         Match         syslog.*
-        Format        json_lines
+        Host          hyperdx-otel-collector.hyperdx.svc.cluster.local
+        Port          4318
+        Logs_uri      /v1/logs
+        Tls           Off
+        Header        authorization 67591567-eca7-43b1-b218-4af3992e5e9b
+        Compress      gzip
+        Log_response_payload False
 
   parsers.conf: |
     [PARSER]
