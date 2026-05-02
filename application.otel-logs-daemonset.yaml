@@ -46,6 +46,12 @@ spec:
               create_directory: true
               timeout: 10s
 
+          receivers:
+            journald:
+              directory: /var/log/journal
+              priority: info
+              storage: file_storage/queue
+
           processors:
             memory_limiter:
               check_interval: 5s
@@ -84,7 +90,7 @@ spec:
             extensions: [health_check, file_storage/queue]
             pipelines:
               logs:
-                receivers: [filelog]
+                receivers: [filelog, journald]
                 processors: [k8sattributes, transform/service_name_fallback, memory_limiter, batch]
                 exporters: [otlp]
               metrics: null
@@ -100,10 +106,24 @@ spec:
             hostPath:
               path: /var/lib/otelcol
               type: DirectoryOrCreate
+          - name: journal
+            hostPath:
+              path: /var/log/journal
+              type: Directory
+          - name: machine-id
+            hostPath:
+              path: /etc/machine-id
+              type: File
 
         extraVolumeMounts:
           - name: otelcol-state
             mountPath: /var/lib/otelcol
+          - name: journal
+            mountPath: /var/log/journal
+            readOnly: true
+          - name: machine-id
+            mountPath: /etc/machine-id
+            readOnly: true
 
         resources:
           limits:
