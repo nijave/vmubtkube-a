@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-journald-config
+  namespace: monitoring
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Daemon        Off
+        Log_Level     info
+        Parsers_File  parsers.conf
+        HTTP_Server   Off
+
+    [INPUT]
+        Name            systemd
+        Tag             host.journal
+        Path            /var/log/journal
+        DB              /var/lib/fluent-bit/journald.db
+        DB.Sync         Normal
+        Read_From_Tail  On
+        Strip_Underscores On
+
+    # Promote useful journald fields to top-level keys before export
+    [FILTER]
+        Name    modify
+        Match   host.journal
+        Rename  SYSTEMD_UNIT      service.name
+        Rename  HOSTNAME          host.name
+        Rename  MESSAGE           message
+        Add     log.source        journald
+
+    # Fall back to SYSLOG_IDENTIFIER when SYSTEMD_UNIT is absent
+    [FILTER]
+        Name    modify
+        Match   host.journal
+        Condition Key_does_not_exist service.name
+        Rename  SYSLOG_IDENTIFIER service.name
+
+    [OUTPUT]
+        Name          opentelemetry
+        Match         host.journal
+        Host          hyperdx-otel-collector.hyperdx.svc.cluster.local
+        Port          4318
+        Logs_uri      /v1/logs
+        Tls           Off
+        Header        authorization 67591567-eca7-43b1-b218-4af3992e5e9b
+        Compress      gzip
+        Log_response_payload False
+
+  parsers.conf: |
+    # placeholder; systemd input does not require a parser
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit-journald
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit-journald
+  template:
+    metadata:
+      labels:
+        app: fluent-bit-journald
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: fluent-bit
+          image: cr.fluentbit.io/fluent/fluent-bit:5.0
+          args: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc/
+            - name: journal
+              mountPath: /var/log/journal
+              readOnly: true
+            - name: machine-id
+              mountPath: /etc/machine-id
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/fluent-bit
+      volumes:
+        - name: config
+          configMap:
+            name: fluent-bit-journald-config
+        - name: journal
+          hostPath:
+            path: /var/log/journal
+            type: Directory
+        - name: machine-id
+          hostPath:
+            path: /etc/machine-id
+            type: File
+        - name: state
+          hostPath:
+            path: /var/lib/fluent-bit-journald
+            type: DirectoryOrCreate
