@@ -60,6 +60,16 @@ spec:
             batch:
               send_batch_size: 1024
               timeout: 5s
+            transform/journald_resource:
+              error_mode: ignore
+              log_statements:
+                - context: log
+                  conditions:
+                    - body["_SYSTEMD_UNIT"] != nil or body["SYSLOG_IDENTIFIER"] != nil or body["_HOSTNAME"] != nil
+                  statements:
+                    - set(resource.attributes["service.name"], body["_SYSTEMD_UNIT"])    where resource.attributes["service.name"] == nil and body["_SYSTEMD_UNIT"]    != nil
+                    - set(resource.attributes["service.name"], body["SYSLOG_IDENTIFIER"]) where resource.attributes["service.name"] == nil and body["SYSLOG_IDENTIFIER"] != nil
+                    - set(resource.attributes["host.name"], body["_HOSTNAME"])           where resource.attributes["host.name"]    == nil and body["_HOSTNAME"]        != nil
             transform/service_name_fallback:
               error_mode: ignore
               log_statements:
@@ -91,7 +101,7 @@ spec:
             pipelines:
               logs:
                 receivers: [filelog, journald]
-                processors: [k8sattributes, transform/service_name_fallback, memory_limiter, batch]
+                processors: [k8sattributes, transform/journald_resource, transform/service_name_fallback, memory_limiter, batch]
                 exporters: [otlp]
               metrics: null
               traces: null
