@@ -22,5 +22,3 @@ spec:
     repoURL: https://github.com/Altinity/clickhouse-operator
     path: deploy/helm/clickhouse-operator/crds
     targetRevision: 0.26.2
-    directory:
-      recurse: false
