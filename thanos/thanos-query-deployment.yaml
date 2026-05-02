@@ -65,6 +65,7 @@ spec:
         - --query.max-concurrent=2
         - --query.max-concurrent-select=2
         - --query.promql-engine=thanos
+        - --query.conn-metric.label=ip_port
         - --query.conn-metric.label=store_type
 
         - --enable-auto-gomemlimit
