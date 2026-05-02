@@ -1,0 +1,88 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kured
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: kured
+    repoURL: https://kubereboot.github.io/charts
+    targetRevision: 5.6.2
+    helm:
+      releaseName: kured
+      valuesObject:
+        configuration:
+          period: 10m
+          rebootDays:
+          - sa
+          - su
+          startTime: "04:00"
+          endTime: "08:00"
+          timeZone: America/New_York
+        metrics:
+          create: true
+        serviceMonitor:
+          create: true
+          labels:
+            release: prom
+        tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kured-rules
+  namespace: kube-system
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: kured
+    rules:
+    - alert: KuredRebootRequiredTooLong
+      annotations:
+        summary: Node {{ $labels.node }} has had a pending reboot for over 48h.
+        description: kured has been signaling a required reboot on {{ $labels.node }} for more than 48h. Check the maintenance window, node drain blockers, or kured locks.
+      expr: max by (node) (kured_reboot_required) == 1
+      for: 48h
+      labels:
+        severity: warning
+    - alert: KuredNodeStuckDraining
+      annotations:
+        summary: Node {{ $labels.node }} has been held in drain by kured for over 1h.
+        description: kured initiated a drain on {{ $labels.node }} but it has not completed in 1h. A PDB or stuck pod may be blocking the reboot.
+      expr: max by (node) (kured_node_blocked_by_pdb) > 0
+      for: 1h
+      labels:
+        severity: warning
+    - alert: KuredDown
+      annotations:
+        summary: kured DaemonSet has missing pods.
+        description: One or more kured pods are not ready, automatic reboots will not happen on those nodes.
+      expr: |
+        kube_daemonset_status_number_ready{daemonset="kured"}
+          < kube_daemonset_status_desired_number_scheduled{daemonset="kured"}
+      for: 30m
+      labels:
+        severity: warning

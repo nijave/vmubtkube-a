@@ -1,0 +1,95 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: descheduler
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: descheduler
+    repoURL: https://kubernetes-sigs.github.io/descheduler/
+    targetRevision: 0.33.0
+    helm:
+      releaseName: descheduler
+      valuesObject:
+        kind: CronJob
+        schedule: "*/30 * * * *"
+        successfulJobsHistoryLimit: 1
+        failedJobsHistoryLimit: 3
+        suspend: false
+        serviceMonitor:
+          enabled: true
+          additionalLabels:
+            release: prom
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        deschedulerPolicyAPIVersion: descheduler/v1alpha2
+        deschedulerPolicy:
+          profiles:
+          - name: default
+            pluginConfig:
+            - name: DefaultEvictor
+              args:
+                evictLocalStoragePods: false
+                evictSystemCriticalPods: false
+                ignorePvcPods: false
+                nodeFit: true
+            - name: RemoveDuplicates
+            - name: RemovePodsViolatingTopologySpreadConstraint
+              args:
+                constraints:
+                - DoNotSchedule
+                - ScheduleAnyway
+            - name: LowNodeUtilization
+              args:
+                thresholds:
+                  cpu: 20
+                  memory: 20
+                  pods: 20
+                targetThresholds:
+                  cpu: 50
+                  memory: 50
+                  pods: 50
+            plugins:
+              balance:
+                enabled:
+                - RemoveDuplicates
+                - RemovePodsViolatingTopologySpreadConstraint
+                - LowNodeUtilization
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: descheduler-rules
+  namespace: kube-system
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: descheduler
+    rules:
+    - alert: DeschedulerJobFailing
+      annotations:
+        summary: descheduler CronJob has failed runs.
+        description: The descheduler CronJob in kube-system has failed at least one of its recent runs. Pods will not be rebalanced after kured reboots until this is fixed.
+      expr: kube_job_failed{namespace="kube-system",job_name=~"descheduler-.*"} > 0
+      for: 1h
+      labels:
+        severity: warning
