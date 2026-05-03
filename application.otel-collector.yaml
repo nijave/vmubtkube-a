@@ -27,7 +27,7 @@ spec:
       valuesObject:
         mode: deployment
         image:
-          repository: docker.io/otel/opentelemetry-collector-k8s
+          repository: docker.io/otel/opentelemetry-collector-contrib
         enableConfigChecksumAnnotation: false
 
         presets:
