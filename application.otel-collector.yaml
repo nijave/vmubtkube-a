@@ -94,7 +94,7 @@ spec:
             # anything else. add_attributes populates net.peer.ip/port so we
             # always have the sender's identity even when the payload doesn't
             # include a hostname.
-            udplog/syslog:
+            udp_log/syslog:
               listen_address: 0.0.0.0:5140
               add_attributes: true
               operators: &syslog_ops
@@ -137,18 +137,18 @@ spec:
                   field: attributes["log.source"]
                   value: syslog
 
-            tcplog/syslog:
+            tcp_log/syslog:
               listen_address: 0.0.0.0:5140
               add_attributes: true
               operators: *syslog_ops
 
           exporters:
             debug: {}
-            # otlp:
+            # otlp_grpc:
               # endpoint: jaeger-collector.monitoring:4317
               # tls:
                 # insecure: true
-            otlp:
+            otlp_grpc:
               endpoint: hyperdx-otel-collector.hyperdx:4317
               compression: gzip
               headers:
@@ -161,18 +161,18 @@ spec:
               logs:
                 receivers: [otlp]
                 processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
-                exporters: [otlp]
+                exporters: [otlp_grpc]
               logs/syslog:
-                receivers: [udplog/syslog, tcplog/syslog]
+                receivers: [udp_log/syslog, tcp_log/syslog]
                 processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
-                exporters: [otlp]
+                exporters: [otlp_grpc]
               metrics: null
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, tail_sampling, batch]
                 exporters:
                   # - debug
-                  - otlp
+                  - otlp_grpc
                   # - otlphttp
 
         ports:
