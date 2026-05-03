@@ -101,7 +101,7 @@ metadata:
 spec:
   prometheusMetricsPort: 9094
   controllers:
-    loadBalancers:
+    loadBalancer:
       assignIPs: AllServices
     node:
       reconcilerPeriod: 5m
