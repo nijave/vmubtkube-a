@@ -4,7 +4,6 @@ namespace: monitoring
 
 resources:
   - journald-daemonset.yaml
-  - syslog-deployment.yaml
 
 # Hash-suffixed ConfigMaps so any config change rolls the workload that
 # references it (Kustomize rewrites the configMap.name in pod specs).
@@ -13,7 +12,3 @@ configMapGenerator:
     files:
       - conf/journald/fluent-bit.conf
       - conf/journald/parsers.conf
-  - name: fluent-bit-syslog-config
-    files:
-      - conf/syslog/fluent-bit.conf
-      - conf/syslog/parsers.conf

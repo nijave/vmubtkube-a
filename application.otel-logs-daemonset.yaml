@@ -49,7 +49,6 @@ spec:
           receivers:
             filelog:
               exclude:
-                - /var/log/pods/monitoring_fluent-bit-syslog-*/*/*.log
                 - /var/log/pods/monitoring_fluent-bit-journald-*/*/*.log
 
           processors:

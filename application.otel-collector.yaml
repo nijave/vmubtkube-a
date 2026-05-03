@@ -88,6 +88,60 @@ spec:
             prometheus: null
             zipkin: null
 
+            # Syslog ingest. tcplog/udplog (not the syslog receiver) so we can
+            # accept arbitrary line-based formats — RFC 5424, RFC 3164, the
+            # bracketed-timestamp Ubiquiti format, plus a passthrough for
+            # anything else. add_attributes populates net.peer.ip/port so we
+            # always have the sender's identity even when the payload doesn't
+            # include a hostname.
+            udplog/syslog:
+              listen_address: 0.0.0.0:5140
+              add_attributes: true
+              operators: &syslog_ops
+                # RFC 5424: <PRI>VERSION TIMESTAMP HOST APP PROC MSGID SD MSG
+                - type: regex_parser
+                  if: 'body matches "^<\\d+>\\d\\s"'
+                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\S+)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)\s+(?P<sd>\[[^\]]*\]|-)\s*(?P<message>.*)$'
+                  parse_from: body
+                  parse_to: attributes
+                  on_error: send
+                # RFC 3164: <PRI>MMM dd HH:MM:SS HOST IDENT[PID]: MSG
+                - type: regex_parser
+                  if: 'body matches "^<\\d+>[A-Za-z]"'
+                  regex: '^<(?P<pri>\d+)>(?P<time>\S+\s+\S+\s+\S+)\s+(?P<host>\S+)\s+(?P<ident>[\w\-./]+)(?:\[(?P<pid>\d+)\])?(?:[^:]*:)?\s*(?P<message>.*)$'
+                  parse_from: body
+                  parse_to: attributes
+                  on_error: send
+                # Ubiquiti / EdgeOS: [unix.fractional_ts] payload
+                - type: regex_parser
+                  if: 'body matches "^\\["'
+                  regex: '^\[(?P<time>\d+(?:\.\d+)?)\]\s*(?P<message>.*)$'
+                  parse_from: body
+                  parse_to: attributes
+                  on_error: send
+                # Map captured fields to OTel semantic conventions.
+                - type: move
+                  if: 'attributes["host"] != nil'
+                  from: attributes["host"]
+                  to: attributes["host.name"]
+                - type: move
+                  if: 'attributes["app"] != nil'
+                  from: attributes["app"]
+                  to: attributes["service.name"]
+                - type: move
+                  if: 'attributes["ident"] != nil'
+                  from: attributes["ident"]
+                  to: attributes["service.name"]
+                # Tag for transform/promote_host_resource_attrs.
+                - type: add
+                  field: attributes["log.source"]
+                  value: syslog
+
+            tcplog/syslog:
+              listen_address: 0.0.0.0:5140
+              add_attributes: true
+              operators: *syslog_ops
+
           exporters:
             debug: {}
             # otlp:
@@ -106,6 +160,10 @@ spec:
             pipelines:
               logs:
                 receivers: [otlp]
+                processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
+                exporters: [otlp]
+              logs/syslog:
+                receivers: [udplog/syslog, tcplog/syslog]
                 processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
                 exporters: [otlp]
               metrics: null
@@ -128,6 +186,16 @@ spec:
             enabled: false
           metrics:
             enabled: true
+          syslog-udp:
+            enabled: true
+            containerPort: 5140
+            servicePort: 514
+            protocol: UDP
+          syslog-tcp:
+            enabled: true
+            containerPort: 5140
+            servicePort: 514
+            protocol: TCP
 
         resources:
           limits:
@@ -157,7 +225,7 @@ spec:
 
         service:
           annotations:
-            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
+            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info,syslog.k8s.somemissing.info
 
         serviceMonitor:
           enabled: true
