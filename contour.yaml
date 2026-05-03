@@ -9276,6 +9276,27 @@ metadata:
     # for information about enabling the PROXY protocol on the ELB to recover
     # the original remote IP address.
     service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+    # external-dns.alpha.kubernetes.io/hostname: contour.k8s.somemissing.info
+spec:
+  ports:
+  - port: 80
+    name: http
+    protocol: TCP
+    targetPort: 8080
+  - port: 443
+    name: https
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app: envoy
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-lb
+  namespace: projectcontour
+  annotations:
     external-dns.alpha.kubernetes.io/hostname: contour.k8s.somemissing.info
 spec:
   ports:
@@ -9289,10 +9310,8 @@ spec:
     targetPort: 8443
   selector:
     app: envoy
-  # type: LoadBalancer
-  # externalTrafficPolicy: Local
-  type: ClusterIP
-
+  type: LoadBalancer
+  externalTrafficPolicy: Local
 ---
 apiVersion: apps/v1
 kind: Deployment
