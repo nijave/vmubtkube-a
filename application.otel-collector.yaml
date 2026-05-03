@@ -77,8 +77,14 @@ spec:
               protocols:
                 grpc:
                   endpoint: ${env:MY_POD_IP}:4317
+                  tls:
+                    cert_file: /tls/tls.crt
+                    key_file:  /tls/tls.key
                 http:
                   endpoint: ${env:MY_POD_IP}:4318
+                  tls:
+                    cert_file: /tls/tls.crt
+                    key_file:  /tls/tls.key
             prometheus: null
             zipkin: null
 
@@ -131,6 +137,19 @@ spec:
             cpu: 10m
             memory: 128Mi
 
+        podAnnotations:
+          # Restart when the TLS secret rotates (cert-manager renews ~every 60d).
+          secret.reloader.stakater.com/reload: otel-collector-tls
+
+        extraVolumes:
+          - name: tls
+            secret:
+              secretName: otel-collector-tls
+        extraVolumeMounts:
+          - name: tls
+            mountPath: /tls
+            readOnly: true
+
         rollout:
           rollingUpdate:
             maxUnavailable: 0
@@ -151,3 +170,17 @@ spec:
             enabled: true
           extraLabels:
             release: prom
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: otel-collector
+  namespace: monitoring
+spec:
+  secretName: otel-collector-tls
+  commonName: otel-collector.k8s.somemissing.info
+  dnsNames:
+  - otel-collector.k8s.somemissing.info
+  issuerRef:
+    kind: ClusterIssuer
+    name: cert-manager-webhook-dnsimple-production
