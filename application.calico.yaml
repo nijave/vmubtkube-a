@@ -73,15 +73,6 @@ spec:
   # Outside the LAN (172.16.0.0/22) so senders route via the BGP-speaking
   # gateway instead of trying (and failing) to ARP for the IP locally.
   cidr: 192.168.240.0/28
-  blockSize: 32
-  ipipMode: Never
-  vxlanMode: Never
-  natOutgoing: true
-  nodeSelector: all()
-  # Automatic so Calico's loadbalancer controller can pull IPs from this
-  # pool for type=LoadBalancer Services. Manual mode requires explicit
-  # allocation calls and silently skips controller-driven assignment.
-  assignmentMode: Automatic
   allowedUses:
   - LoadBalancer
 ---
@@ -97,3 +88,55 @@ spec:
   healthPort: 9099
   logSeverityScreen: Info
   nftablesMode: Disabled
+  prometheusMetricsEnabled: true
+  prometheusMetricsPort: 9091
+---
+apiVersion: crd.projectcalico.org/v1
+kind: KubeControllersConfiguration
+metadata:
+  name: default
+spec:
+  prometheusMetricsPort: 9094
+  controllers:
+    node:
+      reconcilerPeriod: 5m
+      leakGracePeriod: 15m
+      syncLabels: Enabled
+      hostEndpoint:
+        autoCreate: Disabled
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: calico-node
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  namespaceSelector:
+    matchNames:
+    - calico-system
+  selector:
+    matchLabels:
+      k8s-app: calico-node
+  podMetricsEndpoints:
+  - targetPort: 9091
+    interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: calico-kube-controllers
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  namespaceSelector:
+    matchNames:
+    - calico-system
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
+  podMetricsEndpoints:
+  - targetPort: 9094
+    interval: 30s
