@@ -9312,6 +9312,7 @@ spec:
     app: envoy
   type: LoadBalancer
   externalTrafficPolicy: Local
+  allocateLoadBalancerNodePorts: false
 ---
 apiVersion: apps/v1
 kind: Deployment
