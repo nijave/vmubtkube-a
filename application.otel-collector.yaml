@@ -99,9 +99,12 @@ spec:
               add_attributes: true
               operators: &syslog_ops
                 # RFC 5424: <PRI>VERSION TIMESTAMP HOST APP PROC MSGID SD MSG
+                # Timestamp matches both the standard `2026-05-03T00:55:50Z`
+                # and the non-standard space-separated `2026-05-03 00:55:50`
+                # form (e.g. TP-Link Omada controllers).
                 - type: regex_parser
                   if: 'body matches "^<\\d+>\\d\\s"'
-                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\S+)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)\s+(?P<sd>\[[^\]]*\]|-)\s*(?P<message>.*)$'
+                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)\s+(?P<sd>\[[^\]]*\]|-)\s*(?P<message>.*)$'
                   parse_from: body
                   parse_to: attributes
                   on_error: send
@@ -186,16 +189,13 @@ spec:
             enabled: false
           metrics:
             enabled: true
-          syslog-udp:
-            enabled: true
-            containerPort: 5140
-            servicePort: 514
-            protocol: UDP
-          syslog-tcp:
-            enabled: true
-            containerPort: 5140
-            servicePort: 514
-            protocol: TCP
+          # Syslog listens on 5140 inside the pod (configured via the
+          # tcp_log/udp_log receivers' listen_address) but is exposed only
+          # on the dedicated LoadBalancer Service `otel-collector-syslog`
+          # below — this keeps the chart's ClusterIP Service free of UDP and
+          # lets externalTrafficPolicy: Local preserve source IP for syslog.
+          syslog-udp: {enabled: false}
+          syslog-tcp: {enabled: false}
 
         resources:
           limits:
@@ -225,7 +225,7 @@ spec:
 
         service:
           annotations:
-            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info,syslog.k8s.somemissing.info
+            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
 
         serviceMonitor:
           enabled: true
@@ -252,3 +252,31 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: cert-manager-webhook-dnsimple-production
+---
+# Dedicated LoadBalancer Service for syslog ingest. externalTrafficPolicy:
+# Local makes Calico advertise the LB IP only from nodes hosting a ready
+# otel-collector pod, so kube-proxy never has to cross-node forward and
+# never SNATs — the pod sees the original sender's IP in net.peer.ip.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-syslog
+  namespace: monitoring
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: syslog.k8s.somemissing.info
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 172.16.1.33
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: opentelemetry-collector
+    app.kubernetes.io/instance: otel-collector
+  ports:
+  - name: syslog-udp
+    port: 514
+    targetPort: 5140
+    protocol: UDP
+  - name: syslog-tcp
+    port: 514
+    targetPort: 5140
+    protocol: TCP
