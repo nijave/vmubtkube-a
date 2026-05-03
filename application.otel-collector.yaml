@@ -147,10 +147,10 @@ spec:
 
           exporters:
             debug: {}
-            # otlp_grpc:
-              # endpoint: jaeger-collector.monitoring:4317
-              # tls:
-                # insecure: true
+            # The chart ships a stub `otlp:` exporter with no endpoint as a
+            # placeholder — null it out so the collector doesn't see a
+            # second, empty OTLP exporter and refuse to boot.
+            otlp: null
             otlp_grpc:
               endpoint: hyperdx-otel-collector.hyperdx:4317
               compression: gzip
