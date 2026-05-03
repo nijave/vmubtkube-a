@@ -73,6 +73,9 @@ spec:
   # Outside the LAN (172.16.0.0/22) so senders route via the BGP-speaking
   # gateway instead of trying (and failing) to ARP for the IP locally.
   cidr: 192.168.240.0/28
+  # /32 so the /28 pool fits Calico's "block size <= pool size" rule.
+  blockSize: 32
+  assignmentMode: Automatic
   allowedUses:
   - LoadBalancer
 ---
@@ -98,6 +101,8 @@ metadata:
 spec:
   prometheusMetricsPort: 9094
   controllers:
+    loadBalancers:
+      assignIPs: AllServices
     node:
       reconcilerPeriod: 5m
       leakGracePeriod: 15m
