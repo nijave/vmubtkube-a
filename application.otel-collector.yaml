@@ -264,8 +264,6 @@ metadata:
   namespace: monitoring
   annotations:
     external-dns.alpha.kubernetes.io/hostname: syslog.k8s.somemissing.info
-    # Calico-native LB IP request (replaces deprecated spec.loadBalancerIP).
-    projectcalico.org/loadBalancerIPs: '["192.168.240.1"]'
 spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
