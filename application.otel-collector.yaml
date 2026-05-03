@@ -264,10 +264,15 @@ metadata:
   namespace: monitoring
   annotations:
     external-dns.alpha.kubernetes.io/hostname: syslog.k8s.somemissing.info
+    # Calico-native LB IP request (replaces deprecated spec.loadBalancerIP).
+    projectcalico.org/loadBalancerIPs: '["192.168.240.1"]'
 spec:
   type: LoadBalancer
-  loadBalancerIP: 172.16.1.33
   externalTrafficPolicy: Local
+  # Calico's BGP advertises directly to the pod; the per-port NodePort
+  # allocation isn't used and just wastes a NodePort. (The healthCheckNodePort
+  # for ETP: Local is allocated separately by k8s and can't be opted out of.)
+  allocateLoadBalancerNodePorts: false
   selector:
     app.kubernetes.io/name: opentelemetry-collector
     app.kubernetes.io/instance: otel-collector

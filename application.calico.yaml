@@ -59,9 +59,9 @@ spec:
   - action: Accept
     cidr: 192.168.208.0/20
     matchOperator: In
-  # Allow LoadBalancer IPPool (contour-pool, repurposed)
+  # Allow LoadBalancer IPPool
   - action: Accept
-    cidr: 172.16.1.32/28
+    cidr: 192.168.240.0/28
     matchOperator: In
   - action: Reject
 ---
@@ -70,13 +70,18 @@ kind: IPPool
 metadata:
   name: loadbalancer-pool
 spec:
-  cidr: 172.16.1.32/28
+  # Outside the LAN (172.16.0.0/22) so senders route via the BGP-speaking
+  # gateway instead of trying (and failing) to ARP for the IP locally.
+  cidr: 192.168.240.0/28
   blockSize: 32
   ipipMode: Never
   vxlanMode: Never
   natOutgoing: true
   nodeSelector: all()
-  assignmentMode: Manual
+  # Automatic so Calico's loadbalancer controller can pull IPs from this
+  # pool for type=LoadBalancer Services. Manual mode requires explicit
+  # allocation calls and silently skips controller-driven assignment.
+  assignmentMode: Automatic
   allowedUses:
   - LoadBalancer
 ---
