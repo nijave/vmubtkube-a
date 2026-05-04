@@ -13,8 +13,8 @@
   },
   "kubernetes": {
     "managerFilePatterns": [
-      "/^(immich|operators|thanos)/.+\\.yaml$/",
-      "/^(cert-manager|cloudflared|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
+      "/^(fluentbit|immich|operators|thanos)/.+\\.yaml$/",
+      "/^(cert-manager|cloudflared|barman-cloud-plugin-.+|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
     ]
   },
   "registryAliases": {
@@ -23,6 +23,16 @@
   "ignoreDeps": [
     "registry.apps.nickv.me/jellyfin",
     "registry.apps.nickv.me/python-envoy-authz"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/\\.yaml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
+      ],
+      "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
+    }
   ],
   "packageRules": [
     {
