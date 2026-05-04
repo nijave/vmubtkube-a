@@ -1,8 +1,39 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  name: calico-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: tigera-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+    - CreateNamespace=true
+  source:
+    chart: crd.projectcalico.org.v1
+    repoURL: https://docs.tigera.io/calico/charts
+    targetRevision: v3.32.0
+    helm:
+      releaseName: calico-crds
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
   name: calico
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -22,7 +53,7 @@ spec:
   source:
     chart: tigera-operator
     repoURL: https://docs.tigera.io/calico/charts
-    targetRevision: v3.31.5
+    targetRevision: v3.32.0
     helm:
       releaseName: calico
       valuesObject:
