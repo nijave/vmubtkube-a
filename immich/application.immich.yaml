@@ -47,6 +47,7 @@ spec:
                         name: immich-postgres
         controllers:
           main:
+            strategy: Recreate
             containers:
               main:
                 image:
