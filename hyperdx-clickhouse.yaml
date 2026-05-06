@@ -77,7 +77,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
           containers:
             - name: clickhouse-keeper
-              image: clickhouse/clickhouse-keeper:26.3-alpine
+              image: clickhouse/clickhouse-keeper:26.4-alpine
               imagePullPolicy: IfNotPresent
               resources:
                 requests:
@@ -182,7 +182,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
           containers:
             - name: clickhouse
-              image: clickhouse/clickhouse-server:26.3-alpine
+              image: clickhouse/clickhouse-server:26.4-alpine
               imagePullPolicy: IfNotPresent
               resources:
                 requests:
@@ -337,7 +337,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: seed
-          image: clickhouse/clickhouse-server:26.3-alpine
+          image: clickhouse/clickhouse-server:26.4-alpine
           command: ["/bin/sh", "/seed/seed.sh"]
           env:
             - name: SQL_REF
