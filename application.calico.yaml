@@ -34,7 +34,7 @@ spec:
           version: 7a70536b49f0
 
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: BGPConfiguration
 metadata:
   name: default
@@ -46,7 +46,7 @@ spec:
   - cidr: 192.168.240.0/28
   serviceLoadBalancerAggregation: Enabled
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: BGPPeer
 metadata:
   name: router
@@ -56,7 +56,7 @@ spec:
   filters:
   - default
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: BGPFilter
 metadata:
   name: default
@@ -72,7 +72,7 @@ spec:
     matchOperator: In
   - action: Reject
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: IPPool
 metadata:
   name: loadbalancer-pool
@@ -86,7 +86,7 @@ spec:
   allowedUses:
   - LoadBalancer
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: FelixConfiguration
 metadata:
   name: default
@@ -101,7 +101,7 @@ spec:
   prometheusMetricsEnabled: true
   prometheusMetricsPort: 9091
 ---
-apiVersion: crd.projectcalico.org/v1
+apiVersion: projectcalico.org/v3
 kind: KubeControllersConfiguration
 metadata:
   name: default
