@@ -35,10 +35,10 @@ spec:
           timeZone: America/New_York
         metrics:
           create: true
-        serviceMonitor:
-          create: true
           labels:
             release: prom
+        serviceMonitor:
+          create: true
         tolerations:
         - effect: NoSchedule
           operator: Exists
