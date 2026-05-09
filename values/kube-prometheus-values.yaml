@@ -3,7 +3,7 @@
 nameOverride: kp
 grafana:
   env:
-    GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector-opentelemetry-collector.monitoring:4317
+    GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector.k8s.somemissing.info:4317
     GF_TRACING_OPENTELEMETRY_OTLP_PROPAGATION: w3c
   grafana.ini:
     server:
@@ -72,8 +72,6 @@ prometheusOperator:
     enabled: true
 kube-state-metrics:
   replicas: 2
-  extraArgs:
-    - --enable-leader-election
 additionalPrometheusRulesMap:
   blackbox-exporter-alerts:
     groups:
@@ -126,8 +124,8 @@ prometheus:
       prometheus: vmubtkube-a
     tracingConfig:
       clientType: grpc
-      endpoint: otel-collector-opentelemetry-collector.monitoring:4317
-      insecure: true
+      endpoint: otel-collector.k8s.somemissing.info:4317
+      insecure: false
       samplingFraction: "0.01"
     retention: 7d
     retentionSize: 15GB

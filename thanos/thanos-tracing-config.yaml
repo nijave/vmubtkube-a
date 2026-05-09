@@ -12,8 +12,8 @@ data:
       resource_attributes: {}
       reconnection_period: 0s
       compression: ""
-      insecure: true
-      endpoint: otel-collector-opentelemetry-collector.monitoring:4317
+      insecure: false
+      endpoint: otel-collector.k8s.somemissing.info:4317
       timeout: 0s
       retry_config:
         retry_enabled: true
