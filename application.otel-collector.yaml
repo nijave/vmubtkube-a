@@ -98,13 +98,16 @@ spec:
               listen_address: 0.0.0.0:5140
               add_attributes: true
               operators: &syslog_ops
-                # RFC 5424: <PRI>VERSION TIMESTAMP HOST APP PROC MSGID SD MSG
+                # RFC 5424: <PRI>VERSION TIMESTAMP HOST APP PROC MSGID [SD] MSG
                 # Timestamp matches both the standard `2026-05-03T00:55:50Z`
                 # and the non-standard space-separated `2026-05-03 00:55:50`
                 # form (e.g. TP-Link Omada controllers).
+                # SD-ELEMENT is optional: TP-Link Omada Controller-level events
+                # (e.g. "log storage limit reached") omit it entirely and put
+                # bare message text where the SD field would be.
                 - type: regex_parser
                   if: 'body matches "^<\\d+>\\d\\s"'
-                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)\s+(?P<sd>\[[^\]]*\]|-)\s*(?P<message>.*)$'
+                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)(?:\s+(?P<sd>\[[^\]]*\]|-))?\s*(?P<message>.*)$'
                   parse_from: body
                   parse_to: attributes
                   on_error: send
