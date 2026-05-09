@@ -17,7 +17,13 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
+    # Replace=true falls back to `kubectl replace` (in-place PUT) when SSA
+    # can't be used, e.g. for the larger Calico CRDs whose schemas exceed
+    # kubectl's client-side last-applied-config annotation limit. Replace
+    # alone is non-destructive — it does not delete the CRD or its CRs;
+    # only the addition of Force=true would trigger DELETE+CREATE.
     - ServerSideApply=true
+    - Replace=true
     - ApplyOutOfSyncOnly=true
     - CreateNamespace=true
   source:
