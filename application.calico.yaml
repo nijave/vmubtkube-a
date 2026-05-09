@@ -14,7 +14,7 @@ spec:
     namespace: tigera-operator
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
     syncOptions:
     # Replace=true falls back to `kubectl replace` (in-place PUT) when SSA
