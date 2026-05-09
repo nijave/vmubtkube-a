@@ -51,7 +51,7 @@ spec:
                 status_code: {status_codes: [ERROR]}
               - name: random
                 type: probabilistic
-                probabilistic: {sampling_percentage: 5}
+                probabilistic: {sampling_percentage: 1}
             # Host log shippers (fluent-bit on cluster nodes, plus external hosts
             # forwarding to otel-collector.k8s.somemissing.info) tag records with
             # log.source=journald|syslog and put service.name / host.name in log

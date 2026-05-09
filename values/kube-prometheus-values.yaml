@@ -116,8 +116,6 @@ prometheus:
     annotations:
       external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
   prometheusSpec:
-    #image:
-    #  sha: "b1af68dd8294e71031a379ad312f2749724e2ad21c236009a1819fdb5573a72f"
     prometheusExternalLabelNameClear: true
     externalLabels:
       cluster: vmubtkube-a
@@ -126,7 +124,6 @@ prometheus:
       clientType: grpc
       endpoint: otel-collector.k8s.somemissing.info:4317
       insecure: false
-      samplingFraction: "0.01"
     retention: 7d
     retentionSize: 15GB
     scrapeInterval: 15s
