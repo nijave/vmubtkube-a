@@ -5,20 +5,56 @@ grafana:
   env:
     GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector-opentelemetry-collector.monitoring:4317
     GF_TRACING_OPENTELEMETRY_OTLP_PROPAGATION: w3c
+  grafana.ini:
+    server:
+      protocol: https
+      domain: grafana.k8s.somemissing.info
+      root_url: https://grafana.k8s.somemissing.info/
+      cert_file: /etc/grafana/tls/tls.crt
+      cert_key: /etc/grafana/tls/tls.key
+      certs_watch_interval: 1h
   useStatefulSet: true
-  serviceMonitor:
-    interval: 30s
-    scrapeTimeout: 30s
   service:
+    port: 443
+    portName: https-web
+    appProtocol: https
     annotations:
       external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
+  serviceMonitor:
+    interval: 30s
+    scheme: https
+    tlsConfig:
+      serverName: grafana.k8s.somemissing.info
+    scrapeTimeout: 30s
+  extraSecretMounts:
+    - name: grafana-tls
+      secretName: grafana-k8s-somemissing-info-tls
+      defaultMode: 420
+      mountPath: /etc/grafana/tls
+      readOnly: true
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+      scheme: HTTPS
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: grafana
+      scheme: HTTPS
+    initialDelaySeconds: 60
+    timeoutSeconds: 30
+    failureThreshold: 10
   persistence:
     enabled: true
     storageClassName: zfs-generic-iscsi-csi
   initChownData:
     enabled: false
   sidecar:
+    dashboards:
+      reloadURL: https://grafana.k8s.somemissing.info/api/admin/provisioning/dashboards/reload
     datasources:
+      reloadURL: https://grafana.k8s.somemissing.info/api/admin/provisioning/datasources/reload
       url: http://thanos-query.thanos.svc.cluster.local.:9090
       timeout: 300
       jsonData:
