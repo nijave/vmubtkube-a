@@ -1,49 +1,6 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: calico-crds
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "-1"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  destination:
-    server: "https://kubernetes.default.svc"
-    namespace: tigera-operator
-  syncPolicy:
-    automated:
-      prune: false
-      selfHeal: true
-    syncOptions:
-    # Replace=true falls back to `kubectl replace` (in-place PUT) when SSA
-    # can't be used, e.g. for the larger Calico CRDs whose schemas exceed
-    # kubectl's client-side last-applied-config annotation limit. Replace
-    # alone is non-destructive — it does not delete the CRD or its CRs;
-    # only the addition of Force=true would trigger DELETE+CREATE.
-    - ServerSideApply=true
-    - Replace=true
-    - ApplyOutOfSyncOnly=true
-    - CreateNamespace=true
-  source:
-    # Pinned to merge SHA of projectcalico/calico#12705 (release-v3.32 backport
-    # of #12702) for the SSA fix on BGPConfiguration object lists. Revert to
-    # the helm-repo source below once v3.32.1 is published.
-    repoURL: https://github.com/projectcalico/calico.git
-    path: charts/crd.projectcalico.org.v1
-    targetRevision: d6af56d98dd201f51c6665e4cdbae452113b00fd
-    helm:
-      releaseName: calico-crds
-    # chart: crd.projectcalico.org.v1
-    # repoURL: https://docs.tigera.io/calico/charts
-    # targetRevision: v3.32.0
-    # helm:
-    #   releaseName: calico-crds
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
   name: calico
   namespace: argocd
   annotations:
