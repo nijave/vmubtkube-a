@@ -130,7 +130,12 @@ spec:
           otlp-http:      { enabled: false }
           metrics:        { enabled: true }
 
+        # ServiceMonitor would require a Service the chart doesn't create
+        # in daemonset mode. PodMonitor scrapes the metrics container port
+        # directly, which is the right shape for DaemonSets.
         serviceMonitor:
+          enabled: false
+        podMonitor:
           enabled: true
           extraLabels:
             release: prom

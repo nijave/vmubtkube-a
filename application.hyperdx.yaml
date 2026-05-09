@@ -275,3 +275,22 @@ spec:
         - name: render
           configMap:
             name: hyperdx-config-render
+---
+# Clickstack chart doesn't ship a ServiceMonitor for its bundled OTel collector,
+# so add one — the collector's self-telemetry endpoint is on port 8888.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hyperdx-otel-collector
+  namespace: hyperdx
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: hyperdx
+      app.kubernetes.io/name: otel-collector
+      component: standalone-collector
+  endpoints:
+  - port: metrics
+    interval: 30s
