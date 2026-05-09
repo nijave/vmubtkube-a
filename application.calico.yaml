@@ -22,25 +22,17 @@ spec:
     - ApplyOutOfSyncOnly=true
     - CreateNamespace=true
   source:
-    # Pinned to merge SHA of projectcalico/calico#12705 (release-v3.32 backport
-    # of #12702) for the SSA fix on BGPConfiguration object lists. Revert to
-    # the helm-repo source below once v3.32.1 is published.
-    repoURL: https://github.com/projectcalico/calico.git
-    path: charts/tigera-operator
-    targetRevision: d6af56d98dd201f51c6665e4cdbae452113b00fd
+    chart: tigera-operator
+    repoURL: https://docs.tigera.io/calico/charts
+    targetRevision: v3.32.0
     helm:
       releaseName: calico
       valuesObject:
         installation:
           registry: quay.io
-    # chart: tigera-operator
-    # repoURL: https://docs.tigera.io/calico/charts
-    # targetRevision: v3.32.0
-    # helm:
-    #   releaseName: calico
-    #   valuesObject:
-    #     installation:
-    #       registry: quay.io
+        tigeraOperator:
+          version: 7a70536b49f0
+
 ---
 apiVersion: crd.projectcalico.org/v1
 kind: BGPConfiguration
