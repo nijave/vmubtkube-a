@@ -24,13 +24,8 @@ spec:
     targetRevision: 84.5.0
     helm:
       releaseName: prom
-      # CRDs (Prometheus, Alertmanager, etc.) are managed separately by the
-      # `crds` Argo app from crds/, so the chart shouldn't render them.
-      skipCrds: true
       valuesObject:
         nameOverride: kp
-        crds:
-          enabled: false
         grafana:
           env:
             GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector.k8s.somemissing.info:4317
