@@ -121,6 +121,13 @@ prometheus:
     # replicas this guarantees they land on separate hosts so a single
     # node failure can't take both Prometheus instances offline.
     podAntiAffinity: hard
+    # MUST be set when replicas > 1: makes each pod tag samples with its
+    # unique replica label so Thanos receive can distinguish the two
+    # writers. Without this, both replicas write identical series and
+    # the multi-tsdb compactor fails with "out-of-order series added"
+    # (same labels appearing twice during compaction), which also blocks
+    # block uploads to S3 (ThanosReceiveNoUpload alert).
+    replicaExternalLabelName: prometheus_replica
     prometheusExternalLabelNameClear: true
     externalLabels:
       cluster: vmubtkube-a
