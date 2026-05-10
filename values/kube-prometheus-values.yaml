@@ -116,6 +116,11 @@ prometheus:
     annotations:
       external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
   prometheusSpec:
+    replicas: 2
+    # `hard` = requiredDuringScheduling on hostname; with 8 nodes and 2
+    # replicas this guarantees they land on separate hosts so a single
+    # node failure can't take both Prometheus instances offline.
+    podAntiAffinity: hard
     prometheusExternalLabelNameClear: true
     externalLabels:
       cluster: vmubtkube-a
