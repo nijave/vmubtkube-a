@@ -18,6 +18,23 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
+  ignoreDifferences:
+  # The chart auto-generates a random Grafana admin password on every render.
+  # Argo's helm template runs are stateless, so each refresh produces a new
+  # value → permanent drift. Ignore the password (it's set once on first sync)
+  # and the StatefulSet pod-template checksum that mirrors the secret hash.
+  - group: ""
+    kind: Secret
+    name: prom-grafana
+    namespace: monitoring
+    jsonPointers:
+    - /data/admin-password
+  - group: apps
+    kind: StatefulSet
+    name: prom-grafana
+    namespace: monitoring
+    jqPathExpressions:
+    - '.spec.template.metadata.annotations."checksum/secret"'
   source:
     chart: kube-prometheus-stack
     repoURL: https://prometheus-community.github.io/helm-charts
@@ -183,7 +200,8 @@ spec:
                 retryOnRateLimit: true
                 sampleAgeLimit: 5m
               writeRelabelConfigs:
-                - sourceLabels: [pod, server, job]
+                - action: replace
+                  sourceLabels: [pod, server, job]
                   targetLabel: job
                   # Require ; and at least 1 other character (both pod and server can't be empty)
                   regex: '.{2,};minio|scrapeConfig/minio-tenant/minio.*'
