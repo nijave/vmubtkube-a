@@ -111,8 +111,8 @@ spec:
     loadBalancer:
       assignIPs: AllServices
     node:
-      reconcilerPeriod: 5m
-      leakGracePeriod: 15m
+      reconcilerPeriod: 5m0s
+      leakGracePeriod: 15m0s
       syncLabels: Enabled
       hostEndpoint:
         autoCreate: Disabled
