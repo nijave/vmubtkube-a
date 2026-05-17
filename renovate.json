@@ -13,7 +13,7 @@
   },
   "kubernetes": {
     "managerFilePatterns": [
-      "/^(fluentbit|immich|operators|thanos)/.+\\.yaml$/",
+      "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
       "/^(cert-manager|cloudflared|barman-cloud-plugin-.+|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
     ]
   },

@@ -1,0 +1,42 @@
+# Let's Encrypt cert for the browser-facing GUI hostname.  Mounted directly
+# into the Woodpecker server pod so the server terminates TLS natively
+# (WOODPECKER_SERVER_CERT / WOODPECKER_SERVER_KEY in application.woodpecker.yaml).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: woodpecker-k8s-somemissing-info-cert
+  namespace: woodpecker
+spec:
+  secretName: woodpecker-k8s-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn woodpecker.k8s.somemissing.info
+  dnsNames:
+    - *cn
+---
+# Dedicated Service for the GUI / OAuth callback.  Carries the external-dns
+# annotation so the in-cluster IP is published under woodpecker.k8s.somemissing.info
+# in the internal zone (external-dns runs with --publish-internal-services).
+# Targets the Woodpecker TLS listener directly (no Contour involvement).
+apiVersion: v1
+kind: Service
+metadata:
+  name: woodpecker-server-gui
+  namespace: woodpecker
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: woodpecker.k8s.somemissing.info
+  labels:
+    app.kubernetes.io/name: server
+    app.kubernetes.io/instance: woodpecker
+    app.kubernetes.io/component: gui
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: server
+    app.kubernetes.io/instance: woodpecker
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP

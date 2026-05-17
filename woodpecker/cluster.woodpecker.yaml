@@ -1,0 +1,294 @@
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-woodpecker-user
+  namespace: woodpecker
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: woodpecker
+---
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-superuser
+  namespace: woodpecker
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: postgres
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secret-reader
+  namespace: woodpecker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: woodpecker
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secret-reader
+  namespace: woodpecker
+subjects:
+  - kind: ServiceAccount
+    name: secret-reader
+    namespace: woodpecker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: secret-reader
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: k8s
+  namespace: woodpecker
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: woodpecker
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: secret-reader
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: woodpecker
+  namespace: woodpecker
+spec:
+  instances: 2
+  startDelay: 300
+  stopDelay: 300
+  primaryUpdateStrategy: unsupervised
+
+  # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/postgresql
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+  postgresql:
+    parameters:
+      shared_buffers: 128MB
+      random_page_cost: '1.1'
+      pg_stat_statements.max: '10000'
+      pg_stat_statements.track: all
+
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: postgres-superuser
+
+  storage:
+    size: 10Gi
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "50m"
+    limits:
+      memory: "512Mi"
+
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+
+  enablePDB: true
+
+  plugins:
+  - enabled: true
+    name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: true
+    parameters:
+      barmanObjectName: woodpecker-s3
+
+  managed:
+    roles:
+    - name: woodpecker
+      ensure: present
+      inherit: true
+      connectionLimit: -1
+      login: true
+      superuser: false
+      passwordSecret:
+        name: postgres-woodpecker-user
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: postgres-woodpecker
+  namespace: woodpecker
+spec:
+  cluster:
+    name: woodpecker
+  name: woodpecker
+  owner: woodpecker
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres
+  namespace: woodpecker
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: woodpecker
+  podMetricsEndpoints:
+  - port: metrics
+---
+# Renders the postgres DSN (and any future forge OAuth env vars) into a single
+# Secret consumed by the server StatefulSet via extraSecretNamesForEnvFrom.
+# Populate forge credentials by extending this ExternalSecret once Forgejo /
+# GitHub OAuth apps exist (e.g. WOODPECKER_GITHUB_CLIENT, WOODPECKER_GITHUB_SECRET).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: woodpecker-server-env
+  namespace: woodpecker
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    kind: SecretStore
+    name: k8s
+  target:
+    name: woodpecker-server-env
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        WOODPECKER_DATABASE_DRIVER: postgres
+        WOODPECKER_DATABASE_DATASOURCE: "postgres://woodpecker:{{ .pgPassword }}@woodpecker-rw.woodpecker.svc.cluster.local:5432/woodpecker?sslmode=require"
+  data:
+  - secretKey: pgPassword
+    remoteRef:
+      key: postgres-woodpecker-user
+      property: password
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+# GitHub OAuth credentials pulled from Bitwarden Secrets Manager.
+# Create two secrets in the bitwarden project referenced by the `default`
+# ClusterSecretStore:
+#   - woodpecker-github-oauth-client  -> the OAuth App's Client ID
+#   - woodpecker-github-oauth-secret  -> the OAuth App's Client Secret
+# OAuth app must be registered at https://github.com/settings/developers
+# with callback URL https://<WOODPECKER_HOST>/authorize
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: woodpecker-github-oauth
+  namespace: woodpecker
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: woodpecker-github-oauth
+    template:
+      engineVersion: v2
+      type: Opaque
+      data:
+        WOODPECKER_GITHUB_CLIENT: "{{ .client }}"
+        WOODPECKER_GITHUB_SECRET: "{{ .secret }}"
+  data:
+  - secretKey: client
+    remoteRef:
+      key: woodpecker-github-oauth-client
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secret
+    remoteRef:
+      key: woodpecker-github-oauth-secret
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+# Reuses the shared volsync restic repo S3 credentials (same MinIO/S3 endpoint
+# at vmubthh01.s.nickv.me).  The cnpg-woodpecker/ prefix in the bucket must
+# exist or be auto-creatable by the configured account.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: barman-s3-creds
+  namespace: woodpecker
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: barman-s3-creds
+    template:
+      type: Opaque
+      data:
+        ACCESS_KEY_ID: "{{ .accessKey }}"
+        ACCESS_SECRET_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: woodpecker-s3
+  namespace: woodpecker
+spec:
+  configuration:
+    destinationPath: s3://cnpg-woodpecker/
+    endpointURL: https://vmubthh01.s.nickv.me
+    s3Credentials:
+      accessKeyId:
+        name: barman-s3-creds
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: barman-s3-creds
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+  retentionPolicy: "30d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: woodpecker-daily-backup
+  namespace: woodpecker
+spec:
+  schedule: "0 0 4 * * *"
+  backupOwnerReference: self
+  method: plugin
+  cluster:
+    name: woodpecker
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

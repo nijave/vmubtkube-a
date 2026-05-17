@@ -1,0 +1,107 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: woodpecker-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: woodpecker
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    repoURL: ghcr.io/woodpecker-ci/helm
+    chart: woodpecker
+    targetRevision: 3.6.2
+    helm:
+      releaseName: woodpecker
+      valuesObject:
+        server:
+          statefulSet:
+            replicaCount: 1
+          env:
+            # GUI / OAuth callback: served by Woodpecker's native TLS listener
+            # on :443, exposed by the woodpecker-server-gui Service in
+            # proxy_woodpecker_gui.yaml.  Must exactly match the GitHub OAuth
+            # App callback URL (https://woodpecker.k8s.somemissing.info/authorize).
+            WOODPECKER_HOST: https://woodpecker.k8s.somemissing.info
+            # Webhook URL handed to the forge when adding a repo.  Exposed
+            # publicly via Contour (proxy_woodpecker_webhook.yaml) so GitHub
+            # can deliver pushes; only /api/hook is routed through.
+            WOODPECKER_EXPERT_WEBHOOK_HOST: https://woodpecker.apps.somemissing.info
+            WOODPECKER_ADMIN: nijave
+            WOODPECKER_GITHUB: "true"
+            # Enabling these flips the chart's :8000 listener into redirect-only
+            # mode and starts the real TLS server on the address below.  The
+            # cert/key files come from the mounted
+            # woodpecker-k8s-somemissing-info-tls Secret.  Bind is non-privileged
+            # (:8443) because the chart runs the container as uid 1000.
+            WOODPECKER_SERVER_CERT: /tls/tls.crt
+            WOODPECKER_SERVER_KEY: /tls/tls.key
+            WOODPECKER_SERVER_ADDR_TLS: ":8443"
+            # Forgejo wiring goes here once Forgejo is deployed; remember the
+            # forge-blind admin caveat in woodpecker-ci/woodpecker#5798 —
+            # pick a Forgejo username you also own on GitHub.
+            #
+            # WOODPECKER_FORGEJO: "true"
+            # WOODPECKER_FORGEJO_URL: http://forgejo-http.forgejo.svc.cluster.local:3000
+          extraSecretNamesForEnvFrom:
+            - woodpecker-server-env
+            - woodpecker-github-oauth
+          extraVolumes:
+            - name: tls
+              secret:
+                secretName: woodpecker-k8s-somemissing-info-tls
+          extraVolumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+          persistentVolume:
+            enabled: true
+            size: 1Gi
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          metrics:
+            enabled: true
+            port: 9001
+          prometheus:
+            podmonitor:
+              enabled: true
+              interval: 30s
+              labels:
+                release: prom
+            rules:
+              enabled: true
+              labels:
+                release: prom
+        agent:
+          replicaCount: 1
+          env:
+            WOODPECKER_SERVER: woodpecker-server:9000
+            WOODPECKER_BACKEND: kubernetes
+            WOODPECKER_BACKEND_K8S_NAMESPACE: woodpecker
+            WOODPECKER_BACKEND_K8S_STORAGE_RWX: "false"
+            WOODPECKER_BACKEND_K8S_VOLUME_SIZE: 10G
+            WOODPECKER_CONNECT_RETRY_COUNT: "1"
+          persistence:
+            enabled: true
+            size: 1Gi
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

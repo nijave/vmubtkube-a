@@ -1,0 +1,39 @@
+# Let's Encrypt cert for the public webhook hostname.  Used by Contour to
+# terminate TLS at the edge; Woodpecker's native TLS is unrelated to this cert.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: woodpecker-apps-somemissing-info-cert
+  namespace: woodpecker
+spec:
+  secretName: woodpecker-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn woodpecker.apps.somemissing.info
+  dnsNames:
+    - *cn
+---
+# Public-facing route, exposed via the existing Contour envoy-lb LoadBalancer.
+# Only the webhook path is forwarded — everything else (UI, OAuth, API, etc.)
+# returns 404 from Contour, so the public surface is the smallest it can be.
+# Backend uses protocol: tls because once Woodpecker's native TLS is enabled
+# the HTTP listener (:8000) becomes a redirect-only handler; the real handler
+# lives on :443.
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: woodpecker-webhook
+  namespace: woodpecker
+spec:
+  virtualhost:
+    fqdn: woodpecker.apps.somemissing.info
+    tls:
+      secretName: woodpecker-apps-somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /api/hook
+      services:
+        - name: woodpecker-server-gui
+          port: 443
+          protocol: tls

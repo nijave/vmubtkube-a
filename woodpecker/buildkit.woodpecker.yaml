@@ -1,0 +1,106 @@
+# Long-lived rootless BuildKit daemon shared by all Woodpecker pipelines.
+# Pipeline steps connect via BUILDKIT_HOST=tcp://buildkitd.woodpecker.svc.cluster.local:1234
+# and run `buildctl build ...` — no privileged: true, no docker.sock, no host
+# access. Image layer cache persists across builds via the cache PVC.
+#
+# Prereqs the cluster must satisfy (likely already true on this Ubuntu nodepool):
+#   - kernel.unprivileged_userns_clone=1 (default on modern kernels)
+#   - Pod Security admission for this namespace must allow seccompProfile=Unconfined
+#     (the woodpecker namespace has no PSA label set, so this is fine).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-cache
+  namespace: woodpecker
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: woodpecker
+  labels:
+    app: buildkitd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+    spec:
+      containers:
+        - name: buildkitd
+          # renovate: datasource=docker depName=moby/buildkit
+          image: moby/buildkit:v0.30.0-rootless
+          args:
+            - --oci-worker-no-process-sandbox
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+          readinessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+          ports:
+            - containerPort: 1234
+              name: grpc
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - mountPath: /home/user/.local/share/buildkit
+              name: cache
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkitd-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd
+  namespace: woodpecker
+  labels:
+    app: buildkitd
+spec:
+  type: ClusterIP
+  selector:
+    app: buildkitd
+  ports:
+    - name: grpc
+      port: 1234
+      targetPort: grpc
