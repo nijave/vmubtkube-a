@@ -8,6 +8,54 @@
 #   - Pod Security admission for this namespace must allow seccompProfile=Unconfined
 #     (the woodpecker namespace has no PSA label set, so this is fine).
 ---
+# buildkitd.toml + the self-signed registry CA, mounted together at
+# /etc/buildkit.  The toml's `ca = [...]` path resolves inside that mount.
+# Cert source of truth: infra/k8s/registry/registry.crt — keep in sync if
+# the registry's cert is ever rotated (it's a 10-year self-signed leaf
+# acting as its own CA; expires 2030-11-19).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-config
+  namespace: woodpecker
+data:
+  buildkitd.toml: |
+    [registry."registry.apps.nickv.me"]
+      ca = ["/etc/buildkit/registry.apps.nickv.me.crt"]
+  registry.apps.nickv.me.crt: |
+    -----BEGIN CERTIFICATE-----
+    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
+    lSIZNbtADG+sLDVVpQXbhOmRpsp6
+    -----END CERTIFICATE-----
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -44,6 +92,8 @@ spec:
           # renovate: datasource=docker depName=moby/buildkit
           image: moby/buildkit:v0.30.0-rootless
           args:
+            - --config
+            - /etc/buildkit/buildkitd.toml
             - --oci-worker-no-process-sandbox
             - --addr
             - unix:///run/user/1000/buildkit/buildkitd.sock
@@ -84,10 +134,16 @@ spec:
           volumeMounts:
             - mountPath: /home/user/.local/share/buildkit
               name: cache
+            - mountPath: /etc/buildkit
+              name: config
+              readOnly: true
       volumes:
         - name: cache
           persistentVolumeClaim:
             claimName: buildkitd-cache
+        - name: config
+          configMap:
+            name: buildkitd-config
 ---
 apiVersion: v1
 kind: Service
