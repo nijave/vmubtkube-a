@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: latest-version
+  namespace: kube-system
+data:
+  version: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cukk
+  namespace: kube-system
+  labels:
+    app: cukk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cukk
+  template:
+    metadata:
+      labels:
+        app: cukk
+    spec:
+      serviceAccountName: cukk
+      containers:
+        - name: operator
+          image: registry.apps.nickv.me/cukk:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9090
+              name: metrics
+            - containerPort: 8080
+              name: health
+          env:
+            - name: CUKK_NAMESPACE
+              value: kube-system
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CUKK_DRY_RUN
+              value: "false"
+            - name: CUKK_ALLOW_MINOR_UPGRADE
+              value: "true"
+            - name: CUKK_MIN_PATCH_VERSION
+              value: "4"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cukk
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cukk
+rules:
+  # Nodes: read, cordon/uncordon
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch", "patch"]
+  # ConfigMaps: read/write for target version + kopf state
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Jobs: create, read, delete for upgrade steps.
+  # patch/update are needed by kopf to manage finalizers and last-handled-configuration
+  # annotations on watched Jobs (required by the on_job_deleted handler).
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+  # Pods: needed for drain eviction
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  # DaemonSets: kubectl drain --ignore-daemonsets still needs to GET daemonsets
+  # to verify that a pod is owned by one before skipping it. Without this, drain
+  # fails with a misleading "cannot delete daemonsets" error that is actually a
+  # denied GET on daemonsets.apps.
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list"]
+  # Leases: kopf leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # CRDs: kopf startup scanning
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["list", "watch"]
+  # Events: kopf event posting
+  - apiGroups: ["", "events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cukk
+subjects:
+  - kind: ServiceAccount
+    name: cukk
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: cukk
+  apiGroup: rbac.authorization.k8s.io
