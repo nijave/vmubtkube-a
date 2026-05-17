@@ -87,6 +87,8 @@ spec:
       labels:
         app: buildkitd
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: buildkitd
           # renovate: datasource=docker depName=moby/buildkit
