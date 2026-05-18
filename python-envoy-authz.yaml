@@ -62,7 +62,7 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       containers:
       - name: python-envoy-authz
-        image: registry.apps.nickv.me/python-envoy-authz
+        image: registry.apps.nickv.me/nijave/python-envoy-authz:latest
         imagePullPolicy: Always
         resources:
           requests:

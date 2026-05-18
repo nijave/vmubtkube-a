@@ -22,7 +22,8 @@
   },
   "ignoreDeps": [
     "registry.apps.nickv.me/jellyfin",
-    "registry.apps.nickv.me/python-envoy-authz"
+    "registry.apps.nickv.me/nijave/cukk",
+    "registry.apps.nickv.me/nijave/python-envoy-authz"
   ],
   "customManagers": [
     {

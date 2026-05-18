@@ -1,0 +1,25 @@
+# Mirrors images referenced as registry.apps.nickv.me/<path>:<tag> from their
+# upstream registries. See .ci/mirror-images.sh for the mapping logic; upstream
+# coordinates come entirely from renovate.json (registryAliases, packageRules,
+# ignoreDeps), so the mirror path must equal the upstream repo path.
+#
+# Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
+# push to main as a self-healing backstop (re-mirrors anything missing).
+when:
+  - event: pull_request
+  - event: push
+    branch: main
+
+steps:
+  mirror-images:
+    # renovate: datasource=docker depName=ghcr.io/regclient/regctl
+    image: ghcr.io/regclient/regctl:v0.11.4-alpine
+    backend_options:
+      kubernetes:
+        # regclient image runs as non-root; need root to apk add yq/jq.
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+    commands:
+      - apk add --no-cache yq jq
+      - sh .ci/mirror-images.sh

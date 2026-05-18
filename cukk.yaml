@@ -26,7 +26,7 @@ spec:
       serviceAccountName: cukk
       containers:
         - name: operator
-          image: registry.apps.nickv.me/cukk:latest
+          image: registry.apps.nickv.me/nijave/cukk:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 9090

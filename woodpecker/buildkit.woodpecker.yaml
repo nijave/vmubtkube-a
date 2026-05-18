@@ -162,3 +162,27 @@ spec:
     - name: grpc
       port: 1234
       targetPort: grpc
+---
+# The gRPC API has no auth; anyone who can reach :1234 can build (== run
+# arbitrary code as the daemon user and read/poison the shared cache).
+# Restrict ingress to pods in the woodpecker namespace, which is where
+# Woodpecker's k8s backend lands step pods (WOODPECKER_BACKEND_K8S_NAMESPACE).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkitd
+  namespace: woodpecker
+spec:
+  podSelector:
+    matchLabels:
+      app: buildkitd
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: woodpecker
+      ports:
+        - protocol: TCP
+          port: 1234

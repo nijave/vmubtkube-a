@@ -84,7 +84,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
-        image: registry.apps.nickv.me/thanos:v0.41.0
+        image: registry.apps.nickv.me/thanos/thanos:v0.41.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 4

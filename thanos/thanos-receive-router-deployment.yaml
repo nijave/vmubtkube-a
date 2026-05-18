@@ -85,7 +85,7 @@ spec:
             configMapKeyRef:
               name: thanos-tracing
               key: tracing.yaml
-        image: registry.apps.nickv.me/thanos:v0.41.0
+        image: registry.apps.nickv.me/thanos/thanos:v0.41.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
