@@ -12,14 +12,19 @@
 # Bare-name mirrors (registry.apps.nickv.me/thanos) will resolve against the
 # default upstream and almost certainly fail — rename them to org/image first.
 #
-# Requires: yq (mikefarah), jq, regctl, grep, sort, awk, sed.
+# Only mirrors refs that appear on lines *added* since the diff base:
+#   - pull_request: origin/$CI_COMMIT_TARGET_BRANCH
+#   - push:         $CI_COMMIT_BEFORE
+#   - otherwise:    HEAD^
+#
+# Requires: yq (mikefarah), jq, regctl, git, grep, sort, awk, sed.
 set -eu
 
 MIRROR_REG="registry.apps.nickv.me"
 BUILDKIT_FILE="woodpecker/buildkit.woodpecker.yaml"
 RENOVATE_FILE="renovate.json"
 
-for cmd in yq jq regctl grep sort awk sed; do
+for cmd in yq jq regctl git grep sort awk sed; do
   command -v "$cmd" >/dev/null || { echo "missing required tool: $cmd" >&2; exit 1; }
 done
 
@@ -65,9 +70,32 @@ done > "$OVERRIDES"
 
 jq -r '.ignoreDeps[]? // empty' "$RENOVATE_FILE" > "$IGNORE"
 
-# Find every registry.apps.nickv.me/<repo>:<tag> reference across the repo.
-grep -rEohI "$MIRROR_REG/[A-Za-z0-9._/-]+:[A-Za-z0-9._+-]+" \
-  --include='*.yaml' --include='*.yml' . \
+# Pick a diff base appropriate for the trigger, then mirror refs found on
+# added lines only. Re-runs against the same base are idempotent (regctl copy
+# no-ops when digests match).
+case "${CI_PIPELINE_EVENT:-}" in
+  pull_request)
+    target_branch="${CI_COMMIT_TARGET_BRANCH:-main}"
+    git fetch --no-tags --depth=100 origin "$target_branch" >/dev/null 2>&1 || true
+    BASE_REF="origin/$target_branch"
+    ;;
+  push)
+    if [ -n "${CI_COMMIT_BEFORE:-}" ] \
+       && [ "$CI_COMMIT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+      BASE_REF="$CI_COMMIT_BEFORE"
+    else
+      BASE_REF="HEAD^"
+    fi
+    ;;
+  *)
+    BASE_REF="${BASE_REF:-HEAD^}"
+    ;;
+esac
+
+echo "diff base: $BASE_REF"
+git diff --unified=0 "$BASE_REF"...HEAD \
+  | grep -E '^\+[^+]' \
+  | grep -oE "$MIRROR_REG/[A-Za-z0-9._/-]+:[A-Za-z0-9._+-]+" \
   | sort -u > "$REFS"
 
 mirrored=0

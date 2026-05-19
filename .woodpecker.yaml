@@ -21,5 +21,5 @@ steps:
           runAsUser: 0
           runAsGroup: 0
     commands:
-      - apk add --no-cache yq jq
+      - apk add --no-cache yq jq git
       - sh .ci/mirror-images.sh
