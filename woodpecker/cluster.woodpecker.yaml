@@ -80,7 +80,7 @@ spec:
   primaryUpdateStrategy: unsupervised
 
   # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/postgresql
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.10
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4
   postgresql:
     parameters:
       shared_buffers: 128MB
