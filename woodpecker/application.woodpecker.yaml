@@ -21,7 +21,7 @@ spec:
   source:
     repoURL: ghcr.io/woodpecker-ci/helm
     chart: woodpecker
-    targetRevision: 3.6.2
+    targetRevision: 3.6.3
     helm:
       releaseName: woodpecker
       valuesObject:
