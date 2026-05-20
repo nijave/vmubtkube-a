@@ -21,7 +21,7 @@ spec:
   source:
     chart: clickstack
     repoURL: https://clickhouse.github.io/ClickStack-helm-charts
-    targetRevision: 2.1.1
+    targetRevision: 3.0.0
     helm:
       releaseName: hyperdx
       valuesObject:
