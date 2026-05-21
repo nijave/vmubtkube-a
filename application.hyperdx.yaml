@@ -59,6 +59,12 @@ spec:
           ingress:
             enabled: false
         otel-collector:
+          image:
+            # Chart clickstack-3.0.0 defaults this to 2.19.0, whose
+            # clickhouseexporter lacks the `json` field that the OPAMP
+            # config (appVersion 2.27.0) now pushes — agent crashes with
+            # `'clickhouseexporter.Config' has invalid keys: json`.
+            tag: "2.27.0"
           extraEnvs:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
