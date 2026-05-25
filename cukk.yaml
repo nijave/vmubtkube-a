@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: latest-version
   namespace: kube-system
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=true
 data:
   version: ""
 ---
