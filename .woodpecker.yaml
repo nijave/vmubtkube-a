@@ -13,7 +13,7 @@ when:
 steps:
   mirror-images:
     # renovate: datasource=docker depName=ghcr.io/regclient/regctl
-    image: ghcr.io/regclient/regctl:v0.11.4-alpine
+    image: ghcr.io/regclient/regctl:v0.11.5-alpine
     backend_options:
       kubernetes:
         # regclient image runs as non-root; need root to apk add yq/jq.
