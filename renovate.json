@@ -84,6 +84,11 @@
         "registry.k8s.io/autoscaling/vpa-admission-controller"
       ],
       "groupName": "vpa"
+    },
+    {
+      "description": "Only update kube-prometheus-stack on Fridays",
+      "matchPackageNames": ["kube-prometheus-stack"],
+      "schedule": ["on friday"]
     }
   ]
 }
