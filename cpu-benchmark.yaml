@@ -29,6 +29,8 @@ spec:
           FEATURE_FILE=/features.d/cpu-benchmark
 
           while true; do
+            sleep $((RANDOM % 600))
+
             score=$(sysbench cpu --threads=1 --time=30 run 2>&1 \
               | awk '/events per second/{printf "%d", $NF}')
 
