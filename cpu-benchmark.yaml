@@ -27,8 +27,18 @@ spec:
         - |
           set -euo pipefail
           FEATURE_FILE=/features.d/cpu-benchmark
+          MAX_AGE=$((30 * 86400))
 
           while true; do
+            if [ -f "$FEATURE_FILE" ]; then
+              age=$(( $(date +%s) - $(stat -c %Y "$FEATURE_FILE") ))
+              if [ "$age" -lt "$MAX_AGE" ]; then
+                echo "$(date -Iseconds): score still fresh (${age}s old), sleeping"
+                sleep $(( MAX_AGE - age ))
+                continue
+              fi
+            fi
+
             sleep $((RANDOM % 600))
 
             score=$(sysbench cpu --threads=1 --time=30 run 2>&1 \
@@ -45,7 +55,7 @@ spec:
               continue
             fi
 
-            sleep 604800
+            sleep $MAX_AGE
           done
         volumeMounts:
         - name: features-d
