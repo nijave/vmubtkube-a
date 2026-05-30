@@ -1,0 +1,88 @@
+# Build and push the image:
+#   podman build -f Containerfile.cpu-benchmark -t registry.apps.nickv.me/cpu-benchmark:latest
+#   podman push registry.apps.nickv.me/cpu-benchmark:latest
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cpu-benchmark
+  namespace: kube-system
+  labels:
+    app: cpu-benchmark
+spec:
+  selector:
+    matchLabels:
+      app: cpu-benchmark
+  template:
+    metadata:
+      labels:
+        app: cpu-benchmark
+    spec:
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: benchmark
+        image: registry.apps.nickv.me/cpu-benchmark:latest
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          set -euo pipefail
+          FEATURE_FILE=/features.d/cpu-benchmark
+
+          while true; do
+            score=$(sysbench cpu --threads=1 --time=30 run 2>&1 \
+              | awk '/events per second/{printf "%d", $NF}')
+
+            if [ -n "$score" ] && [ "$score" -gt 0 ]; then
+              tmp=$(mktemp /features.d/.cpu-benchmark.XXXXXX)
+              echo "cpu-benchmark-score=$score" > "$tmp"
+              mv "$tmp" "$FEATURE_FILE"
+              echo "$(date -Iseconds): score=$score"
+            else
+              echo "$(date -Iseconds): benchmark failed, retrying in 60s"
+              sleep 60
+              continue
+            fi
+
+            sleep 604800
+          done
+        volumeMounts:
+        - name: features-d
+          mountPath: /features.d
+        resources:
+          requests:
+            cpu: 100m
+            memory: 32Mi
+          limits:
+            cpu: "1"
+            memory: 64Mi
+      volumes:
+      - name: features-d
+        hostPath:
+          path: /etc/kubernetes/node-feature-discovery/features.d/
+---
+# Adjust the threshold (3400) based on actual benchmark scores.
+# Current measurements: a24 (Zen 4) ~3738, a20-a23 (N-series) ~3102
+apiVersion: nfd.k8s-sigs.io/v1alpha1
+kind: NodeFeatureRule
+metadata:
+  name: cpu-tier
+spec:
+  rules:
+  - name: cpu-tier-standard
+    labels:
+      cpu-tier: standard
+    matchFeatures:
+    - feature: local.label
+      matchExpressions:
+        cpu-benchmark-score:
+          op: Lt
+          value: ["3400"]
+  - name: cpu-tier-fast
+    labels:
+      cpu-tier: fast
+    matchFeatures:
+    - feature: local.label
+      matchExpressions:
+        cpu-benchmark-score:
+          op: Gt
+          value: ["3399"]
