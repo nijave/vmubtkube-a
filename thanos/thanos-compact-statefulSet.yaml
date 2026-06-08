@@ -59,7 +59,7 @@ spec:
         - --retention.resolution-1h=395d
         - --delete-delay=1h
         - --block-files-concurrency=2
-        - --compact.concurrency=2
+        - --compact.concurrency=1
         - --compact.blocks-fetch-concurrency=2
         - --downsample.concurrency=8
         - --compact.enable-vertical-compaction
@@ -150,4 +150,4 @@ spec:
       storageClassName: zfs-generic-iscsi-csi
       resources:
         requests:
-          storage: 150Gi
+          storage: 200Gi
