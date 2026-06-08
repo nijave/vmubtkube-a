@@ -40,7 +40,7 @@ if [ ! -s "$CA_DIR/$MIRROR_REG.crt" ]; then
   echo "failed to extract $MIRROR_REG CA cert from $BUILDKIT_FILE" >&2
   exit 1
 fi
-export REG_CERT_DIR="$CA_DIR"
+regctl registry set "$MIRROR_REG" --cacert "$(cat "$CA_DIR/$MIRROR_REG.crt")"
 
 strip_url() { printf '%s' "$1" | sed -E 's|^https?://||; s|/.*$||'; }
 
