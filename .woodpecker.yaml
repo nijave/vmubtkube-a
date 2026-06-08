@@ -5,6 +5,11 @@
 #
 # Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
+clone:
+  git:
+    settings:
+      depth: 25
+
 when:
   - event: pull_request
   - event: push
