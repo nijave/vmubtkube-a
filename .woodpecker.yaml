@@ -13,7 +13,8 @@ when:
 steps:
   mirror-images:
     # renovate: datasource=docker depName=ghcr.io/regclient/regctl
-    image: ghcr.io/regclient/regctl:v0.11.5-alpine
+    #image: ghcr.io/regclient/regctl:v0.11.5-alpine
+    image: registry.apps.nickv.me/regclient/regctl:v0.11.5-alpine
     backend_options:
       kubernetes:
         # regclient image runs as non-root; need root to apk add yq/jq.
@@ -21,5 +22,7 @@ steps:
           runAsUser: 0
           runAsGroup: 0
     commands:
+      - whoami
+      - sleep 300
       - apk add --no-cache yq jq git
       - sh .ci/mirror-images.sh
