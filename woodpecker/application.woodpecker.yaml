@@ -90,6 +90,11 @@ spec:
               labels:
                 release: prom
         agent:
+          image:
+            registry: registry.apps.nickv.me
+            repository: woodpeckerci/woodpecker-agent
+            # https://github.com/woodpecker-ci/woodpecker/pull/6710
+            tag: v3.15.0-aa87bcb21
           replicaCount: 1
           env:
             WOODPECKER_SERVER: woodpecker-server:9000

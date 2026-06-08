@@ -16,6 +16,7 @@ steps:
     image: ghcr.io/regclient/regctl:v0.11.5-alpine
     backend_options:
       kubernetes:
+        hostUsers: false
         # regclient image runs as non-root; need root to apk add yq/jq.
         securityContext:
           runAsUser: 0
