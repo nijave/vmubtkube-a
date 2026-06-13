@@ -143,6 +143,8 @@ spec:
           value: reloader-reloader
         image: ghcr.io/stakater/reloader:v1.4.17
         imagePullPolicy: IfNotPresent
+        args:
+        - --reload-strategy=annotations
         livenessProbe:
           failureThreshold: 5
           httpGet:
