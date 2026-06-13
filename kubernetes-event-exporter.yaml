@@ -36,7 +36,9 @@ metadata:
   namespace: monitoring
 data:
   config.yaml: |
-    logLevel: warn
+    kubeQPS: 100
+    kubeBurst: 500
+    logLevel: error
     logFormat: json
     metricsNamePrefix: event_exporter_
     leaderElection:
@@ -45,9 +47,8 @@ data:
       routes:
       - drop:
         - reason: "LeaderElection"
-        - source:
-            component: "default-scheduler"
-            reason: "Scheduled"
+        - component: "default-scheduler"
+          reason: "Scheduled"
         match:
         - receiver: "dump"
     receivers:
