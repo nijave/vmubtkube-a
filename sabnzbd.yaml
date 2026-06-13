@@ -84,7 +84,7 @@ spec:
     spec:
       containers:
       - name: sabnzbd
-        image: lscr.io/linuxserver/sabnzbd:latest
+        image: lscr.io/linuxserver/sabnzbd:latest@sha256:c2f1826a3d231b9506554a60447e763157fd8ba4f600a4a864d6d0ddae00a0aa
         # command: [sleep, infinity]
         env:
         - name: TZ

@@ -89,6 +89,26 @@
       "description": "Only update kube-prometheus-stack on Fridays",
       "matchPackageNames": ["kube-prometheus-stack"],
       "schedule": ["on friday"]
+    },
+    {
+      "description": "Only update Sonarr on Fridays",
+      "matchPackageNames": ["lscr.io/linuxserver/sonarr"],
+      "schedule": ["on friday"]
+    },
+    {
+      "description": "Only update SABnzbd on Fridays",
+      "matchPackageNames": ["lscr.io/linuxserver/sabnzbd"],
+      "schedule": ["on friday"]
+    },
+    {
+      "description": "Only update Radarr on Fridays",
+      "matchPackageNames": ["lscr.io/linuxserver/radarr"],
+      "schedule": ["on friday"]
+    },
+    {
+      "description": "Only update Prowlarr on Fridays",
+      "matchPackageNames": ["lscr.io/linuxserver/prowlarr"],
+      "schedule": ["on friday"]
     }
   ]
 }
