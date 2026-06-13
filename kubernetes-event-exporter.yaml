@@ -62,6 +62,8 @@ metadata:
   namespace: monitoring
   labels:
     app: event-exporter
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   revisionHistoryLimit: 3
