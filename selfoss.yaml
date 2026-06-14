@@ -1,0 +1,219 @@
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: selfoss-config
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: selfoss-config
+    template:
+      type: Opaque
+      data:
+        config.ini: |
+          ; see http://selfoss.aditu.de for more information about
+          ; the configuration parameters
+          [globals]
+          db_type=mysql
+          db_host=mysql.apps.somemissing.info
+          db_database=selfoss
+          db_username=selfoss
+          db_password={{ .db_password }}
+          db_port=3306
+          db_prefix=
+          logger_level=INFO
+          items_perpage=50
+          items_lifetime=9125
+          base_url=
+          username=nick
+          password={{ .login_password }}
+          ; salt=
+          public=0
+          html_title=selfoss
+          rss_title=selfoss feed
+          rss_max_items=1000
+          rss_mark_as_read=0
+          homepage=unread
+          language=0
+          auto_mark_as_read=1
+          auto_collapse=0
+          auto_stream_more=1
+          anonymizer=
+          use_system_font=
+          share=
+          wallabag=
+          allow_public_update_access=
+          unread_order=asc
+          load_images_on_mobile=1
+          auto_hide_read_on_mobile=0
+          env_prefix=selfoss_
+          camo_domain=
+          camo_key=
+          scroll_to_article_header=0
+          logger_destination=file:/dev/stdout
+  data:
+  - secretKey: db_password
+    remoteRef:
+      key: selfoss-db-password
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: login_password
+    remoteRef:
+      key: selfoss-login-password
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: selfoss-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: selfoss
+  namespace: default
+  labels:
+    app.kubernetes.io/component: selfoss
+    app.kubernetes.io/name: selfoss
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: selfoss
+    app.kubernetes.io/name: selfoss
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selfoss
+  namespace: default
+  labels:
+    app.kubernetes.io/component: selfoss
+    app.kubernetes.io/name: selfoss
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: selfoss
+      app.kubernetes.io/name: selfoss
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: selfoss
+        app.kubernetes.io/name: selfoss
+    spec:
+      containers:
+      - name: selfoss
+        image: ghcr.io/nijave/selfoss:20260601-7fa8a6d
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        startupProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html/data
+        - name: config
+          mountPath: /var/www/html/config.ini
+          subPath: config.ini
+          readOnly: true
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 10m
+          limits:
+            memory: 512Mi
+            cpu: 1000m
+      - name: cliupdate
+        image: registry.apps.nickv.me/selfoss:aa8f2079
+        workingDir: /var/www/html
+        command:
+        - /bin/sh
+        - -c
+        - while true; do /usr/local/bin/php -f /var/www/html/cliupdate.php; sleep 1500; done
+        volumeMounts:
+        - name: data
+          mountPath: /var/www/html/data
+        - name: config
+          mountPath: /var/www/html/config.ini
+          subPath: config.ini
+          readOnly: true
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 10m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: selfoss-data
+      - name: config
+        secret:
+          secretName: selfoss-config
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rss-nickv-me-cert
+  namespace: default
+spec:
+  secretName: rss-nickv-me-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn rss.nickv.me
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: rss-nickv-me
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: rss.nickv.me
+    tls:
+      secretName: rss-nickv-me-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: selfoss
+          port: 80
