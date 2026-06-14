@@ -159,7 +159,7 @@ spec:
             memory: 512Mi
             cpu: 1000m
       - name: cliupdate
-        image: registry.apps.nickv.me/selfoss:aa8f2079
+        image: ghcr.io/nijave/selfoss:20260601-7fa8a6d
         workingDir: /var/www/html
         command:
         - /bin/sh
