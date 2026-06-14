@@ -54,7 +54,7 @@ spec:
           camo_domain=
           camo_key=
           scroll_to_article_header=0
-          logger_destination=file:/proc/1/fd/1
+          logger_destination=error_log
   data:
   - secretKey: db_password
     remoteRef:
@@ -123,6 +123,9 @@ spec:
         app.kubernetes.io/component: selfoss
         app.kubernetes.io/name: selfoss
     spec:
+      securityContext:
+        fsGroup: 33
+        fsGroupChangePolicy: OnRootMismatch
       containers:
       - name: selfoss
         image: ghcr.io/nijave/selfoss:20260601-7fa8a6d
