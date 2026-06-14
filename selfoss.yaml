@@ -54,7 +54,7 @@ spec:
           camo_domain=
           camo_key=
           scroll_to_article_header=0
-          logger_destination=file:/dev/stdout
+          logger_destination=file:/proc/1/fd/1
   data:
   - secretKey: db_password
     remoteRef:
