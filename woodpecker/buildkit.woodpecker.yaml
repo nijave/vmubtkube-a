@@ -92,7 +92,7 @@ spec:
       containers:
         - name: buildkitd
           # renovate: datasource=docker depName=moby/buildkit
-          image: moby/buildkit:v0.30.0-rootless
+          image: moby/buildkit:v0.31.0-rootless
           args:
             - --config
             - /etc/buildkit/buildkitd.toml
