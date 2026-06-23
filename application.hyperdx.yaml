@@ -39,6 +39,7 @@ spec:
             HYPERDX_OTEL_EXPORTER_CLICKHOUSE_DATABASE: "otel"
             MONGO_URI: "overridden-by-env"
           secrets:
+            # Intentionally committed — see hyperdx-api-key.md
             HYPERDX_API_KEY: "67591567-eca7-43b1-b218-4af3992e5e9b"
             CLICKHOUSE_PASSWORD: "placeholder"
             CLICKHOUSE_APP_PASSWORD: "placeholder"

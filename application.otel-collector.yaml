@@ -154,6 +154,7 @@ spec:
               endpoint: hyperdx-otel-collector.hyperdx:4317
               compression: gzip
               headers:
+                # Intentionally committed — see hyperdx-api-key.md
                 authorization: 67591567-eca7-43b1-b218-4af3992e5e9b
               tls:
                 insecure: true

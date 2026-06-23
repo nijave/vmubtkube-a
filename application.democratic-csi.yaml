@@ -164,10 +164,9 @@ spec:
             allowVolumeExpansion: true
             parameters:
               fsType: ext4
-            mountOptions: []
-            parameters:
               csi.storage.k8s.io/node-stage-secret-name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
               csi.storage.k8s.io/node-stage-secret-namespace: kube-system
+            mountOptions: []
             secrets:
               provisioner-secret:
               controller-publish-secret:
