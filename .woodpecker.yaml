@@ -10,6 +10,10 @@ clone:
     image: woodpeckerci/plugin-git
     settings:
       partial: false
+      # Shallow clone of HEAD's recent history. mirror-images.sh fetches the
+      # target branch separately to compute diffs; if a long-lived PR's
+      # merge-base falls outside these depths, the script's explicit git-diff
+      # check will fail loudly rather than silently producing empty mirror sets.
       depth: 25
 
 when:

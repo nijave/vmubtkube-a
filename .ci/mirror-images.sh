@@ -18,7 +18,7 @@
 #   - otherwise:    HEAD^
 #
 # Requires: yq (mikefarah), jq, regctl, git, grep, sort, awk, sed.
-set -eu
+set -euo pipefail
 
 MIRROR_REG="registry.apps.nickv.me"
 BUILDKIT_FILE="woodpecker/buildkit.woodpecker.yaml"
@@ -29,9 +29,13 @@ for cmd in yq jq regctl git grep sort awk sed; do
 done
 
 # Pull the registry's self-signed CA out of the buildkitd-config ConfigMap and
-# point regctl at it via REG_CERT_DIR. Single source of truth for the cert.
-CA_DIR="${CA_DIR:-/tmp/mirror-ca}"
-mkdir -p "$CA_DIR"
+# point regctl at it. Single source of truth for the cert.
+CA_DIR=$(mktemp -d)
+OVERRIDES=$(mktemp)
+IGNORE=$(mktemp)
+REFS=$(mktemp)
+RAW_DIFF=$(mktemp)
+trap 'rm -rf "$CA_DIR" "$OVERRIDES" "$IGNORE" "$REFS" "$RAW_DIFF"' EXIT
 yq ea '
   select(.kind == "ConfigMap" and .metadata.name == "buildkitd-config")
   | .data["'"$MIRROR_REG"'.crt"]
@@ -50,11 +54,6 @@ if [ -z "$DEFAULT_UPSTREAM" ]; then
   exit 1
 fi
 DEFAULT_HOST=$(strip_url "$DEFAULT_UPSTREAM")
-
-OVERRIDES=$(mktemp)
-IGNORE=$(mktemp)
-REFS=$(mktemp)
-trap 'rm -f "$OVERRIDES" "$IGNORE" "$REFS"' EXIT
 
 # Override map: matchPackageNames entry -> upstream registry host. Skips rules
 # with no registryUrls (those are pure grouping/description rules).
@@ -76,6 +75,10 @@ jq -r '.ignoreDeps[]? // empty' "$RENOVATE_FILE" > "$IGNORE"
 case "${CI_PIPELINE_EVENT:-}" in
   pull_request)
     target_branch="${CI_COMMIT_TARGET_BRANCH:-main}"
+    # depth=100 covers main's history back ~3-4 weeks at typical merge rates,
+    # enough for nearly all PRs (Renovate bot PRs are <5 commits ahead).
+    # If the merge-base falls outside this, the git-diff check below fails
+    # loudly with a clear error rather than silently producing empty refs.
     git fetch --no-tags --depth=100 origin "$target_branch" >/dev/null 2>&1 || true
     BASE_REF="origin/$target_branch"
     ;;
@@ -93,10 +96,20 @@ case "${CI_PIPELINE_EVENT:-}" in
 esac
 
 echo "diff base: $BASE_REF"
-git diff --unified=0 "$BASE_REF"...HEAD \
-  | grep -E '^\+[^+]' \
+# Detect git diff failure explicitly — without this, a missing merge-base
+# (e.g. shallow clone) silently produces empty $REFS and CI passes with
+# mirrored=0 failed=0, masking the failure.
+if ! git diff --unified=0 "$BASE_REF"...HEAD > "$RAW_DIFF" 2>&1; then
+  echo "ERROR: git diff against $BASE_REF failed:" >&2
+  cat "$RAW_DIFF" >&2
+  exit 1
+fi
+# Extract mirror refs from added lines. grep returns 1 when there are no
+# matches, which is legitimate (a PR with no mirror image changes) — guard
+# with `|| true` so pipefail doesn't treat it as a failure.
+grep -E '^\+[^+]' "$RAW_DIFF" \
   | grep -oE "$MIRROR_REG/[A-Za-z0-9._/-]+:[A-Za-z0-9._+-]+" \
-  | sort -u > "$REFS"
+  | sort -u > "$REFS" || true
 
 mirrored=0
 skipped=0
