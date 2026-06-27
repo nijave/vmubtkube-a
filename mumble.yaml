@@ -1,0 +1,135 @@
+---
+# mittwald kubernetes-secret-generator auto-fills data.password with a random
+# value. With ServerSideApply the controller owns the `data` field, so ArgoCD
+# self-heal won't clobber it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mumble-superuser
+  namespace: default
+  annotations:
+    secret-generator.mittwald.de/secret-type: password
+    secret-generator.mittwald.de/password-length: "32"
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mumble-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mumble
+  namespace: default
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: mumble.k8s.somemissing.info
+  labels:
+    app.kubernetes.io/component: mumble-server
+    app.kubernetes.io/name: mumble
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  allocateLoadBalancerNodePorts: false
+  ports:
+  - name: voice-tcp
+    port: 64738
+    targetPort: 64738
+    protocol: TCP
+  - name: voice-udp
+    port: 64738
+    targetPort: 64738
+    protocol: UDP
+  selector:
+    app.kubernetes.io/component: mumble-server
+    app.kubernetes.io/name: mumble
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mumble
+  namespace: default
+  labels:
+    app.kubernetes.io/component: mumble-server
+    app.kubernetes.io/name: mumble
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mumble-server
+      app.kubernetes.io/name: mumble
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mumble-server
+        app.kubernetes.io/name: mumble
+    spec:
+      securityContext:
+        runAsUser: 10000
+        runAsGroup: 10000
+        runAsNonRoot: true
+        fsGroup: 10000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+      - name: mumble
+        image: mumblevoip/mumble-server:v1.5.901
+        command:
+        - /entrypoint.sh
+        args:
+        - /usr/bin/mumble-server
+        env:
+        - name: MUMBLE_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mumble-superuser
+              key: password
+        ports:
+        - containerPort: 64738
+          name: voice-tcp
+          protocol: TCP
+        - containerPort: 64738
+          name: voice-udp
+          protocol: UDP
+        startupProbe:
+          tcpSocket:
+            port: voice-tcp
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          failureThreshold: 30
+        livenessProbe:
+          tcpSocket:
+            port: voice-tcp
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          failureThreshold: 5
+        readinessProbe:
+          tcpSocket:
+            port: voice-tcp
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 10m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: mumble-data
