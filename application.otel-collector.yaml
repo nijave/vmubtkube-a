@@ -49,6 +49,12 @@ spec:
               - name: error
                 type: status_code
                 status_code: {status_codes: [ERROR]}
+              - name: claude-code
+                type: ottl_condition
+                ottl_condition:
+                  error_mode: ignore
+                  span:
+                    - 'resource.attributes["service.name"] == "claude-code"'
               - name: random
                 type: probabilistic
                 probabilistic: {sampling_percentage: 1}
