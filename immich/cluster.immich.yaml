@@ -249,7 +249,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      cnpg.io/cluster: postgres
+      cnpg.io/cluster: immich
   podMetricsEndpoints:
   - port: metrics
 ---
