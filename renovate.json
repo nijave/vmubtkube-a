@@ -3,12 +3,14 @@
   "extends": ["config:recommended"],
   "argocd": {
     "managerFilePatterns": [
-      "/(^|/)application\\..*\\.yaml$/"
+      "/(^|/)application\\..*\\.yaml$/",
+      "/^operators\\/.+\\.yaml$/"
     ]
   },
   "helm-values": {
     "managerFilePatterns": [
-      "/(^|/)application\\..*\\.yaml$/"
+      "/(^|/)application\\..*\\.yaml$/",
+      "/^operators\\/.+\\.yaml$/"
     ]
   },
   "kubernetes": {
