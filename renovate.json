@@ -37,7 +37,8 @@
       "customType": "regex",
       "managerFilePatterns": ["/\\.yaml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?",
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
     }

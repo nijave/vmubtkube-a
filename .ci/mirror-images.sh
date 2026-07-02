@@ -17,14 +17,14 @@
 #   - push:         $CI_COMMIT_BEFORE
 #   - otherwise:    HEAD^
 #
-# Requires: yq (mikefarah), jq, regctl, git, grep, sort, awk, sed.
+# Requires: yq (mikefarah), jq, regctl, git, grep, sort, awk, sed, comm.
 set -euo pipefail
 
 MIRROR_REG="registry.apps.nickv.me"
 BUILDKIT_FILE="woodpecker/buildkit.woodpecker.yaml"
 RENOVATE_FILE="renovate.json"
 
-for cmd in yq jq regctl git grep sort awk sed; do
+for cmd in yq jq regctl git grep sort awk sed comm; do
   command -v "$cmd" >/dev/null || { echo "missing required tool: $cmd" >&2; exit 1; }
 done
 
@@ -107,9 +107,31 @@ fi
 # Extract mirror refs from added lines. grep returns 1 when there are no
 # matches, which is legitimate (a PR with no mirror image changes) — guard
 # with `|| true` so pipefail doesn't treat it as a failure.
+#
+# This only catches the single-line `image: registry/repo:tag` style (e.g.
+# the thanos manifests). Charts that split the reference across sibling
+# `registry:`/`tag:` keys (e.g. democratic-csi's valuesObject, which Helm
+# concatenates itself) never produce a line containing both the path and the
+# tag, so they're invisible to this regex — handled separately below.
 grep -E '^\+[^+]' "$RAW_DIFF" \
   | grep -oE "$MIRROR_REG/[A-Za-z0-9._/-]+:[A-Za-z0-9._+-]+" \
   | sort -u > "$REFS" || true
+
+# Extract refs expressed as sibling `registry:`/`tag:` keys anywhere in
+# changed YAML files (any nesting depth — e.g. Helm valuesObject blocks).
+# Compare old vs new file content and keep only refs that are new or changed,
+# mirroring the "added lines only" behavior of the regex extraction above.
+YQ_REGISTRY_TAG_REFS='[.. | select(tag == "!!map" and has("registry") and has("tag")) | select(.registry | test("^'"$MIRROR_REG"'(/|$)")) | (.registry + ":" + (.tag | tostring))] | .[]'
+git diff --name-only --diff-filter=d "$BASE_REF"...HEAD -- '*.yaml' | while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  OLD_YAML=$(mktemp)
+  git show "$BASE_REF:$f" > "$OLD_YAML" 2>/dev/null || : > "$OLD_YAML"
+  yq eval-all "$YQ_REGISTRY_TAG_REFS" "$OLD_YAML" 2>/dev/null | sort -u > "$OLD_YAML.refs" || true
+  yq eval-all "$YQ_REGISTRY_TAG_REFS" "$f" 2>/dev/null | sort -u > "$OLD_YAML.new" || true
+  comm -13 "$OLD_YAML.refs" "$OLD_YAML.new" 2>/dev/null >> "$REFS" || true
+  rm -f "$OLD_YAML" "$OLD_YAML.refs" "$OLD_YAML.new"
+done
+sort -u -o "$REFS" "$REFS"
 
 mirrored=0
 skipped=0
