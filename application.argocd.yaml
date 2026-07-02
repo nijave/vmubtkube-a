@@ -27,17 +27,19 @@ spec:
       limit: 2
   ignoreDifferences:
   - group: ""
-    kind: ConfigMap
-    jqPathExpressions:
-    - .data
-    - .metadata.labels
-  - group: ""
     kind: Secret
+    name: argocd-secret
     jqPathExpressions:
     - .data
     - .stringData
     - .metadata.labels
     - .metadata.annotations
+  - group: ""
+    kind: Secret
+    name: argocd-notifications-secret
+    jqPathExpressions:
+    - .data
+    - .stringData
   source:
     chart: argo-cd
     repoURL: https://argoproj.github.io/argo-helm
@@ -57,6 +59,7 @@ spec:
             resource.customizations.ignoreDifferences.apps_StatefulSet: |
               jqPathExpressions:
               - .spec.volumeClaimTemplates[].metadata.creationTimestamp
+            resource.trackingmethod: annotation
           params:
             otlp.address: otel-collector.k8s.somemissing.info:4317
             otlp.insecure: "false"

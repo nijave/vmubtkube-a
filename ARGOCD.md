@@ -79,15 +79,9 @@ The root app points at `./` with only `renovate.json`, `vendir.yml`, and `vendir
 
 ### Lower Impact
 
-#### 9. No RBAC / auth beyond local admin
+#### ~~9. No RBAC / auth beyond local admin~~ (N/A — single local admin)
 
-Dex is disabled, no RBAC configuration. Access is presumably local-admin-only. Fine for a homelab, but if anyone else accesses the ArgoCD UI, there's no role separation (read-only viewers vs. admins).
-
-#### 10. Single Redis instance
-
-`redis-ha: false` means a single Redis pod. ArgoCD degrades gracefully without Redis (falls back to direct API calls), but cache loss causes temporary performance degradation. Not a real issue at this scale.
-
-#### ~~11. No network policies for ArgoCD namespace~~ (RESOLVED)
+#### ~~10. No network policies for ArgoCD namespace~~ (RESOLVED)
 
 `networkpolicy.argocd.yaml` adds a default-deny ingress policy with targeted exceptions: argocd-server remains fully open (authenticated API, UI, webhooks), repo-server and redis only accept traffic from other ArgoCD components, and all components allow metrics scraping from the monitoring namespace.
 
