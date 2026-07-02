@@ -11,10 +11,7 @@ spec:
     path: ./
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
     directory:
-      exclude: |
-        renovate.json
-        vendir.yml
-        vendir.lock.yml
+      exclude: '{renovate.json,vendir.yml,vendir.lock.yml}'
     targetRevision: HEAD
   syncPolicy:
     automated:
