@@ -77,6 +77,12 @@
       "groupName": "contour"
     },
     {
+      "description": "metrics-server — vendored whole-release via vendir (not per-image)",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["kubernetes-sigs/metrics-server"],
+      "groupName": "metrics-server"
+    },
+    {
       "description": "thanos is handled by the custom regex manager with a registryUrl annotation (registryAliases maps to DockerHub but thanos lives on quay.io)",
       "matchPackageNames": ["**/thanos/thanos"],
       "matchManagers": ["kubernetes"],

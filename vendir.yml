@@ -54,3 +54,12 @@ directories:
         newRootPath: deploy/crds
         includePaths:
           - deploy/crds/bundle.yaml
+
+  - path: vendored/metrics-server/base
+    contents:
+      - path: .
+        githubRelease:
+          slug: kubernetes-sigs/metrics-server
+          tag: v0.8.1
+          assetNames: ["high-availability.yaml"]
+          disableAutoChecksumValidation: true   # checksums ship in a release asset, not parseable from notes

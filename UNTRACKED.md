@@ -101,6 +101,10 @@ Remaining unmanaged CRDs (expected — managed by tigera-operator, not ArgoCD):
 | cluster | Namespace | external-secrets, monitoring, tigera-operator | Not managed by ArgoCD |
 | woodpecker | Service | wp-hsvc-82 | Ephemeral Woodpecker pipeline service |
 
+## ~~11. `kube-system` — metrics-server~~ (RESOLVED 2026-07-02)
+
+metrics-server was originally installed by hand via `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/$METRICS_SERVER_VERSION/high-availability.yaml` (last applied at v0.7.1, running as a single replica despite the "high-availability" manifest). It's now vendored via `vendir` (`vendored/metrics-server/base`, tracking upstream release v0.8.1) and synced by ArgoCD through `application.metrics-server.yaml`. A kustomize patch (`vendored/metrics-server/kustomization.yaml`) rewrites the shipped PodDisruptionBudget from `policy/v1beta1` (removed since Kubernetes 1.25) to `policy/v1`; the manifest's default `replicas: 2` with pod anti-affinity is kept as-is since the cluster has plenty of nodes to satisfy it.
+
 ## Summary — Things Worth Acting On
 
 1. ~~**`libvirt-csi-system`**~~ — Cleaned up 2026-07-02
@@ -110,3 +114,4 @@ Remaining unmanaged CRDs (expected — managed by tigera-operator, not ArgoCD):
 5. ~~**`monitoring` namespace secrets**~~ — `argocd-initial-admin-secret`, `argocd-redis` deleted 2026-07-02
 6. **3 unmanaged namespaces**: `external-secrets`, `monitoring`, `tigera-operator`
 7. **`media/gluetun-airvpn`** and **`thanos/thanos-objectstorage`** secrets — manually created, not in git
+8. ~~**`kube-system/metrics-server`**~~ — Brought under ArgoCD via vendir 2026-07-02
