@@ -18,15 +18,6 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
-  ignoreDifferences:
-  - group: apps
-    kind: Deployment
-    name: clickhouse-operator-altinity-clickhouse-operator
-    namespace: operators
-    managedFieldsManagers:
-    - clickhouse-operator
-    jqPathExpressions:
-    - .spec.template.spec.containers[].env[].valueFrom.resourceFieldRef.divisor
   source:
     chart: altinity-clickhouse-operator
     repoURL: https://helm.altinity.com
