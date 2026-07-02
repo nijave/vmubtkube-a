@@ -1,12 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "postUpgradeTasks": {
-    "description": "After the vendir manager bumps a tag/ref in vendir.yml, re-sync so vendored/*/base + vendir.lock.yml land in the same PR. (vendir sync is a no-op when vendir.yml is unchanged, so this is safe on non-vendir PRs.) Verify Mend free tier actually runs postUpgradeTasks on the first PR; if not, fall back to a Woodpecker vendir-sync step.",
-    "commands": ["vendir sync"],
-    "fileFilters": ["vendored/**", "vendir.lock.yml"],
-    "executionMode": "branch",
-    "installTools": {"vendir": ">=0.40.0"}
+  "lockFileMaintenance": {
+    "enabled": true
   },
   "argocd": {
     "managerFilePatterns": [
