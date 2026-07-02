@@ -40,7 +40,7 @@
       "customType": "regex",
       "managerFilePatterns": ["/\\.yaml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
     }
@@ -77,9 +77,10 @@
       "groupName": "contour"
     },
     {
-      "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
+      "description": "thanos is handled by the custom regex manager with a registryUrl annotation (registryAliases maps to DockerHub but thanos lives on quay.io)",
       "matchPackageNames": ["registry.apps.nickv.me/thanos/thanos", "thanos/thanos"],
-      "registryUrls": ["https://quay.io"]
+      "matchManagers": ["kubernetes"],
+      "enabled": false
     },
     {
       "description": "cloudflared is mirrored from cloudflare/cloudflared on DockerHub",

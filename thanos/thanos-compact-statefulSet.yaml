@@ -84,6 +84,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.hostIP
+        # renovate: datasource=docker registryUrl=https://quay.io depName=thanos/thanos
         image: registry.apps.nickv.me/thanos/thanos:v0.41.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
