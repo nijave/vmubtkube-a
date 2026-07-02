@@ -79,34 +79,31 @@ those three apps' sync for any conversion-webhook or schema warnings.
    synced by the root app as unknown kinds → SyncError. Added to
    `application.vmubtkube-a.yaml` `directory.exclude`.
 
-## Verified push sequence (3 commits on `feature/vendir-kustomize`)
+## Verified push sequences
 
-ArgoCD root app uses `targetRevision: HEAD` (main), so each commit must be applied
-to main in turn with ArgoCD confirmation between. Cherry-pick each commit to main:
+ArgoCD root app uses `targetRevision: HEAD` (main), so each commit must be
+pushed to main one at a time with ArgoCD confirmation between.
 
-### Commit 1 — harden root app (disable prune, drop finalizer, exclude vendir files)
-Edit `application.vmubtkube-a.yaml`: remove `resources-finalizer` from
-`metadata.finalizers`; `syncPolicy.automated.prune: true → false`; add
-`vendir.yml` / `vendir.lock.yml` to `directory.exclude`.
-**After push:** confirm in ArgoCD UI that root app shows `prune: false`.
+### Phase 1 — CNPG, cert-manager, barman, external-secrets CRDs (2026-07-02)
 
-### Commit 2 — file migration
-- Delete: `cnpg-1.30.0.yaml`, `cert-manager.yaml`, `barman-cloud-plugin-0.12.0.yaml`,
-  `crds/crd-externalsecrets.yaml` (and `crds/`).
-- Add: `vendir.yml`, `vendir.lock.yml`, `vendored/{cnpg,barman-cloud-plugin,cert-manager,external-secrets-crds}/`,
-  `application.vendored-{cnpg,barman-cloud-plugin,cert-manager}.yaml`.
-- Modify: `application.crds.yaml` (repoint path), `renovate.json`.
-- **Unchanged (contour deferred):** `contour.yaml`, `contour-tracing.yaml`, `external-dns.yaml`.
-**After push, BEFORE commit 3 — verify in ArgoCD:**
-  - `cnpg`, `barman-cloud-plugin`, `cert-manager`, `crds` apps all `Synced` + `Healthy`.
-  - No `OutOfSync`/`Degraded` on those apps. CNPG clusters, cert-manager, ESO still healthy.
-  - Root app shows the operator resources as gone from its managed set (now owned by the vendored apps).
-  - If any vendored app fails to sync, **stop** and investigate before commit 3.
+3-push sequence on `feature/vendir-kustomize`, cherry-picked to main:
 
-### Commit 3 — restore root app pruning
-Edit `application.vmubtkube-a.yaml`: restore `resources-finalizer`;
-`syncPolicy.automated.prune: false → true` (vendir excludes remain).
-**After push:** confirm root app pruning re-enabled; nothing unexpectedly pruned.
+1. **Disable prune + drop finalizer + exclude vendir files** from root app.
+2. **File migration**: delete root YAML files, add `vendir.yml`, `vendir.lock.yml`,
+   `vendored/` tree, per-component ArgoCD apps, repoint `application.crds.yaml`,
+   update `renovate.json`.
+3. **Restore prune + finalizer** on root app.
+
+### Phase 2 — Contour (2026-07-02)
+
+Separate 3-push sequence, committed directly on main:
+
+1. **Disable prune + drop finalizer** on root app.
+2. **File migration**: delete `contour.yaml` from root, add
+   `vendored/contour/{kustomization.yaml,patch-*.yaml,envoy-lb-service.yaml}`,
+   `application.vendored-contour.yaml`, update `renovate.json`. Manually deleted
+   orphaned `contour-certgen` Job after new versioned Job completed.
+3. **Restore prune + finalizer** on root app.
 
 ## Renovate caveats
 - `postUpgradeTasks` (vendir sync) support on the Mend free tier is unverified —

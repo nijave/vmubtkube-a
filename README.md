@@ -7,7 +7,7 @@ which prunes and self-heals via ServerSideApply.
 ## Vendored upstream manifests
 
 Upstream manifests that don't ship as a Helm chart — operators (CNPG,
-cert-manager), plugin bundles (barman-cloud), standalone CRDs
+cert-manager, contour), plugin bundles (barman-cloud), standalone CRDs
 (external-secrets) — are vendored with
 [vendir](https://github.com/carvel-dev/vendir) instead of committed as ad-hoc
 YAML. vendir fetches a **whole upstream release atomically** — manifest, CRDs,
