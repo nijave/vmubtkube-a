@@ -3,8 +3,7 @@ kind: Application
 metadata:
   name: vmubtkube-a
   namespace: argocd
-  finalizers:
-  - resources-finalizer.argocd.argoproj.io
+  finalizers: []
 spec:
   project: default
   destination:
@@ -17,7 +16,7 @@ spec:
     targetRevision: HEAD
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
     syncOptions:
     - PruneLast=true
