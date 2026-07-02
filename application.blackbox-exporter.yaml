@@ -27,7 +27,7 @@ spec:
   source:
     chart: prometheus-blackbox-exporter
     repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: 9.6.0
+    targetRevision: 9.8.0
     helm:
       releaseName: blackbox-exporter
       valuesObject:
