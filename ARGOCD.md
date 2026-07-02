@@ -87,9 +87,9 @@ Dex is disabled, no RBAC configuration. Access is presumably local-admin-only. F
 
 `redis-ha: false` means a single Redis pod. ArgoCD degrades gracefully without Redis (falls back to direct API calls), but cache loss causes temporary performance degradation. Not a real issue at this scale.
 
-#### 11. No network policies for ArgoCD namespace
+#### ~~11. No network policies for ArgoCD namespace~~ (RESOLVED)
 
-No NetworkPolicies restrict ingress to the ArgoCD server or repo-server. Any pod in the cluster can reach the ArgoCD API. At minimum, restricting repo-server and Redis to only ArgoCD components would reduce the attack surface.
+`networkpolicy.argocd.yaml` adds a default-deny ingress policy with targeted exceptions: argocd-server remains fully open (authenticated API, UI, webhooks), repo-server and redis only accept traffic from other ArgoCD components, and all components allow metrics scraping from the monitoring namespace.
 
 ---
 
