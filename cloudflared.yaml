@@ -42,7 +42,7 @@ spec:
             value: "0 2147483647"
       containers:
       - name: cloudflared
-        image: registry.apps.nickv.me/cloudflare/cloudflared:latest
+        image: registry.apps.nickv.me/cloudflare/cloudflared:2026.6.1
         command:
         - cloudflared
         - tunnel

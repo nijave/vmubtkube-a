@@ -7,19 +7,21 @@
   "argocd": {
     "managerFilePatterns": [
       "/(^|/)application\\..*\\.yaml$/",
-      "/^operators\\/.+\\.yaml$/"
+      "/^operators\\/.+\\.yaml$/",
+      "/^(descheduler|kured)\\.yaml$/"
     ]
   },
   "helm-values": {
     "managerFilePatterns": [
       "/(^|/)application\\..*\\.yaml$/",
-      "/^operators\\/.+\\.yaml$/"
+      "/^operators\\/.+\\.yaml$/",
+      "/^(descheduler|kured)\\.yaml$/"
     ]
   },
   "kubernetes": {
     "managerFilePatterns": [
       "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
-      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/",
+      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|selfoss|snmp-exporter|sonarr|vpa)\\.yaml$/",
       "/^application\\.hyperdx\\.yaml$/",
       "/^vendored/contour/patch-.+\\.yaml$/"
     ]
@@ -138,6 +140,11 @@
       "description": "Only update Prowlarr on Fridays",
       "matchPackageNames": ["lscr.io/linuxserver/prowlarr"],
       "schedule": ["on friday"]
+    },
+    {
+      "description": "thanos-receive-controller uses date-based tags (main-YYYY-MM-DD-hash)",
+      "matchPackageNames": ["quay.io/observatorium/thanos-receive-controller"],
+      "versioning": "regex:^main-(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})-[a-f0-9]+$"
     }
   ]
 }
