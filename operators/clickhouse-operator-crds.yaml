@@ -3,8 +3,7 @@ kind: Application
 metadata:
   name: clickhouse-operator-crds
   namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
+  finalizers: []
 spec:
   project: default
   destination:
@@ -12,7 +11,7 @@ spec:
     namespace: operators
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
     syncOptions:
     - PruneLast=true
