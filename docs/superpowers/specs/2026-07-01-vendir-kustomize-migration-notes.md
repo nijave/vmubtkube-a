@@ -11,7 +11,7 @@ deviations discovered during implementation, plus the verified push sequence.
 | cert-manager | ✅ migrated | **stale-render refresh**: current is the v1.19.1 manifest with 3 images bumped to 1.20.3; vendoring refreshes CRDs/RBAC to true v1.20.3 (images already 1.20.3). No local config lost. |
 | Barman Cloud Plugin | ✅ migrated | **stale-render refresh**: current is the 0.12.0 manifest with image bumped to 0.13.0; vendoring refreshes CRDs to 0.13.0 (adds `restoreAdditionalCommandArgs`, `lz4`). No local config lost. |
 | external-secrets CRDs | ✅ migrated | **stale-render refresh**: current has 23 CRDs from an older ESO release; vendoring brings v2.7.0 (24 CRDs). Matches the chart 2.7.0 operator. |
-| **Contour** | ⏸️ **DEFERRED** | see below |
+| Contour | ✅ migrated | **kustomize overlay** preserving all local config; see contour section below |
 
 **Note on content changes:** only CNPG is byte-identical. cert-manager, barman, and
 es-crds all get CRD/manifest refreshes that bring the manifests in line with the
@@ -42,25 +42,32 @@ those three apps' sync for any conversion-webhook or schema warnings.
 
 ## Deviations from the design spec (judgment calls)
 
-1. **Contour deferred.** The current `contour.yaml` is a **release-1.32 render**
-   (controller-gen v0.18.0, header comment `release-1.32`) with only the images
-   bumped to v1.33.5 — the exact stale-render problem this migration fixes. But
-   it also carries extensive **local ContourConfiguration** the spec didn't
-   account for: custom accesslog format, `rateLimitService` (failOpen, x-rate-limit,
-   resource-exhausted), `tracing`→otel-collector, `policy` request/response headers,
-   `ingress-status-address: contour.k8s.somemissing.info`, `enableExternalNameService`,
-   `metrics`, plus envoy pinned at `v1.38.3` (non-distroless; upstream bundles
-   `distroless-v1.35.10`) and resource limits on 4 containers. A naive overlay
-   (envoy `images:` + resource patches) would silently drop all that production
-   config. Contour needs its own focused migration that preserves the
-   ContourConfiguration (strategic-merge the ConfigMap data) and refreshes the
-   render 1.32→current. **`contour.yaml` and `contour-tracing.yaml` stay at root,
-   managed by the root app, and `contour` stays in `renovate.json` kubernetes
-   patterns.** No `application.vendored-contour.yaml` is created.
-2. **`mirror-images.sh` not changed.** Its fix was driven by contour's kustomize
-   `images:` transform. With contour deferred, envoy bumps are still detected
-   normally via the literal `registry.apps.nickv.me/...` line in `contour.yaml`.
-   Revisit when contour migrates.
+1. **Contour migrated with full kustomize overlay (2026-07-02).** Originally
+   deferred because the current `contour.yaml` was a release-1.32 render with
+   extensive local ContourConfiguration that a naive overlay would silently drop.
+   Migrated in a separate 3-push sequence using:
+   - **Strategic merge patch** on the ConfigMap to replace the entire
+     `data.contour.yaml` with local config (accesslog format, rateLimitService,
+     tracing→otel-collector, policy headers, enableExternalNameService,
+     ingress-status-address, metrics).
+   - **Strategic merge patches** on the Deployment and DaemonSet for resource
+     limits on all 4 containers, envoy image (`registry.apps.nickv.me/envoyproxy/envoy:v1.38.3`,
+     non-distroless), and metrics `hostPort: 8002`.
+   - **JSON 6902 patches** to change the envoy Service from LoadBalancer→ClusterIP
+     and add ArgoCD `Replace=true,Force=true` on the certgen Job.
+   - **Separate `envoy-lb` Service** resource for the LoadBalancer with
+     `external-dns`, `externalTrafficPolicy: Local`, `allocateLoadBalancerNodePorts: false`.
+   - **Versioned certgen Job name** accepted from upstream (`contour-certgen-v1-33-5`);
+     old static `contour-certgen` manually deleted after migration.
+   - `contour-tracing.yaml` (ExtensionService) stays at root, managed by root app.
+   - Renovate: `contour` removed from kubernetes `managerFilePatterns`, added as
+     vendir `projectcontour/contour` rule; overlay patch files added to kubernetes
+     scan so envoy image bumps are tracked independently.
+2. **`mirror-images.sh` not changed.** The envoy image reference is in the
+   strategic merge patch file (`patch-envoy-daemonset.yaml`) as a full
+   `registry.apps.nickv.me/envoyproxy/envoy:v1.38.3` string on one line, so
+   `mirror-images.sh` detects it in the git diff naturally — no kustomize
+   `images:` transform to work around.
 3. **CRDs repointed, not recreated.** `application.crds.yaml` keeps app identity
    `crds` and just changes `source.path` `crds/` → `vendored/external-secrets-crds/base`.
    The spec's delete-`application.crds.yaml`-+create-new approach would let the
