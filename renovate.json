@@ -6,7 +6,7 @@
     "commands": ["vendir sync"],
     "fileFilters": ["vendored/**", "vendir.lock.yml"],
     "executionMode": "branch",
-    "installTools": ["vendir"]
+    "installTools": {"vendir": ">=0.40.0"}
   },
   "argocd": {
     "managerFilePatterns": [
