@@ -6,13 +6,18 @@ metadata:
 spec:
   data:
     - remoteRef:
+        conversionStrategy: Default
+        decodingStrategy: None
         key: github-vmubtkube-a-deploy-key
+        metadataPolicy: None
       secretKey: sshPrivateKey
   refreshInterval: 300s
   secretStoreRef:
     kind: ClusterSecretStore
     name: default
   target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
     name: argocd-repo-vmubtkube-a
     template:
       data:
@@ -23,6 +28,7 @@ spec:
           {{ .sshPrivateKey }}
         url: ssh://git@github.com/nijave/vmubtkube-a.git
       engineVersion: v2
+      mergePolicy: Replace
       metadata:
         labels:
           argocd.argoproj.io/secret-type: repository
