@@ -1,7 +1,24 @@
 # vendir + kustomize: Operator Manifest Management
 
 **Date**: 2026-07-01
-**Status**: Approved — pending implementation
+**Status**: Implemented on `feature/vendir-kustomize` — 4 of 5 components; contour deferred; cluster rollout pending the 3-push sequence (not yet pushed to main)
+
+> **Implementation status (2026-07-02):** CNPG, cert-manager, barman-cloud-plugin,
+> and external-secrets CRDs are migrated to `vendir` + per-component ArgoCD apps
+> on branch `feature/vendir-kustomize` (3 commits, validated, **not pushed**).
+> **Contour is deferred** — its current `contour.yaml` is a stale release-1.32
+> render (images bumped to v1.33.5) carrying extensive local ContourConfiguration
+> (accesslog format, rateLimitService, tracing, policy headers, ingress-status-address,
+> etc.) that the overlay in this spec does not preserve.
+>
+> Several values below were **corrected during implementation** — the barman repo
+> slug/asset name, the external-secrets tag (v2.7.0, not v0.14.x) and CRD source
+> (git `deploy/crds/bundle.yaml`, since no CRD-only release asset exists), checksum
+> handling, and vendir `includePaths`/`newRootPath` semantics. Two safety changes
+> not anticipated here were also made: the `crds` app is **repointed in place**
+> (not deleted+recreated, to avoid cascade-deleting the ExternalSecret CRD) and
+> `vendir.yml`/`vendir.lock.yml` are **excluded from the root app** (non-k8s kinds).
+> Authoritative details: `2026-07-01-vendir-kustomize-migration-notes.md`.
 
 ---
 
