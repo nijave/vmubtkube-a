@@ -41,19 +41,20 @@ Both `eck` and `jaeger` ArgoCD Applications have been deleted along with all the
 | default | 6x TLS secrets from Certificates |
 | hyperdx | hyperdx-{clickstack-config,cluster-secret,user} |
 
-## 6. Monitoring — Partially Unmanaged
+## ~~6. Monitoring — Partially Unmanaged~~ (PARTIALLY RESOLVED 2026-07-02)
 
-| Kind | Name |
-|------|------|
-| Secret | minio-prom-additional-scrape-config, prom-kp-admission |
-| ConfigMap | blackbox-exporter-extended-config, snmp-exporter-config |
-| Deployment | blackbox-exporter-prometheus-blackbox-exporter |
-| RoleBinding + Role | prometheus |
-| ServiceMonitor | 10 blackbox-exporter ServiceMonitors |
-| ServiceAccount | blackbox-exporter-prometheus-blackbox-exporter |
-| Service | blackbox-exporter-prometheus-blackbox-exporter |
+| Kind | Name | Notes |
+|------|------|-------|
+| Secret | minio-prom-additional-scrape-config, prom-kp-admission | |
+| ~~ConfigMap~~ | ~~blackbox-exporter-extended-config~~ | Migrated to ArgoCD 2026-07-02 |
+| ConfigMap | snmp-exporter-config | |
+| ~~Deployment~~ | ~~blackbox-exporter-prometheus-blackbox-exporter~~ | Migrated to ArgoCD 2026-07-02 |
+| RoleBinding + Role | prometheus | |
+| ~~ServiceMonitor~~ | ~~10 blackbox-exporter ServiceMonitors~~ | Migrated to ArgoCD 2026-07-02 |
+| ~~ServiceAccount~~ | ~~blackbox-exporter-prometheus-blackbox-exporter~~ | Migrated to ArgoCD 2026-07-02 |
+| ~~Service~~ | ~~blackbox-exporter-prometheus-blackbox-exporter~~ | Migrated to ArgoCD 2026-07-02 |
 
-The blackbox-exporter resources and remaining monitoring secrets appear to be outside ArgoCD's tracked scope. The `argocd-initial-admin-secret`, `argocd-redis`, `es-roles`, `jaeger-es-creds`, and `jaeger-operator-service-cert` secrets were removed on 2026-07-02 (orphaned, nothing referenced them).
+Blackbox exporter migrated to ArgoCD via `application.blackbox-exporter.yaml` on 2026-07-02. Remaining unmanaged: snmp-exporter-config ConfigMap, monitoring secrets, and prometheus RoleBinding/Role. The `argocd-initial-admin-secret`, `argocd-redis`, `es-roles`, `jaeger-es-creds`, and `jaeger-operator-service-cert` secrets were removed on 2026-07-02 (orphaned, nothing referenced them).
 
 ## 7. Operators Namespace — Operator-Created Resources
 
