@@ -55,6 +55,19 @@ directories:
         includePaths:
           - deploy/crds/bundle.yaml
 
+  - path: vendored/kubelet-rubber-stamp/base
+    contents:
+      - path: .
+        git:
+          url: https://github.com/nijave/kubelet-rubber-stamp
+          ref: v0.3.2
+        newRootPath: deploy
+        includePaths:
+          - deploy/service_account.yaml
+          - deploy/role.yaml
+          - deploy/role_binding.yaml
+          - deploy/operator.yaml
+
   - path: vendored/metrics-server/base
     contents:
       - path: .

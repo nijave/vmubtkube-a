@@ -32,7 +32,8 @@
   "ignoreDeps": [
     "registry.apps.nickv.me/jellyfin",
     "registry.apps.nickv.me/nijave/cukk",
-    "registry.apps.nickv.me/nijave/python-envoy-authz"
+    "registry.apps.nickv.me/nijave/python-envoy-authz",
+    "registry.apps.nickv.me/nijave/kubelet-rubber-stamp"
   ],
   "customManagers": [
     {
@@ -81,6 +82,11 @@
       "matchManagers": ["vendir"],
       "matchPackageNames": ["kubernetes-sigs/metrics-server"],
       "groupName": "metrics-server"
+    },
+    {
+      "description": "kubelet-rubber-stamp — group vendir ref and image tag bumps together",
+      "matchPackageNames": ["nijave/kubelet-rubber-stamp"],
+      "groupName": "kubelet-rubber-stamp"
     },
     {
       "description": "thanos is handled by the custom regex manager with a registryUrl annotation (registryAliases maps to DockerHub but thanos lives on quay.io)",

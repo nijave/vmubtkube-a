@@ -40,4 +40,12 @@ directories:
       url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/281050386
     path: .
   path: vendored/metrics-server/base
+- contents:
+  - git:
+      commitTitle: 'Merge pull request #59 from nijave/dependabot/go_modules/sigs.k8s.io/controller-runtime-0.18.4...'
+      sha: a3b9ab96e0f4b0c38b5cd53ed734e80fe3db8b4c
+      tags:
+      - v0.3.2
+    path: .
+  path: vendored/kubelet-rubber-stamp/base
 kind: LockConfig
