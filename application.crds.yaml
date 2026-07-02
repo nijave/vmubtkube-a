@@ -10,11 +10,18 @@ spec:
   destination:
     server: https://kubernetes.default.svc
   source:
-    path: crds/
+    # external-secrets CRDs, vendored via vendir from external-secrets/external-secrets
+    # git ref (must track the chart version in application.external-secrets.yaml).
+    # App identity unchanged from the old crds/ source on purpose: repointing in
+    # place avoids a delete+recreate that would cascade-delete this CRD via the
+    # finalizer below.
+    path: vendored/external-secrets-crds/base
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
     targetRevision: HEAD
   syncPolicy:
     automated:
+      # Never cascade-delete CRDs — removing them wipes every ExternalSecret
+      # instance's stored data.
       prune: false
       selfHeal: true
     syncOptions:

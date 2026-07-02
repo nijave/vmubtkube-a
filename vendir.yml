@@ -1,0 +1,56 @@
+apiVersion: vendir.k14s.io/v1alpha1
+kind: Config
+minimumRequiredVersion: 0.40.0
+# Fetch whole upstream operator release bundles atomically. Renovate's vendir
+# manager bumps the tag/ref fields below, and postUpgradeTasks runs `vendir sync`
+# so the vendored/*/base files land in the same PR. Never hand-edit base/.
+directories:
+  - path: vendored/cnpg/base
+    contents:
+      - path: .
+        githubRelease:
+          slug: cloudnative-pg/cloudnative-pg
+          tag: v1.30.0
+          assetNames: ["cnpg-*.yaml"]
+          disableAutoChecksumValidation: true   # checksums ship in a release asset, not parseable from notes
+
+  - path: vendored/barman-cloud-plugin/base
+    contents:
+      - path: .
+        githubRelease:
+          slug: cloudnative-pg/plugin-barman-cloud   # NOT cloudnative-pg-plugin-barman-cloud
+          tag: v0.13.0
+          assetNames: ["manifest.yaml"]               # upstream renamed from barman-cloud-plugin-*.yaml
+          disableAutoChecksumValidation: true          # release ships no checksum file
+
+  - path: vendored/cert-manager/base
+    contents:
+      - path: .
+        githubRelease:
+          slug: cert-manager/cert-manager
+          tag: v1.20.3
+          assetNames: ["cert-manager.yaml"]
+          disableAutoChecksumValidation: true   # same as above; lock file still pins the digest
+
+  - path: vendored/contour/base
+    contents:
+      - path: .
+        git:
+          url: https://github.com/projectcontour/contour
+          ref: v1.33.5
+        newRootPath: examples/render
+        includePaths:
+          - examples/render/contour.yaml   # full pre-re-root path; vendir applies includePaths before newRootPath
+
+  - path: vendored/external-secrets-crds/base
+    contents:
+      - path: .
+        # CRD-only. The githubRelease asset is the full external-secrets.yaml
+        # (controller + RBAC), which would double-deploy alongside the Helm
+        # chart. Source the bundled CRDs from git at the tag matching chart 2.7.0.
+        git:
+          url: https://github.com/external-secrets/external-secrets
+          ref: v2.7.0
+        newRootPath: deploy/crds
+        includePaths:
+          - deploy/crds/bundle.yaml

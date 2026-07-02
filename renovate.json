@@ -1,6 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "postUpgradeTasks": {
+    "description": "After the vendir manager bumps a tag/ref in vendir.yml, re-sync so vendored/*/base + vendir.lock.yml land in the same PR. (vendir sync is a no-op when vendir.yml is unchanged, so this is safe on non-vendir PRs.) Verify Mend free tier actually runs postUpgradeTasks on the first PR; if not, fall back to a Woodpecker vendir-sync step.",
+    "commands": ["vendir sync"],
+    "fileFilters": ["vendored/**", "vendir.lock.yml"],
+    "executionMode": "branch",
+    "installTools": ["vendir"]
+  },
   "argocd": {
     "managerFilePatterns": [
       "/(^|/)application\\..*\\.yaml$/",
@@ -16,7 +23,7 @@
   "kubernetes": {
     "managerFilePatterns": [
       "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
-      "/^(cert-manager|cloudflared|barman-cloud-plugin-.+|cnpg-.+|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
+      "/^(cloudflared|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
     ]
   },
   "registryAliases": {
@@ -39,6 +46,30 @@
   ],
   "packageRules": [
     {
+      "description": "CNPG operator — vendored whole-release via vendir (not per-image)",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["cloudnative-pg/cloudnative-pg"],
+      "groupName": "cnpg-operator"
+    },
+    {
+      "description": "Barman Cloud Plugin — vendored whole-release via vendir",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["cloudnative-pg/plugin-barman-cloud"],
+      "groupName": "barman-cloud-plugin"
+    },
+    {
+      "description": "cert-manager — vendored whole-release via vendir (replaces per-image grouping)",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["cert-manager/cert-manager"],
+      "groupName": "cert-manager"
+    },
+    {
+      "description": "external-secrets CRDs — vendored via vendir. NOTE: this git ref must track the Helm chart version in application.external-secrets.yaml; bumps are independent and can drift — review together.",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["external-secrets/external-secrets"],
+      "groupName": "external-secrets-crds"
+    },
+    {
       "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
       "matchPackageNames": ["thanos/thanos"],
       "registryUrls": ["https://quay.io"]
@@ -46,16 +77,6 @@
     {
       "description": "cloudflared is mirrored from cloudflare/cloudflared on DockerHub",
       "matchPackageNames": ["cloudflare/cloudflared"]
-    },
-    {
-      "description": "Group cert-manager images into a single PR (still requires re-downloading cert-manager.yaml from GitHub releases)",
-      "matchPackageNames": [
-        "quay.io/jetstack/cert-manager-controller",
-        "quay.io/jetstack/cert-manager-cainjector",
-        "quay.io/jetstack/cert-manager-webhook",
-        "quay.io/jetstack/cert-manager-acmesolver"
-      ],
-      "groupName": "cert-manager"
     },
     {
       "description": "Bump altinity-clickhouse-operator chart and CRD git ref together",

@@ -1,0 +1,8 @@
+# ArgoCD auto-detects kustomize here. No current patches; this overlay exists
+# so future customizations (e.g. --tracing-enabled on the three Deployments via
+# JSON 6902 patches — args[] has no merge key, so avoid strategic merge) can be
+# added without changing the ArgoCD Application spec.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - base/cert-manager.yaml

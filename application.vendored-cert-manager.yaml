@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+  source:
+    # Points at the dir containing kustomization.yaml (not base/), so ArgoCD
+    # auto-detects kustomize and applies any future overlays.
+    path: vendored/cert-manager
+    repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    targetRevision: HEAD
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true

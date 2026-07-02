@@ -1,0 +1,37 @@
+apiVersion: vendir.k14s.io/v1alpha1
+directories:
+- contents:
+  - githubRelease:
+      tag: v1.30.0
+      url: https://api.github.com/repos/cloudnative-pg/cloudnative-pg/releases/346387279
+    path: .
+  path: vendored/cnpg/base
+- contents:
+  - githubRelease:
+      tag: v0.13.0
+      url: https://api.github.com/repos/cloudnative-pg/plugin-barman-cloud/releases/337122108
+    path: .
+  path: vendored/barman-cloud-plugin/base
+- contents:
+  - githubRelease:
+      tag: v1.20.3
+      url: https://api.github.com/repos/cert-manager/cert-manager/releases/344757217
+    path: .
+  path: vendored/cert-manager/base
+- contents:
+  - git:
+      commitTitle: Update Contour Docker image to v1.33.5....
+      sha: 2713ad0e0ebd5d192a53803cef4c1c3a69692b1c
+      tags:
+      - v1.33.5
+    path: .
+  path: vendored/contour/base
+- contents:
+  - git:
+      commitTitle: 'feat(doppler): include HTTP status in API errors (#6489)...'
+      sha: e215053f3e68504de7483f9542b49f19f98293a1
+      tags:
+      - v2.7.0
+    path: .
+  path: vendored/external-secrets-crds/base
+kind: LockConfig
