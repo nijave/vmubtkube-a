@@ -18,6 +18,17 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
+    - RespectIgnoreDifferences=true
+  ignoreDifferences:
+  - group: ""
+    kind: ConfigMap
+    jsonPointers:
+    - /data
+  - group: ""
+    kind: Secret
+    jsonPointers:
+    - /data
+    - /stringData
   source:
     chart: argo-cd
     repoURL: https://argoproj.github.io/argo-helm
