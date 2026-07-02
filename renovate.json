@@ -78,7 +78,7 @@
     },
     {
       "description": "thanos is handled by the custom regex manager with a registryUrl annotation (registryAliases maps to DockerHub but thanos lives on quay.io)",
-      "matchPackageNames": ["registry.apps.nickv.me/thanos/thanos", "thanos/thanos"],
+      "matchPackageNames": ["**/thanos/thanos"],
       "matchManagers": ["kubernetes"],
       "enabled": false
     },
