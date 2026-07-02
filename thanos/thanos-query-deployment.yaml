@@ -56,8 +56,7 @@ spec:
         - --query.replica-label=ingestor_replica
         - --query.replica-label=thanos_replica
 
-        - --endpoint=dnssrv+_grpc._tcp.thanos-receive-ingestor-default.thanos.svc.cluster.local:10901
-        - --endpoint=dnssrv+_grpc._tcp.thanos-store.thanos.svc.cluster.local:10901
+        - --endpoint.sd-config=$(ENDPOINT_SD_CONFIG)
         - --endpoint.sd-config-reload-interval=15s
 
         - --query.auto-downsampling
@@ -81,6 +80,11 @@ spec:
             configMapKeyRef:
               name: thanos-tracing
               key: tracing.yaml
+        - name: ENDPOINT_SD_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: thanos-query-endpoints
+              key: endpoints.yaml
         # renovate: datasource=docker registryUrl=https://quay.io depName=thanos/thanos
         image: registry.apps.nickv.me/thanos/thanos:v0.41.0
         imagePullPolicy: IfNotPresent
