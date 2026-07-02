@@ -78,10 +78,8 @@ spec:
         - --tsdb.retention=6h
         - --tsdb.max-retention-bytes=15GB
         - --tsdb.memory-snapshot-on-shutdown
-        - --tsdb.enable-native-histograms
         - --tsdb.too-far-in-future.time-window=5m
         - --tsdb.out-of-order.time-window=30m
-        - --tsdb.wal-compression
         # - --label=prometheus_replica="$(NAME)"
         - --label=thanos_replica="$(NAME)"
         - --label=receive="true"
