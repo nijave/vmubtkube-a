@@ -4,6 +4,43 @@ ArgoCD root app for the `vmubtkube-a` cluster. Everything in this repo is
 applied by the `vmubtkube-a` Application (`application.vmubtkube-a.yaml`),
 which prunes and self-heals via ServerSideApply.
 
+## Vendored upstream manifests
+
+Upstream manifests that don't ship as a Helm chart — operators (CNPG,
+cert-manager), plugin bundles (barman-cloud), standalone CRDs
+(external-secrets) — are vendored with
+[vendir](https://github.com/carvel-dev/vendir) instead of committed as ad-hoc
+YAML. vendir fetches a **whole upstream release atomically** — manifest, CRDs,
+and RBAC together — so an image bump can't silently leave CRDs stale (which is
+what happened before this setup). Only the `tag`/`ref` in `vendir.yml` is
+edited; everything else is generated.
+
+```
+vendir.yml            # sources + pinned tags/refs (the only hand-edited file)
+vendir.lock.yml       # fetched content digests (generated)
+vendored/<name>/
+  base/               # upstream files, written by `vendir sync` — never hand-edit
+  kustomization.yaml  # present only when local patches are needed
+```
+
+- **Refresh:** bump a `tag`/`ref` in `vendir.yml`, run `vendir sync`, then commit
+  `vendir.yml`, `vendir.lock.yml`, and the changed `vendored/*/base/` together.
+- **Renovate** bumps `vendir.yml` via its `vendir` manager and runs
+  `vendir sync` (`postUpgradeTasks`) so the refreshed base files land in the same
+  PR — no manual re-download.
+- **Local changes** (private-registry image mirrors, resource limits, config) go
+  in a kustomize overlay next to the base. **Never edit `base/`** — the next sync
+  overwrites it.
+- **ArgoCD** renders each vendored component from its own Application: a plain
+  directory source when there's no overlay, or a kustomize source when a
+  `kustomization.yaml` is present. Base files are committed, so ArgoCD never
+  runs vendir at sync time.
+
+Manifests that *do* ship as Helm charts stay as ArgoCD Helm-source apps
+(`application.<name>.yaml`); image-only deployments remain hand-written and are
+tracked by Renovate's `kubernetes` manager. Full design:
+`docs/superpowers/specs/2026-07-01-vendir-kustomize-design.md`.
+
 ## Secret management
 
 Two mechanisms are available; pick by **where the secret originates**, not by
