@@ -157,7 +157,7 @@ spec:
             image:
               # renovate: datasource=docker depName=busybox
               registry: registry.apps.nickv.me/library/busybox
-              tag: 1.37.0
+              tag: 1.38.0
           driver:
             image:
               # renovate: datasource=docker depName=democraticcsi/democratic-csi
