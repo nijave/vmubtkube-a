@@ -78,7 +78,7 @@
     },
     {
       "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
-      "matchPackageNames": ["thanos/thanos"],
+      "matchPackageNames": ["registry.apps.nickv.me/thanos/thanos", "thanos/thanos"],
       "registryUrls": ["https://quay.io"]
     },
     {
