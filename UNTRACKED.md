@@ -56,17 +56,18 @@ Both `eck` and `jaeger` ArgoCD Applications have been deleted along with all the
 
 Blackbox exporter migrated to ArgoCD via `application.blackbox-exporter.yaml` on 2026-07-02. Remaining unmanaged: snmp-exporter-config ConfigMap, monitoring secrets, and prometheus RoleBinding/Role. The `argocd-initial-admin-secret`, `argocd-redis`, `es-roles`, `jaeger-es-creds`, and `jaeger-operator-service-cert` secrets were removed on 2026-07-02 (orphaned, nothing referenced them).
 
-## 7. Operators Namespace — Operator-Created Resources
+## 7. ~~Operators Namespace — Stale clickhouse-operator~~ (PARTIALLY RESOLVED 2026-07-02)
+
+The stale pre-Helm `clickhouse-operator` Deployment (running v0.25.6 from the private registry with `:latest` tags for 333 days alongside the Helm-managed v0.27.1) was deleted on 2026-07-02. The Helm-managed `clickhouse-operator-altinity-clickhouse-operator` Deployment (v0.27.1, tracked by Renovate) is the sole operator instance.
+
+Remaining operator-created resources (expected, created at runtime by the operators themselves):
 
 | Kind | Name |
 |------|------|
 | ConfigMap | etc-clickhouse-operator-* (10 ConfigMaps) |
-| Deployment | clickhouse-operator |
 | Secret | clickhouse-operator |
 | ServiceAccount | clickhouse-operator |
 | Service | clickhouse-operator-metrics |
-
-These are created by OLM or the operators themselves. ECK and Jaeger operator resources were removed on 2026-07-02.
 
 ## 8. ~~CRDs Not Managed by ArgoCD~~ (RESOLVED 2026-07-02)
 
@@ -101,7 +102,11 @@ Remaining unmanaged CRDs (expected — managed by tigera-operator, not ArgoCD):
 | cluster | Namespace | external-secrets, monitoring, tigera-operator | Not managed by ArgoCD |
 | woodpecker | Service | wp-hsvc-82 | Ephemeral Woodpecker pipeline service |
 
-## ~~11. `kube-system` — metrics-server~~ (RESOLVED 2026-07-02)
+## ~~11. `kube-system` — kubelet-rubber-stamp~~ (RESOLVED 2026-07-02)
+
+kubelet-rubber-stamp was originally deployed via `kubectl create` from raw GitHub URLs in `k8s-setup-user-data.sh`, pinned to commit `00ce633d` with a `kubectl patch` to swap in the private registry image. Now vendored via vendir from `nijave/kubelet-rubber-stamp` at tag `v0.3.2` (which includes the pinned commit), deployed by ArgoCD through `application.vendored-kubelet-rubber-stamp.yaml` with a kustomize overlay for the image patch. Renovate tracks both the vendir git ref and the image tag via `github-tags` datasource, grouped into a single PR.
+
+## ~~12. `kube-system` — metrics-server~~ (RESOLVED 2026-07-02)
 
 metrics-server was originally installed by hand via `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/$METRICS_SERVER_VERSION/high-availability.yaml` (last applied at v0.7.1, running as a single replica despite the "high-availability" manifest). It's now vendored via `vendir` (`vendored/metrics-server/base`, tracking upstream release v0.8.1) and synced by ArgoCD through `application.metrics-server.yaml`. A kustomize patch (`vendored/metrics-server/kustomization.yaml`) rewrites the shipped PodDisruptionBudget from `policy/v1beta1` (removed since Kubernetes 1.25) to `policy/v1`; the manifest's default `replicas: 2` with pod anti-affinity is kept as-is since the cluster has plenty of nodes to satisfy it.
 
@@ -115,3 +120,5 @@ metrics-server was originally installed by hand via `kubectl apply -f https://gi
 6. **3 unmanaged namespaces**: `external-secrets`, `monitoring`, `tigera-operator`
 7. **`media/gluetun-airvpn`** and **`thanos/thanos-objectstorage`** secrets — manually created, not in git
 8. ~~**`kube-system/metrics-server`**~~ — Brought under ArgoCD via vendir 2026-07-02
+9. ~~**`kube-system/kubelet-rubber-stamp`**~~ — Brought under ArgoCD via vendir 2026-07-02
+10. ~~**`operators/clickhouse-operator` stale Deployment**~~ — Deleted 2026-07-02 (pre-Helm v0.25.6 running alongside Helm-managed v0.27.1)

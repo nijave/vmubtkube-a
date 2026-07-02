@@ -73,9 +73,9 @@ Resources like CNPG `Cluster`, `ClickhouseInstallation`, `MongoDBCommunity`, `Ex
 
 The root app points at `./` with only `renovate.json`, `vendir.yml`, and `vendir.lock.yml` excluded. Untracked files (e.g. `gluetun-poc.yaml`, `qds.yaml`, `vpa.yaml`) would be auto-synced if committed. Files like `.woodpecker.yaml` and `docs/` may also be picked up. A tighter include pattern or a dedicated subdirectory for root-level manifests would prevent accidental syncs.
 
-#### 8. Bitnami image in HyperDX config render Job
+#### ~~8. Bitnami image in HyperDX config render Job~~ (RESOLVED)
 
-`application.hyperdx.yaml` uses `bitnamilegacy/kubectl:1.33.4` in the config render Job, which conflicts with the established preference to avoid Bitnami images.
+Replaced with `docker.io/alpine/k8s` (currently `1.36.2`), tracked by Renovate's kubernetes manager.
 
 ### Lower Impact
 
@@ -92,7 +92,7 @@ The root app points at `./` with only `renovate.json`, `vendir.yml`, and `vendir
 | Application | Source Type | Chart/Path | Target Namespace |
 |---|---|---|---|
 | `vmubtkube-a` (root) | Git directory | `./` | (cluster-wide) |
-| `argocd` | Helm | argo-cd 9.5.13 | argocd |
+| `argocd` | Helm | argo-cd 10.1.1 | argocd |
 | `calico` | Helm | tigera-operator v3.32.1 | tigera-operator |
 | `cert-manager` | Git (kustomize) | vendored/cert-manager | (cluster-wide) |
 | `cert-manager-webhook-dnsimple` | Helm | cert-manager-webhook-dnsimple | cert-manager |
@@ -125,7 +125,10 @@ The root app points at `./` with only `renovate.json`, `vendir.yml`, and `vendir
 | `volsync` | Helm | volsync | volsync-system |
 | `woodpecker` | Git directory | woodpecker/ | woodpecker |
 | `woodpecker-app` | Helm (OCI, nested) | woodpecker | woodpecker |
+| `blackbox-exporter` | Helm | prometheus-blackbox-exporter | monitoring |
 | `clickhouse-operator` | Helm | altinity-clickhouse-operator | operators |
+| `kubelet-rubber-stamp` | Git (kustomize) | vendored/kubelet-rubber-stamp | (cluster-wide) |
+| `metrics-server` | Git (kustomize) | vendored/metrics-server | (cluster-wide) |
 | `mongodb-community-operator` | Helm | community-operator | operators |
 
 ---
