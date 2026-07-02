@@ -53,7 +53,7 @@ spec:
             - name: CUKK_ALLOW_MINOR_UPGRADE
               value: "true"
             - name: CUKK_MIN_PATCH_VERSION
-              value: "4"
+              value: "3"
           resources:
             requests:
               cpu: 50m
