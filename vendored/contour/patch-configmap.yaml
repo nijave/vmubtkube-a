@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: contour
+  namespace: projectcontour
+data:
+  contour.yaml: |
+    disablePermitInsecure: false
+    tls:
+    enableExternalNameService: true
+    ingress-status-address: contour.k8s.somemissing.info
+    accesslog-format: envoy
+    accesslog-format-string: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_CODE_DETAILS% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\"\n"
+    rateLimitService:
+      failOpen: true
+      enableXRateLimitHeaders: true
+      enableResourceExhaustedCode: true
+    policy:
+      request-headers:
+        set:
+          X-Envoy-Hostname: '%HOSTNAME%'
+      response-headers:
+        set:
+          X-Envoy-Response-Flags: '%RESPONSE_FLAGS%'
+    tracing:
+      extensionService: projectcontour/otel-collector
+      serviceName: envoy
+      overallSampling: "100"
+      includePodDetail: true
+      maxPathTagLength: 256
+    metrics:
+      contour:
+        address: 0.0.0.0
+        port: 8000
+      envoy:
+        address: 0.0.0.0
+        port: 8002

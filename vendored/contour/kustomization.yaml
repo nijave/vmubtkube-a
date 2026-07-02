@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - base/contour.yaml
+  - envoy-lb-service.yaml
+
+patches:
+  # Replace the upstream contour ConfigMap with local configuration
+  - path: patch-configmap.yaml
+  # Add resource limits to the contour Deployment
+  - path: patch-contour-deployment.yaml
+  # Set envoy image (private mirror), resource limits, and metrics hostPort
+  - path: patch-envoy-daemonset.yaml
+  # Change the upstream envoy Service from LoadBalancer to ClusterIP
+  # (external traffic uses the separate envoy-lb Service instead)
+  - target:
+      kind: Service
+      name: envoy
+      namespace: projectcontour
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: ClusterIP
+      - op: remove
+        path: /spec/externalTrafficPolicy
+  # ArgoCD cannot update an existing completed Job; Replace+Force deletes
+  # and recreates it on each sync
+  - target:
+      kind: Job
+      namespace: projectcontour
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          argocd.argoproj.io/sync-options: "Replace=true,Force=true"

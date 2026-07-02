@@ -23,7 +23,8 @@
   "kubernetes": {
     "managerFilePatterns": [
       "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
-      "/^(cloudflared|contour|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/"
+      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|snmp-exporter|sonarr|vpa)\\.yaml$/",
+      "/^vendored/contour/patch-.+\\.yaml$/"
     ]
   },
   "registryAliases": {
@@ -68,6 +69,12 @@
       "matchManagers": ["vendir"],
       "matchPackageNames": ["external-secrets/external-secrets"],
       "groupName": "external-secrets-crds"
+    },
+    {
+      "description": "Contour — vendored whole-release via vendir; envoy image is tracked separately via kubernetes manager on the overlay patch",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["projectcontour/contour"],
+      "groupName": "contour"
     },
     {
       "description": "thanos is mirrored from quay.io/thanos/thanos, not DockerHub",
