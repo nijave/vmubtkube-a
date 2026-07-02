@@ -167,7 +167,7 @@ spec:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
             registry: registry.apps.nickv.me/democraticcsi/csi-grpc-proxy
-            tag: v0.5.6
+            tag: v0.5.7
         storageClasses:
           - name: zfs-generic-iscsi-csi
             defaultClass: true
