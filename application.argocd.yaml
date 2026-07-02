@@ -58,8 +58,8 @@ spec:
               jqPathExpressions:
               - .spec.volumeClaimTemplates[].metadata.creationTimestamp
           params:
-            otlp.address: otel-collector-opentelemetry-collector.monitoring:4317
-            otlp.insecure: "true"
+            otlp.address: otel-collector.k8s.somemissing.info:4317
+            otlp.insecure: "false"
         controller:
           metrics:
             enabled: true
