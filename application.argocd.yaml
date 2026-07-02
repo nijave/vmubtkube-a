@@ -22,13 +22,20 @@ spec:
   ignoreDifferences:
   - group: ""
     kind: ConfigMap
-    jsonPointers:
-    - /data
+    jqPathExpressions:
+    - .data
+    - .metadata.labels
   - group: ""
     kind: Secret
-    jsonPointers:
-    - /data
-    - /stringData
+    jqPathExpressions:
+    - .data
+    - .stringData
+    - .metadata.labels
+    - .metadata.annotations
+  - group: external-secrets.io
+    kind: ExternalSecret
+    jqPathExpressions:
+    - .metadata.labels
   source:
     chart: argo-cd
     repoURL: https://argoproj.github.io/argo-helm
