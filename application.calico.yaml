@@ -21,6 +21,12 @@ spec:
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
     - CreateNamespace=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
   source:
     chart: tigera-operator
     repoURL: https://docs.tigera.io/calico/charts

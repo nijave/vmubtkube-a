@@ -21,3 +21,9 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
