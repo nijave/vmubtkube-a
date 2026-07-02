@@ -60,6 +60,89 @@ spec:
               jqPathExpressions:
               - .spec.volumeClaimTemplates[].metadata.creationTimestamp
             resource.trackingmethod: annotation
+            resource.customizations.health.postgresql.cnpg.io_Cluster: |
+              hs = {}
+              if obj.status ~= nil and obj.status.phase ~= nil then
+                if obj.status.phase == "Cluster in healthy state" then
+                  hs.status = "Healthy"
+                  hs.message = obj.status.phase
+                elseif obj.status.phase == "Setting up primary" or obj.status.phase == "Creating a new replica" or obj.status.phase == "Upgrading cluster" then
+                  hs.status = "Progressing"
+                  hs.message = obj.status.phase
+                else
+                  hs.status = "Degraded"
+                  hs.message = obj.status.phase
+                end
+              else
+                hs.status = "Progressing"
+                hs.message = "Waiting for status"
+              end
+              return hs
+            resource.customizations.health.clickhouse.altinity.com_ClickHouseInstallation: |
+              hs = {}
+              if obj.status ~= nil and obj.status.status ~= nil then
+                if obj.status.status == "Completed" then
+                  hs.status = "Healthy"
+                  hs.message = "ClickHouse installation completed"
+                elseif obj.status.status == "InProgress" then
+                  hs.status = "Progressing"
+                  hs.message = "ClickHouse installation in progress"
+                else
+                  hs.status = "Degraded"
+                  hs.message = "ClickHouse status: " .. obj.status.status
+                end
+              else
+                hs.status = "Progressing"
+                hs.message = "Waiting for status"
+              end
+              return hs
+            resource.customizations.health.mongodbcommunity.mongodb.com_MongoDBCommunity: |
+              hs = {}
+              if obj.status ~= nil and obj.status.phase ~= nil then
+                if obj.status.phase == "Running" then
+                  hs.status = "Healthy"
+                  hs.message = "MongoDB replica set is running"
+                elseif obj.status.phase == "Pending" then
+                  hs.status = "Progressing"
+                  hs.message = obj.status.message or "MongoDB replica set is being provisioned"
+                elseif obj.status.phase == "Failed" then
+                  hs.status = "Degraded"
+                  hs.message = obj.status.message or "MongoDB replica set has failed"
+                else
+                  hs.status = "Progressing"
+                  hs.message = obj.status.phase
+                end
+              else
+                hs.status = "Progressing"
+                hs.message = "Waiting for status"
+              end
+              return hs
+            resource.customizations.health.volsync.backube_ReplicationSource: |
+              hs = {}
+              if obj.status ~= nil then
+                if obj.status.conditions ~= nil then
+                  for i, condition in ipairs(obj.status.conditions) do
+                    if condition.type == "Synchronizing" and condition.status == "True" then
+                      hs.status = "Progressing"
+                      hs.message = condition.message or "Synchronization in progress"
+                      return hs
+                    end
+                    if condition.type == "Synchronizing" and condition.status == "False" and condition.reason == "Error" then
+                      hs.status = "Degraded"
+                      hs.message = condition.message or "Synchronization error"
+                      return hs
+                    end
+                  end
+                end
+                if obj.status.lastSyncTime ~= nil then
+                  hs.status = "Healthy"
+                  hs.message = "Last sync: " .. obj.status.lastSyncTime
+                  return hs
+                end
+              end
+              hs.status = "Progressing"
+              hs.message = "Waiting for first synchronization"
+              return hs
           params:
             otlp.address: otel-collector.k8s.somemissing.info:4317
             otlp.insecure: "false"
