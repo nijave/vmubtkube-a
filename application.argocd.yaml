@@ -1,0 +1,116 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+  source:
+    chart: argo-cd
+    repoURL: https://argoproj.github.io/argo-helm
+    targetRevision: 9.5.13
+    helm:
+      releaseName: argocd
+      valuesObject:
+        applicationSet:
+          replicas: 0
+        configs:
+          cm:
+            resource.customizations.ignoreDifferences.apiextensions.k8s.io_CustomResourceDefinition: |
+              jqPathExpressions:
+              - .spec.preserveUnknownFields
+            resource.customizations.ignoreDifferences.apps_StatefulSet: |
+              jqPathExpressions:
+              - .spec.volumeClaimTemplates[].metadata.creationTimestamp
+          params:
+            otlp.address: otel-collector-opentelemetry-collector.monitoring:4317
+            otlp.insecure: "true"
+        controller:
+          metrics:
+            enabled: true
+            serviceMonitor:
+              additionalLabels:
+                release: prom
+              enabled: true
+          replicas: 1
+        dex:
+          enabled: false
+        extraObjects:
+        - apiVersion: external-secrets.io/v1
+          kind: ExternalSecret
+          metadata:
+            name: argocd-repo-vmubtkube-a
+            namespace: argocd
+          spec:
+            data:
+            - remoteRef:
+                key: github-vmubtkube-a-deploy-key
+              secretKey: sshPrivateKey
+            refreshInterval: 300s
+            secretStoreRef:
+              kind: ClusterSecretStore
+              name: default
+            target:
+              name: argocd-repo-vmubtkube-a
+              template:
+                data:
+                  enableLfs: "true"
+                  insecure: "false"
+                  name: vmubtkube-a
+                  sshPrivateKey: |
+                    {{ `{{ .sshPrivateKey }}` }}
+                  url: ssh://git@github.com/nijave/vmubtkube-a.git
+                engineVersion: v2
+                metadata:
+                  labels:
+                    argocd.argoproj.io/secret-type: repository
+        redis:
+          exporter:
+            enabled: true
+          metrics:
+            enabled: true
+            serviceMonitor:
+              additionalLabels:
+                release: prom
+              enabled: true
+        redis-ha:
+          enabled: false
+        repoServer:
+          autoscaling:
+            enabled: true
+            minReplicas: 1
+          metrics:
+            enabled: true
+            serviceMonitor:
+              additionalLabels:
+                release: prom
+              enabled: true
+        server:
+          autoscaling:
+            enabled: true
+            minReplicas: 1
+          certificate:
+            additionalHosts:
+            - argocd.k8s.somemissing.info
+          metrics:
+            enabled: true
+            serviceMonitor:
+              additionalLabels:
+                release: prom
+              enabled: true
+          service:
+            annotations:
+              external-dns.alpha.kubernetes.io/hostname: argocd.k8s.somemissing.info
