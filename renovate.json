@@ -21,7 +21,7 @@
   "kubernetes": {
     "managerFilePatterns": [
       "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
-      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|selfoss|snmp-exporter|sonarr|vpa)\\.yaml$/",
+      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|searxng|selfoss|snmp-exporter|sonarr|vpa)\\.yaml$/",
       "/^application\\.hyperdx\\.yaml$/",
       "/^vendored/contour/patch-.+\\.yaml$/"
     ]
