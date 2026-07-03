@@ -20,6 +20,10 @@ metadata:
     secret-generator.v1.mittwald.de/encoding: hex
     secret-generator.v1.mittwald.de/length: "32"
 type: Opaque
+# SearXNG ignores the basic-auth username, but prometheus-operator rejects a
+# ServiceMonitor whose basicAuth lacks a username secret ref
+stringData:
+  username: prometheus
 ---
 apiVersion: v1
 kind: Secret
@@ -391,6 +395,9 @@ spec:
       path: /metrics
       scheme: http
       basicAuth:
+        username:
+          name: searxng-metrics-password
+          key: username
         password:
           name: searxng-metrics-password
           key: password
