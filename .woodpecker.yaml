@@ -31,12 +31,12 @@ steps:
         path:
           - "vendir.yml"
           - "vendir.lock.yml"
-    commands:
+    environment:
       # renovate: datasource=github-releases depName=carvel-dev/vendir
-      - >-
-        VENDIR_VERSION=v0.46.0 &&
-        wget -qO- "https://github.com/carvel-dev/vendir/releases/download/${VENDIR_VERSION}/vendir-linux-amd64" > /usr/local/bin/vendir &&
-        chmod +x /usr/local/bin/vendir
+      VENDIR_VERSION: v0.46.0
+    commands:
+      - wget -qO /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
+      - chmod +x /usr/local/bin/vendir
       - sh .ci/vendir-sync.sh
 
   mirror-images:

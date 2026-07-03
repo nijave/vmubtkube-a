@@ -1,31 +1,15 @@
 #!/bin/sh
 set -euo pipefail
 
-# Runs `vendir sync` on PR branches when vendir.yml or vendir.lock.yml changes,
-# then commits the updated vendored/*/base files back to the branch.
-# Woodpecker provides git credentials via CI_NETRC_* env vars.
+# Runs `vendir sync` on PR branches and commits the updated vendored/*/base
+# files back to the branch. The Woodpecker step's `path:` filter ensures this
+# only runs when vendir.yml or vendir.lock.yml actually changed.
 
-# Only act on PRs — push-to-main should already have synced files
-if [ "${CI_PIPELINE_EVENT}" != "pull_request" ]; then
-  echo "Not a PR event (${CI_PIPELINE_EVENT}), skipping."
-  exit 0
-fi
-
-# Check if vendir.yml or vendir.lock.yml changed in this PR
-TARGET_BRANCH="${CI_COMMIT_TARGET_BRANCH:-main}"
-git fetch origin "${TARGET_BRANCH}" --depth=1
-CHANGED_FILES=$(git diff --name-only "origin/${TARGET_BRANCH}...HEAD")
-
-if ! echo "${CHANGED_FILES}" | grep -qE '^vendir\.(yml|lock\.yml)$'; then
-  echo "No changes to vendir.yml or vendir.lock.yml, skipping."
-  exit 0
-fi
-
-echo "vendir.yml or vendir.lock.yml changed, running vendir sync..."
+echo "Running vendir sync..."
 vendir sync
 
 if git diff --quiet && git diff --cached --quiet; then
-  echo "vendir sync produced no changes."
+  echo "vendir sync produced no file changes."
   exit 0
 fi
 
