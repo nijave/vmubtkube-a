@@ -6,3 +6,22 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - base/cert-manager.yaml
+patches:
+  # k8s.somemissing.info is split-horizon: the LAN bind on opnsense is
+  # authoritative for it, but the public side lives flat in the
+  # somemissing.info zone at DNSimple. cert-manager's DNS01 zone walk must see
+  # the PUBLIC view or it resolves the zone as k8s.somemissing.info and the
+  # dnsimple webhook 404s. Pin all ACME DNS01 lookups to public resolvers.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: cert-manager
+      namespace: cert-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --dns01-recursive-nameservers-only
