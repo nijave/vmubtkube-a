@@ -49,6 +49,19 @@ metadata:
     secret-generator.v1.mittwald.de/length: "64"
 type: Opaque
 ---
+# Metrics password — used as HTTP Basic Auth password for /metrics endpoint.
+# Also referenced by the ServiceMonitor's basicAuth config.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: searxng-metrics-password
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "32"
+type: Opaque
+---
 # SearXNG settings — secret_key is non-sensitive here (JSON API only, no web sessions).
 # Google and Bing disabled to avoid CAPTCHA risk on home IP.
 apiVersion: v1
@@ -63,6 +76,8 @@ data:
     general:
       debug: false
       instance_name: "searxng-private"
+      enable_metrics: true
+      open_metrics: "${SEARXNG_OPEN_METRICS}"
 
     server:
       limiter: false
@@ -219,6 +234,16 @@ spec:
               memory: 128Mi
         - name: searxng
           image: docker.io/searxng/searxng:latest
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SEARXNG_OPEN_METRICS
+              valueFrom:
+                secretKeyRef:
+                  name: searxng-metrics-password
+                  key: password
           volumeMounts:
             - name: searxng-settings
               mountPath: /etc/searxng/settings.yml
@@ -266,9 +291,33 @@ spec:
       port: 443
       targetPort: 443
       protocol: TCP
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
   selector:
     app.kubernetes.io/name: searxng
     app.kubernetes.io/component: searxng
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: searxng
+  namespace: default
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searxng
+  endpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      basicAuth:
+        password:
+          name: searxng-metrics-password
+          key: password
 ```
 
 - [ ] **Step 2: Apply the manifest**
@@ -324,12 +373,34 @@ Status (no token): 401
 Results: 10
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Verify Prometheus metrics endpoint**
+
+```bash
+CLUSTER_IP=$(kubectl get svc searxng -n default -o jsonpath='{.spec.clusterIP}')
+METRICS_PASS=$(kubectl get secret searxng-metrics-password -n default -o jsonpath='{.data.password}' | base64 -d)
+
+# Should return OpenMetrics text output (after running at least one search)
+curl -s --resolve "searxng.k8s.somemissing.info:8080:${CLUSTER_IP}" \
+  -u "prometheus:${METRICS_PASS}" \
+  "http://searxng.k8s.somemissing.info:8080/metrics" | head -20
+```
+
+Expected: Lines starting with `# HELP searxng_engines_` and `# TYPE searxng_engines_`.
+
+Verify the ServiceMonitor is picked up by Prometheus:
+
+```bash
+kubectl get servicemonitor searxng -n default
+```
+
+Expected: resource exists and shows the `searxng` ServiceMonitor.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd ~/Documents/workspace/infra/k8s-manifests/vmubtkube-a
 git add searxng.yaml
-git commit -m "feat: deploy SearXNG with OpenResty auth sidecar"
+git commit -m "feat: deploy SearXNG with OpenResty auth sidecar and Prometheus metrics"
 ```
 
 ---

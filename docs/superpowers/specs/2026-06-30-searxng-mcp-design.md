@@ -148,6 +148,41 @@ TOKEN=$(kubectl get secret searxng-bearer-token -n default -o jsonpath='{.data.v
 keyring set searxng bearer-token "$TOKEN"
 ```
 
+## Metrics / Monitoring
+
+SearXNG has a built-in OpenMetrics endpoint at `/metrics`, gated by `general.open_metrics` in `settings.yml`. When set to a non-empty string, that string becomes the HTTP Basic Auth password for the endpoint (username is ignored by SearXNG).
+
+### Enabling the endpoint
+
+A mittwald-generated Secret (`searxng-metrics-password`) provides a random password. It is injected into the SearXNG container as `SEARXNG_OPEN_METRICS` and referenced in `settings.yml` via env var substitution:
+
+```yaml
+general:
+  enable_metrics: true
+  open_metrics: "${SEARXNG_OPEN_METRICS}"
+```
+
+### Scrape path
+
+The `/metrics` endpoint is served by SearXNG on port 8080. The OpenResty sidecar does **not** need to proxy this — Prometheus scrapes port 8080 directly inside the cluster with basic auth. A second Service port (`metrics`, 8080) is exposed for this purpose.
+
+### ServiceMonitor
+
+A `ServiceMonitor` (label `release: prom`) selects on `app.kubernetes.io/name: searxng` and scrapes the `metrics` port with `basicAuth` referencing the `searxng-metrics-password` Secret. This follows the same pattern as other ServiceMonitors in the cluster (e.g. `thanos-receive-ingestor`, `snmp-exporter`, `arr`).
+
+### Metrics exposed
+
+All per-engine, labeled by `engine_name`:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `searxng_engines_response_time_total_seconds` | gauge | Average total response time |
+| `searxng_engines_response_time_processing_seconds` | gauge | Average processing time |
+| `searxng_engines_response_time_http_seconds` | gauge | Average HTTP response time |
+| `searxng_engines_result_count_total` | counter | Total results returned |
+| `searxng_engines_request_count_total` | counter | Total user requests |
+| `searxng_engines_reliability_total` | counter | Overall engine reliability |
+
 ## Out of Scope
 
 - Redis result caching (stateless is sufficient for this use case)

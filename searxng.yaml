@@ -1,0 +1,285 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: searxng-bearer-token
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: token
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "64"
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: searxng-metrics-password
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "32"
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: searxng-secret-key
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: secret-key
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "64"
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-settings
+  namespace: default
+data:
+  settings.yml: |
+    use_default_settings: true
+
+    general:
+      debug: false
+      instance_name: "searxng-private"
+      enable_metrics: true
+      open_metrics: "METRICS_PASSWORD_PLACEHOLDER"
+
+    server:
+      limiter: false
+      image_proxy: false
+
+    search:
+      formats:
+        - json
+
+    engines:
+      - name: google
+        disabled: true
+      - name: google images
+        disabled: true
+      - name: google news
+        disabled: true
+      - name: google videos
+        disabled: true
+      - name: google scholar
+        disabled: true
+      - name: google play apps
+        disabled: true
+      - name: google play movies
+        disabled: true
+      - name: bing
+        disabled: true
+      - name: bing images
+        disabled: true
+      - name: bing news
+        disabled: true
+      - name: bing videos
+        disabled: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-nginx-config
+  namespace: default
+data:
+  nginx.conf: |
+    env BEARER_TOKEN;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        server {
+            listen 80;
+            server_name searxng.k8s.somemissing.info;
+
+            location / {
+                access_by_lua_block {
+                    local auth = ngx.req.get_headers()["Authorization"]
+                    if not auth then
+                        ngx.status = ngx.HTTP_UNAUTHORIZED
+                        ngx.header.content_type = "application/json"
+                        ngx.say('{"error":"missing Authorization header"}')
+                        return ngx.exit(ngx.HTTP_UNAUTHORIZED)
+                    end
+                    local token = auth:match("^Bearer (.+)$")
+                    if not token or token ~= os.getenv("BEARER_TOKEN") then
+                        ngx.status = ngx.HTTP_UNAUTHORIZED
+                        ngx.header.content_type = "application/json"
+                        ngx.say('{"error":"invalid token"}')
+                        return ngx.exit(ngx.HTTP_UNAUTHORIZED)
+                    end
+                }
+
+                proxy_pass http://localhost:8080;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_read_timeout 30s;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: searxng
+  namespace: default
+  labels:
+    app.kubernetes.io/name: searxng
+    app.kubernetes.io/component: searxng
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searxng
+      app.kubernetes.io/component: searxng
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: searxng
+        app.kubernetes.io/component: searxng
+    spec:
+      initContainers:
+        - name: inject-metrics-password
+          image: registry.apps.nickv.me/library/busybox:1.38.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              PASS=$(cat /run/secrets/metrics-password/password)
+              sed "s/METRICS_PASSWORD_PLACEHOLDER/$PASS/" \
+                /etc/searxng-template/settings.yml > /etc/searxng/settings.yml
+          volumeMounts:
+            - name: searxng-settings-template
+              mountPath: /etc/searxng-template
+              readOnly: true
+            - name: metrics-password
+              mountPath: /run/secrets/metrics-password
+              readOnly: true
+            - name: searxng-settings-rendered
+              mountPath: /etc/searxng
+      containers:
+        - name: openresty
+          image: registry.apps.nickv.me/openresty/openresty:1.31.1.1-alpine
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            - name: BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: searxng-bearer-token
+                  key: token
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /usr/local/openresty/nginx/conf/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+        - name: searxng
+          # renovate: datasource=docker depName=searxng/searxng versioning=regex:^(?<major>\d{4})\.(?<minor>\d+)\.(?<patch>\d+)-(?<build>[a-f0-9]+)$
+          image: registry.apps.nickv.me/searxng/searxng:2026.7.3-c5cd510d8
+          env:
+            - name: SEARXNG_PORT
+              value: "8080"
+            - name: SEARXNG_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: searxng-secret-key
+                  key: secret-key
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: searxng-settings-rendered
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: searxng-nginx-config
+        - name: searxng-settings-template
+          configMap:
+            name: searxng-settings
+        - name: metrics-password
+          secret:
+            secretName: searxng-metrics-password
+        - name: searxng-settings-rendered
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: searxng
+  namespace: default
+  labels:
+    app.kubernetes.io/name: searxng
+    app.kubernetes.io/component: searxng
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: searxng.k8s.somemissing.info
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: searxng
+    app.kubernetes.io/component: searxng
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: searxng
+  namespace: default
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: searxng
+  endpoints:
+    - port: metrics
+      path: /metrics
+      scheme: http
+      basicAuth:
+        password:
+          name: searxng-metrics-password
+          key: password
