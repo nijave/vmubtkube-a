@@ -32,6 +32,29 @@ metadata:
     secret-generator.v1.mittwald.de/length: "64"
 type: Opaque
 ---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: searxng-engine-keys
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        brave-api-key: "{{ .braveApiKey }}"
+  data:
+    - secretKey: braveApiKey
+      remoteRef:
+        key: searxng-braveapi-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -73,6 +96,12 @@ data:
         - (.*\.)?softonic\.com$
 
     engines:
+      # Official Brave Search API (independent index) — key from Bitwarden
+      # via ExternalSecret; $5/mo free credit covers ~1k queries
+      - name: braveapi
+        inactive: false
+        api_key: "BRAVE_API_KEY_PLACEHOLDER"
+        weight: 1.3
       # Startpage proxies Google's index — best-quality results available
       # without scraping Google directly
       - name: startpage
@@ -186,7 +215,9 @@ spec:
           args:
             - |
               PASS=$(cat /run/secrets/metrics-password/password)
-              sed "s/METRICS_PASSWORD_PLACEHOLDER/$PASS/" \
+              BRAVE_KEY=$(cat /run/secrets/engine-keys/brave-api-key)
+              sed -e "s|METRICS_PASSWORD_PLACEHOLDER|$PASS|" \
+                  -e "s|BRAVE_API_KEY_PLACEHOLDER|$BRAVE_KEY|" \
                 /etc/searxng-template/settings.yml > /etc/searxng/settings.yml
           volumeMounts:
             - name: searxng-settings-template
@@ -194,6 +225,9 @@ spec:
               readOnly: true
             - name: metrics-password
               mountPath: /run/secrets/metrics-password
+              readOnly: true
+            - name: engine-keys
+              mountPath: /run/secrets/engine-keys
               readOnly: true
             - name: searxng-settings-rendered
               mountPath: /etc/searxng
@@ -270,6 +304,9 @@ spec:
         - name: metrics-password
           secret:
             secretName: searxng-metrics-password
+        - name: engine-keys
+          secret:
+            secretName: searxng-engine-keys
         - name: searxng-settings-rendered
           emptyDir: {}
 ---

@@ -11,6 +11,10 @@ Applied after comparing result quality against Exa:
 - **Server-side** (`searxng.yaml` settings ConfigMap): raised `outgoing.request_timeout` to 5.0s with `retries: 1` (slow engines were silently dropped at the 3.0s default); enabled Mojeek and Qwant (+news variants); weighted Startpage 1.5 and Mojeek 1.2; added `hostnames` plugin config to boost github.com/stackoverflow.com and demote SEO farms.
 - **Client-side** (`server.py`): `search` gained `categories` (use `news` for current events), `time_range` (day/week/month/year), and `fetch_top` (inline extracted page text for the top N results, 8,000 chars each).
 
+## Follow-up: Brave Search API engine (2026-07-03)
+
+Added the official Brave Search API as a `braveapi` engine (weight 1.3, $5/mo free credit ≈ 1k queries). The key is stored in Bitwarden Secrets Manager as `searxng-braveapi-key`, synced into the cluster by an ExternalSecret (`searxng-engine-keys`, ClusterSecretStore `default`), and injected into settings.yml by the existing initContainer sed step. Google Programmable Search was rejected as a second API engine — Google removed whole-web search for new engines and is shutting down the Custom Search JSON API on 2027-01-01.
+
 **Goal:** Deploy SearXNG on local k8s and expose it as a Claude Code MCP tool so web search works when Z.ai's search quota is exhausted.
 
 **Architecture:** SearXNG runs in the `default` k8s namespace behind an OpenResty sidecar that terminates TLS and enforces a bearer token. A Python stdio MCP server on the host calls `https://searxng.k8s.somemissing.info` with the token from keyring and exposes `search` and `fetch` tools to Claude Code.
