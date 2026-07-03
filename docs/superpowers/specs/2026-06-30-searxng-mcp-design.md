@@ -1,7 +1,14 @@
 # SearXNG MCP Server Design
 
 **Date:** 2026-06-30  
-**Status:** Approved
+**Status:** Implemented (merged in PR #177; result-quality tuning added 2026-07-03)
+
+## Implementation deviations from original design
+
+- The sidecar serves plain HTTP on port 80 (no TLS/cert-manager); traffic stays on the LAN via routable ClusterIP. `SEARXNG_URL` in the MCP server is `http://`.
+- The metrics password is injected by an initContainer that `sed`-replaces a placeholder in the settings template (SearXNG does not expand env vars in `settings.yml`).
+- Images are pulled through `registry.apps.nickv.me` rather than Docker Hub, and the SearXNG image is pinned (Renovate-managed) rather than `latest`.
+- `secret_key` comes from a mittwald-generated Secret via the `SEARXNG_SECRET` env var.
 
 ## Problem
 
@@ -33,12 +40,18 @@ Two auto-generated secrets via mittwald annotation:
 
 ### ConfigMap: SearXNG settings.yml
 
-SearXNG configured with safe engines only. Google disabled to avoid CAPTCHA risk on home IP. Enabled engines:
+SearXNG configured with safe engines only. Google and Bing disabled to avoid CAPTCHA risk on home IP. Enabled engines:
 
-- DuckDuckGo
+- DuckDuckGo (proxies Bing's index)
+- Startpage (proxies Google's index; weight 1.5 — best-quality results without scraping Google directly)
 - Brave Search
-- Wikipedia
-- Startpage
+- Mojeek (weight 1.2) and Qwant — independent indexes, scraping-tolerant (enabled 2026-07-03)
+- Wikipedia, GitHub, StackOverflow, MDN (SearXNG defaults)
+
+Result-quality tuning (2026-07-03):
+
+- `outgoing.request_timeout: 5.0` (default 3.0 silently dropped slow engines from responses), `max_request_timeout: 10.0`, `retries: 1`
+- `hostnames` plugin config: boosts `github.com`/`stackoverflow.com`, demotes SEO farms (Pinterest, Quora, Softonic)
 
 Conservative rate limiting. JSON API enabled. Web UI disabled (not needed, reduces attack surface). `secret_key` injected from Secret via env var.
 
@@ -98,9 +111,9 @@ ClusterIP on port 443, selector targets the Deployment. Routable from LAN/host v
 
 ### Tools exposed
 
-**`search(query: str, num_results: int = 10) -> list`**
+**`search(query: str, max_results: int = 10, categories: str = "", time_range: str = "", fetch_top: int = 0) -> list`**
 
-Calls `https://searxng.k8s.somemissing.info/search?q=<query>&format=json&num_results=<n>`. Returns a list of results, each with `title`, `url`, `content` (snippet), and `engine`. Strips any results with empty snippets.
+Calls `/search?q=<query>&format=json`, forwarding `categories` (general/news/it/images/videos/science/files/q&a) and `time_range` (day/week/month/year) when given — `categories=news` turns current-events queries from homepage links into dated articles. Returns a list of results, each with `title`, `url`, `content` (snippet), and `engine`. Strips any results with empty snippets. With `fetch_top=N`, the top N result pages are fetched and their extracted text inlined as `text` (max 8,000 chars each), closing the gap with content-extracting search APIs in a single call. (`categories`/`time_range`/`fetch_top` added 2026-07-03.)
 
 **`fetch(url: str) -> str`**
 

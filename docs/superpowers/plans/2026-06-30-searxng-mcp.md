@@ -2,6 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETED** — all four tasks implemented and merged to main in PR #177. The deployed version differs from the YAML/code embedded below in a few ways (plain HTTP on port 80 instead of TLS, initContainer-based metrics password injection, pinned private-registry images); `searxng.yaml` and `~/.local/lib/searxng-mcp/server.py` are the source of truth. See the design spec's "Implementation deviations" section.
+
+## Follow-up: result-quality tuning (2026-07-03)
+
+Applied after comparing result quality against Exa:
+
+- **Server-side** (`searxng.yaml` settings ConfigMap): raised `outgoing.request_timeout` to 5.0s with `retries: 1` (slow engines were silently dropped at the 3.0s default); enabled Mojeek and Qwant (+news variants); weighted Startpage 1.5 and Mojeek 1.2; added `hostnames` plugin config to boost github.com/stackoverflow.com and demote SEO farms.
+- **Client-side** (`server.py`): `search` gained `categories` (use `news` for current events), `time_range` (day/week/month/year), and `fetch_top` (inline extracted page text for the top N results, 8,000 chars each).
+
 **Goal:** Deploy SearXNG on local k8s and expose it as a Claude Code MCP tool so web search works when Z.ai's search quota is exhausted.
 
 **Architecture:** SearXNG runs in the `default` k8s namespace behind an OpenResty sidecar that terminates TLS and enforces a bearer token. A Python stdio MCP server on the host calls `https://searxng.k8s.somemissing.info` with the token from keyring and exposes `search` and `fetch` tools to Claude Code.
