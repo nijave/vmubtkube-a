@@ -32,8 +32,7 @@
   "ignoreDeps": [
     "registry.apps.nickv.me/jellyfin",
     "registry.apps.nickv.me/nijave/cukk",
-    "registry.apps.nickv.me/nijave/python-envoy-authz",
-    "registry.apps.nickv.me/nijave/kubelet-rubber-stamp"
+    "registry.apps.nickv.me/nijave/python-envoy-authz"
   ],
   "customManagers": [
     {
@@ -85,7 +84,7 @@
     },
     {
       "description": "kubelet-rubber-stamp — group vendir ref and image tag bumps together",
-      "matchPackageNames": ["nijave/kubelet-rubber-stamp"],
+      "matchPackageNames": ["ghcr.io/nijave/kubelet-rubber-stamp", "nijave/kubelet-rubber-stamp"],
       "groupName": "kubelet-rubber-stamp"
     },
     {

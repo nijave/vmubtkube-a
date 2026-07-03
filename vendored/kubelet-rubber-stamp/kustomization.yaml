@@ -14,8 +14,8 @@ patches:
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/image
-        # renovate: datasource=github-tags depName=nijave/kubelet-rubber-stamp
-        value: registry.apps.nickv.me/nijave/kubelet-rubber-stamp:v0.3.2
+        # renovate: datasource=docker depName=ghcr.io/nijave/kubelet-rubber-stamp
+        value: ghcr.io/nijave/kubelet-rubber-stamp:0.4.0
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
