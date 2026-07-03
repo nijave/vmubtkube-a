@@ -2,8 +2,8 @@ apiVersion: vendir.k14s.io/v1alpha1
 kind: Config
 minimumRequiredVersion: 0.40.0
 # Fetch whole upstream operator release bundles atomically. Renovate's vendir
-# manager bumps the tag/ref fields below, and postUpgradeTasks runs `vendir sync`
-# so the vendored/*/base files land in the same PR. Never hand-edit base/.
+# manager bumps the tag/ref fields below; Woodpecker CI runs `vendir sync` on
+# PR branches and commits the updated vendored/*/base files. Never hand-edit base/.
 directories:
   - path: vendored/cnpg/base
     contents:

@@ -23,6 +23,21 @@ when:
     branch: main
 
 steps:
+  vendir-sync:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.36.2
+    when:
+      - event: pull_request
+        path:
+          - "vendir.yml"
+          - "vendir.lock.yml"
+    commands:
+      # renovate: datasource=github-releases depName=carvel-dev/vendir
+      - VENDIR_VERSION=v0.46.0
+      - wget -qO- "https://github.com/carvel-dev/vendir/releases/download/${VENDIR_VERSION}/vendir-linux-amd64" > /usr/local/bin/vendir
+      - chmod +x /usr/local/bin/vendir
+      - sh .ci/vendir-sync.sh
+
   mirror-images:
     # renovate: datasource=docker depName=ghcr.io/regclient/regctl
     image: ghcr.io/regclient/regctl:v0.11.5-alpine
