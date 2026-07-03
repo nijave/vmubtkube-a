@@ -25,3 +25,16 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/args/-
         value: --dns01-recursive-nameservers-only
+  # Deliberate throttle from pre-vendir cert-manager.yaml (commit 6aa8707,
+  # 2025-11-16), dropped by the vendir migration. Upstream default is 60;
+  # base sets it explicitly at args index 4, so replace rather than append.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: cert-manager
+      namespace: cert-manager
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/4
+        value: --max-concurrent-challenges=5
