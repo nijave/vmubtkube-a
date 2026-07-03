@@ -11,6 +11,10 @@ Applied after comparing result quality against Exa:
 - **Server-side** (`searxng.yaml` settings ConfigMap): raised `outgoing.request_timeout` to 5.0s with `retries: 1` (slow engines were silently dropped at the 3.0s default); enabled Mojeek and Qwant (+news variants); weighted Startpage 1.5 and Mojeek 1.2; added `hostnames` plugin config to boost github.com/stackoverflow.com and demote SEO farms.
 - **Client-side** (`server.py`): `search` gained `categories` (use `news` for current events), `time_range` (day/week/month/year), and `fetch_top` (inline extracted page text for the top N results, 8,000 chars each).
 
+## Follow-up: Exa-style highlights in the MCP client (2026-07-03)
+
+`server.py` reworked so `search` behaves like Exa's search-with-contents: the top N result pages (default `fetch_top=3`) are fetched in parallel (ThreadPoolExecutor, 8s timeout each), the article body is extracted with trafilatura (html2text fallback), and the most query-relevant passages (rare-term-weighted keyword scoring, ≤2,000 chars) are returned per result as `highlights` instead of raw page text. The tool docstring now instructs keyword-style queries (SearXNG engines are lexical; descriptive Exa-style phrasing hurts recall). New dependency: `trafilatura`.
+
 ## Follow-up: Marginalia engine (2026-07-03)
 
 Enabled the built-in `marginalia` engine (independent non-commercial-web index, uses `api2.marginalia-search.com`). Key comes from Bitwarden Secrets Manager as `searxng-marginalia-key` via the `searxng-engine-keys` ExternalSecret. The shared `public` key works as a rate-limited interim value; a free non-commercial key is issued by emailing contact@marginalia-search.com (see https://about.marginalia-search.com/article/api/). DuckDuckGo has no official search API (Instant Answers only); Kagi's Search API ($12/1k) noted as a possible future engine via json_engine.

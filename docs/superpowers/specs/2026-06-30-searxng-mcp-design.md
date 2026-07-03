@@ -115,9 +115,9 @@ ClusterIP on port 443, selector targets the Deployment. Routable from LAN/host v
 
 ### Tools exposed
 
-**`search(query: str, max_results: int = 10, categories: str = "", time_range: str = "", fetch_top: int = 0) -> list`**
+**`search(query: str, max_results: int = 10, categories: str = "", time_range: str = "", fetch_top: int = 3) -> list`**
 
-Calls `/search?q=<query>&format=json`, forwarding `categories` (general/news/it/images/videos/science/files/q&a) and `time_range` (day/week/month/year) when given — `categories=news` turns current-events queries from homepage links into dated articles. Returns a list of results, each with `title`, `url`, `content` (snippet), and `engine`. Strips any results with empty snippets. With `fetch_top=N`, the top N result pages are fetched and their extracted text inlined as `text` (max 8,000 chars each), closing the gap with content-extracting search APIs in a single call. (`categories`/`time_range`/`fetch_top` added 2026-07-03.)
+Calls `/search?q=<query>&format=json`, forwarding `categories` (general/news/it/images/videos/science/files/q&a) and `time_range` (day/week/month/year) when given — `categories=news` turns current-events queries from homepage links into dated articles. Returns a list of results, each with `title`, `url`, `content` (snippet), and `engine`. Strips any results with empty snippets. The top `fetch_top` pages (default 3) are fetched in parallel, body-extracted with trafilatura, and their most query-relevant passages returned as `highlights` (≤2,000 chars each) — mimicking Exa's search-with-contents in a single call. Docstring steers callers to keyword-style queries. (`categories`/`time_range` added 2026-07-03; highlights rework same day.)
 
 **`fetch(url: str) -> str`**
 
