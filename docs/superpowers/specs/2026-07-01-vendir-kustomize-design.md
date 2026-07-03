@@ -315,19 +315,11 @@ The `packageRule` grouping the four `quay.io/jetstack/cert-manager-*` images (wi
 
 The `vendir` manager is enabled by `config:recommended` and matches `**/vendir.yml` by default. No explicit manager config is needed.
 
-### postUpgradeTasks — run vendir sync after version bumps
+### Artifact updates — vendir sync runs automatically
 
-```json
-"postUpgradeTasks": {
-  "commands": ["vendir sync"],
-  "fileFilters": ["vendored/**", "vendir.lock.yml"],
-  "executionMode": "branch",
-  "installTools": ["vendir"]
-}
-```
-
-`installTools: ["vendir"]` tells Renovate to download the vendir binary before running commands. `executionMode: branch` runs once per PR branch rather than once per updated package. The updated `vendored/*/base/` files and `vendir.lock.yml` are staged and included in the Renovate PR.
-
-**Verification required**: The Mend Renovate cloud app's support for `postUpgradeTasks` is not explicitly documented for the free tier. `vendir` appears in the `installTools` allowlist, indicating it is intended to work. Confirm empirically by watching the first Renovate PR after migration — if the vendir-synced base files are absent from the PR, fall back to the Woodpecker CI approach described below.
-
-**Woodpecker fallback** (if postUpgradeTasks doesn't fire on cloud): Add a `vendir-sync` step to `.woodpecker.yaml` that runs only when `vendir.yml` changes, executes `vendir sync`, and commits `vendored/` + `vendir.lock.yml` back to the PR branch using Woodpecker's `CI_NETRC_*` env vars for git auth. Pin the vendir binary version with a `# renovate: datasource=github-releases depName=vmware-tanzu/carvel-vendir` annotation.
+No `postUpgradeTasks` config is needed. Renovate's vendir manager has a built-in
+`updateArtifacts` step (same pattern as npm lock files or Helm Chart.lock) that
+runs `vendir sync` after bumping a tag/ref in `vendir.yml`. The updated
+`vendir.lock.yml` and all changed files under `vendored/*/base/` are committed
+into the PR automatically. This works on the Mend-hosted GitHub App —
+`postUpgradeTasks` is self-hosted only but irrelevant here.

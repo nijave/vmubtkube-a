@@ -106,9 +106,11 @@ Separate 3-push sequence, committed directly on main:
 3. **Restore prune + finalizer** on root app.
 
 ## Renovate caveats
-- `postUpgradeTasks` (vendir sync) support on the Mend free tier is unverified —
-  watch the first post-migration Renovate PR. If the synced `vendored/*/base`
-  files are absent, add the Woodpecker `vendir-sync` fallback from the design spec.
+- ~~`postUpgradeTasks` (vendir sync) support on the Mend free tier is unverified~~
+  **Resolved:** Renovate's vendir manager has a built-in `updateArtifacts` step
+  that runs `vendir sync` automatically (same pattern as npm lock files or Helm
+  Chart.lock). `postUpgradeTasks` is self-hosted only, but irrelevant — the
+  artifact updater handles syncing `vendored/*/base` files into the PR natively.
 - The external-secrets CRD git ref bumps independently of the Helm chart and can
   drift; review CRD bumps against `application.external-secrets.yaml` chart version.
 - vendir `matchPackageNames` use the repo slug as depName; confirm against the

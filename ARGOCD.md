@@ -61,13 +61,13 @@ No notification controller or config. Sync failures, health degradation, or out-
 
 ### Medium Impact
 
-#### 5. Resource tracking method not configured
+#### ~~5. Resource tracking method not configured~~ (RESOLVED)
 
-With SSA enabled everywhere, the default `label`-based resource tracking can conflict with SSA field ownership. The recommended approach for SSA is `annotation` tracking (`resource.trackingmethod: annotation` in argocd-cm). This avoids ArgoCD labels being treated as managed fields that trigger unnecessary diffs.
+`resource.trackingmethod: annotation` is already set in `application.argocd.yaml` under `configs.cm`. ArgoCD uses annotation-based tracking (`argocd.argoproj.io/tracking-id`) instead of the `app.kubernetes.io/instance` label, avoiding SSA field ownership conflicts.
 
-#### 6. No custom health checks for CRDs
+#### ~~6. No custom health checks for CRDs~~ (RESOLVED)
 
-Resources like CNPG `Cluster`, `ClickhouseInstallation`, `MongoDBCommunity`, `ExternalSecret`, and `Certificate` may not have built-in health assessments in ArgoCD. Without custom `resource.customizations.health.<group_kind>` entries in argocd-cm, ArgoCD may show these as "Healthy" when they're actually degraded, or "Progressing" indefinitely. Some of these do have built-in support (ExternalSecret and Certificate likely do) but it's worth verifying for the operator CRDs.
+Custom health checks are configured in `application.argocd.yaml` under `configs.cm` for CNPG `Cluster`, `ClickHouseInstallation`, `MongoDBCommunity`, and VolSync `ReplicationSource`. `ExternalSecret` and `Certificate` have built-in ArgoCD health support.
 
 #### 7. Root app directory scope is broad
 
