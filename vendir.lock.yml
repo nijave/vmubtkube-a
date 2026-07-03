@@ -35,17 +35,17 @@ directories:
     path: .
   path: vendored/external-secrets-crds/base
 - contents:
+  - git:
+      commitTitle: 'feat: add GHCR build workflow and update Dockerfile...'
+      sha: 8c71a9a98e0064d44e90ec02b13e336570c39cc7
+      tags:
+      - v0.4.0
+    path: .
+  path: vendored/kubelet-rubber-stamp/base
+- contents:
   - githubRelease:
       tag: v0.8.1
       url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/281050386
     path: .
   path: vendored/metrics-server/base
-- contents:
-  - git:
-      commitTitle: 'Merge pull request #59 from nijave/dependabot/go_modules/sigs.k8s.io/controller-runtime-0.18.4...'
-      sha: a3b9ab96e0f4b0c38b5cd53ed734e80fe3db8b4c
-      tags:
-      - v0.3.2
-    path: .
-  path: vendored/kubelet-rubber-stamp/base
 kind: LockConfig

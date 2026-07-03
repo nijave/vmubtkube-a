@@ -60,7 +60,7 @@ directories:
       - path: .
         git:
           url: https://github.com/nijave/kubelet-rubber-stamp
-          ref: v0.3.2
+          ref: v0.4.0
         newRootPath: deploy
         includePaths:
           - deploy/service_account.yaml
