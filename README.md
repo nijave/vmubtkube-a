@@ -41,6 +41,30 @@ Manifests that *do* ship as Helm charts stay as ArgoCD Helm-source apps
 tracked by Renovate's `kubernetes` manager. Full design:
 `docs/superpowers/specs/2026-07-01-vendir-kustomize-design.md`.
 
+## DNS zones and TLS
+
+Two DNS zones, split by audience:
+
+- **`*.apps.somemissing.info`** — internet-facing services, exposed through
+  the Contour edge (HTTPProxy) with public DNS.
+- **`*.k8s.somemissing.info`** — internal/LAN-only services. These resolve to
+  routable ServiceIPs via the `external-dns.alpha.kubernetes.io/hostname`
+  annotation on a plain ClusterIP Service (external-dns writes the
+  `k8s.somemissing.info` zone over RFC2136) and are not reachable from the
+  internet.
+
+Both zones get **publicly-trusted Let's Encrypt certificates** from the
+`cert-manager-webhook-dnsimple-production` ClusterIssuer. DNS-01 validation
+has no reachability requirement, so internal-only `*.k8s` hostnames are
+issued the same way as public ones — no private CA to trust on clients. See
+`grafana.yaml` for a minimal example, or `proxy_argocd_webhook.yaml` for a
+cert consumed directly by the workload (`argocd-server-tls`).
+
+The private `k8s` CA in `clusterissuer.yaml` is **not** for browser-facing
+certs — it issues internal service-to-service certs (e.g.
+`python-envoy-authz`, validated by Contour via the delegated `k8s-ca`
+secret).
+
 ## Secret management
 
 Two mechanisms are available; pick by **where the secret originates**, not by
