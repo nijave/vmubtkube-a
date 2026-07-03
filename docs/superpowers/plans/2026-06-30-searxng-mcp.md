@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: COMPLETED** — all four tasks implemented and merged to main in PR #177. The deployed version differs from the YAML/code embedded below in a few ways (plain HTTP on port 80 instead of TLS, initContainer-based metrics password injection, pinned private-registry images); `searxng.yaml` and `~/.local/lib/searxng-mcp/server.py` are the source of truth. See the design spec's "Implementation deviations" section.
+**Status: COMPLETED** — all four tasks implemented and merged to main in PR #177. The deployed version differs from the YAML/code embedded below in a few ways (initContainer-based metrics password injection, pinned private-registry images; TLS on 443 was deferred until `*.k8s.somemissing.info` issuance was fixed and restored 2026-07-03); `searxng.yaml` and `~/.local/lib/searxng-mcp/server.py` are the source of truth. See the design spec's "Implementation deviations" section.
 
 ## Follow-up: result-quality tuning (2026-07-03)
 

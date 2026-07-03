@@ -5,7 +5,7 @@
 
 ## Implementation deviations from original design
 
-- The sidecar serves plain HTTP on port 80 (no TLS/cert-manager); traffic stays on the LAN via routable ClusterIP. `SEARXNG_URL` in the MCP server is `http://`.
+- ~~The sidecar serves plain HTTP on port 80 (no TLS/cert-manager)~~ Resolved 2026-07-03: with `*.k8s.somemissing.info` cert issuance fixed (PR #186), the sidecar now terminates TLS on 443 with a cert-manager Certificate as originally designed, and `SEARXNG_URL` is `https://`. Traffic stays on the LAN via routable ClusterIP.
 - The metrics password is injected by an initContainer that `sed`-replaces a placeholder in the settings template (SearXNG does not expand env vars in `settings.yml`).
 - Images are pulled through `registry.apps.nickv.me` rather than Docker Hub, and the SearXNG image is pinned (Renovate-managed) rather than `latest`.
 - `secret_key` comes from a mittwald-generated Secret via the `SEARXNG_SECRET` env var.
