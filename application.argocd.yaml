@@ -146,6 +146,7 @@ spec:
           params:
             otlp.address: otel-collector.k8s.somemissing.info:4317
             otlp.insecure: "false"
+            controller.resource.health.persist: "true"
         controller:
           metrics:
             enabled: true
