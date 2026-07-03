@@ -28,7 +28,7 @@ spec:
     chart: memcached
     # repoURL: https://charts.bitnami.com/bitnami
     repoURL: registry-1.docker.io/bitnamicharts
-    targetRevision: 8.6.4
+    targetRevision: 8.6.5
     helm:
       releaseName: index-cache
       valuesObject:
