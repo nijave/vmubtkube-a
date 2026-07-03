@@ -55,7 +55,41 @@ data:
       formats:
         - json
 
+    # Slower engines get dropped from responses at the default 3.0s timeout,
+    # shrinking result diversity
+    outgoing:
+      request_timeout: 5.0
+      max_request_timeout: 10.0
+      retries: 1
+
+    # Demote SEO farms; boost sources Claude Code queries most
+    hostnames:
+      high_priority:
+        - (.*\.)?github\.com$
+        - (.*\.)?stackoverflow\.com$
+      low_priority:
+        - (.*\.)?pinterest\.(com|co\.uk|fr|de)$
+        - (.*\.)?quora\.com$
+        - (.*\.)?softonic\.com$
+
     engines:
+      # Startpage proxies Google's index — best-quality results available
+      # without scraping Google directly
+      - name: startpage
+        weight: 1.5
+      - name: startpage news
+        weight: 1.5
+      # Mojeek and Qwant: independent indexes, scraping-tolerant
+      - name: mojeek
+        disabled: false
+        weight: 1.2
+      - name: mojeek news
+        disabled: false
+        weight: 1.2
+      - name: qwant
+        disabled: false
+      - name: qwant news
+        disabled: false
       - name: google
         disabled: true
       - name: google images
