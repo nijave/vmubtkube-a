@@ -45,8 +45,11 @@ SearXNG configured with safe engines only. Google and Bing disabled to avoid CAP
 - DuckDuckGo (proxies Bing's index)
 - Startpage (proxies Google's index; weight 1.5 — best-quality results without scraping Google directly)
 - Brave Search
+- Brave Search API (`braveapi`, weight 1.3) — official API, independent index; key lives in Bitwarden Secrets Manager as `searxng-braveapi-key`, synced by an ExternalSecret into `searxng-engine-keys` and injected into settings.yml by the initContainer (added 2026-07-03). $5/mo free credit ≈ 1k queries.
 - Mojeek (weight 1.2) and Qwant — independent indexes, scraping-tolerant (enabled 2026-07-03)
 - Wikipedia, GitHub, StackOverflow, MDN (SearXNG defaults)
+
+Google Programmable Search was evaluated as a second API engine and rejected: Google removed "Search the entire web" for new engines (Jan 2026) and is discontinuing the Custom Search JSON API on 2027-01-01.
 
 Result-quality tuning (2026-07-03):
 
