@@ -30,6 +30,23 @@ spec:
           port: 443
           protocol: tls
 ---
+# Serving cert for argocd-server itself: ArgoCD watches the argocd-server-tls
+# secret and hot-reloads it in place of its generated self-signed cert.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server-cert
+  namespace: argocd
+spec:
+  secretName: argocd-server-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn argocd.k8s.somemissing.info
+  dnsNames:
+    - *cn
+    - argocd.apps.somemissing.info
+---
 apiVersion: v1
 kind: Secret
 metadata:
