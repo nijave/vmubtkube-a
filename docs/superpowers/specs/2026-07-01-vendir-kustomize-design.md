@@ -90,6 +90,12 @@ Components **with** customizations (cert-manager, contour) have a `kustomization
 
 ## vendir.yml
 
+> **Note:** This example reflects the original design. Several values were corrected
+> during implementation (barman slug/asset, external-secrets source type and tag,
+> checksum handling, contour includePaths). See `vendir.yml` in the repo root for
+> the authoritative config, and `2026-07-01-vendir-kustomize-migration-notes.md`
+> for the corrections.
+
 ```yaml
 apiVersion: vendir.k14s.io/v1alpha1
 kind: Config
@@ -135,12 +141,11 @@ directories:
       - path: .
         githubRelease:
           slug: external-secrets/external-secrets
-          # TODO(impl): confirm GitHub release tag that matches chart 2.7.0 in application.external-secrets.yaml
-          tag: v0.14.x
+          tag: v2.7.0
           assetNames: ["external-secrets.crds.yaml"]
 ```
 
-During implementation, check each release's GitHub assets to determine whether checksums are published. If a `.sha256` or similar file is present alongside the asset, vendir can validate it; otherwise `disableAutoChecksumValidation: true` is needed per directory.
+All directories use `disableAutoChecksumValidation: true` — none of the upstream releases ship checksum files that vendir can validate. Integrity is still pinned by `vendir.lock.yml`.
 
 ---
 
@@ -166,24 +171,7 @@ Future tracing patch: add `--tracing-enabled=true` and `--tracing-endpoint=otel-
 
 ### contour
 
-Two confirmed local customizations:
-
-1. **Envoy image** — the envoy DaemonSet container uses `registry.apps.nickv.me/envoyproxy/envoy:v1.38.3` (private registry mirror). The upstream base file will have the docker.io reference; a kustomize `images:` transform redirects it. Verify the exact image reference in the upstream file during implementation — it may be `docker.io/envoyproxy/envoy` or just `envoyproxy/envoy` (without explicit registry).
-
-2. **Resource limits** — verify during implementation whether the resource requests/limits present in the current `contour.yaml` are from upstream or were added locally. If upstream, no patch needed. If local, add JSON 6902 patches.
-
-```yaml
-# vendored/contour/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - base/contour.yaml
-images:
-  - name: docker.io/envoyproxy/envoy    # verify exact name in upstream base file
-    newName: registry.apps.nickv.me/envoyproxy/envoy
-```
-
-**mirror-images.sh consideration**: The `mirror-images` CI step diffs changed files looking for `registry.apps.nickv.me` image references. With the `images:` kustomize transform, the base file will show `docker.io/envoyproxy/envoy` (not the private registry reference), so the script won't detect it when contour is bumped. During implementation, update `mirror-images.sh` to also scan `vendored/*/base/` files and apply kustomize image transform mappings when looking for images to mirror.
+Implemented with extensive kustomize overlays (strategic merge patches on ConfigMap, Deployment, DaemonSet; JSON 6902 patches on Service and certgen Job; separate `envoy-lb` Service resource). The envoy image is patched via strategic merge patch in `patch-envoy-daemonset.yaml` as a full `registry.apps.nickv.me/envoyproxy/envoy:v1.38.3` string, so `mirror-images.sh` detects it naturally — no kustomize `images:` transform was needed. See `vendored/contour/` and the migration notes for full details.
 
 ---
 
@@ -223,7 +211,7 @@ spec:
 
 **external-secrets-crds** uses `prune: false` (never cascade-delete CRDs). All other components use `prune: true`.
 
-`application.crds.yaml` (currently pointing at `crds/`) is deleted. The external-secrets CRDs move to `application.vendored-external-secrets-crds.yaml`.
+`application.crds.yaml` was repointed in place (not deleted+recreated) to avoid cascade-deleting the ExternalSecret CRD via the resources-finalizer. It now points at `vendored/external-secrets-crds/base`.
 
 ---
 
