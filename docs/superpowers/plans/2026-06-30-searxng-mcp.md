@@ -11,6 +11,10 @@ Applied after comparing result quality against Exa:
 - **Server-side** (`searxng.yaml` settings ConfigMap): raised `outgoing.request_timeout` to 5.0s with `retries: 1` (slow engines were silently dropped at the 3.0s default); enabled Mojeek and Qwant (+news variants); weighted Startpage 1.5 and Mojeek 1.2; added `hostnames` plugin config to boost github.com/stackoverflow.com and demote SEO farms.
 - **Client-side** (`server.py`): `search` gained `categories` (use `news` for current events), `time_range` (day/week/month/year), and `fetch_top` (inline extracted page text for the top N results, 8,000 chars each).
 
+## Follow-up: Marginalia engine (2026-07-03)
+
+Enabled the built-in `marginalia` engine (independent non-commercial-web index, uses `api2.marginalia-search.com`). Key comes from Bitwarden Secrets Manager as `searxng-marginalia-key` via the `searxng-engine-keys` ExternalSecret. The shared `public` key works as a rate-limited interim value; a free non-commercial key is issued by emailing contact@marginalia-search.com (see https://about.marginalia-search.com/article/api/). DuckDuckGo has no official search API (Instant Answers only); Kagi's Search API ($12/1k) noted as a possible future engine via json_engine.
+
 ## Follow-up: Brave Search API engine (2026-07-03)
 
 Added the official Brave Search API as a `braveapi` engine (weight 1.3, $5/mo free credit ≈ 1k queries). The key is stored in Bitwarden Secrets Manager as `searxng-braveapi-key`, synced into the cluster by an ExternalSecret (`searxng-engine-keys`, ClusterSecretStore `default`), and injected into settings.yml by the existing initContainer sed step. Google Programmable Search was rejected as a second API engine — Google removed whole-web search for new engines and is shutting down the Custom Search JSON API on 2027-01-01.
