@@ -21,7 +21,7 @@ Claude Code (host)
   └─ spawns MCP server process (stdio, Python)
        └─ HTTPS + Bearer token → nginx sidecar :443
                                     └─ localhost → SearXNG :8888
-                                                     └─ fan-out (DDG, Brave, Wikipedia, Startpage)
+                                                     └─ fan-out (Brave API, Marginalia, Startpage, DDG, Brave, Mojeek, Qwant, Wikipedia, …)
 ```
 
 Three components: a k8s deployment of SearXNG with an auth sidecar, a Python MCP server process, and Claude Code configuration wiring them together.
@@ -111,7 +111,7 @@ ClusterIP on port 443, selector targets the Deployment. Routable from LAN/host v
 **File:** `~/.local/lib/searxng-mcp/server.py`  
 **Language:** Python  
 **Transport:** stdio (spawned by Claude Code as a child process)  
-**Dependencies:** `mcp`, `httpx`, `html2text`, `keyring`
+**Dependencies:** `mcp`, `niquests`, `html2text`, `keyring`, `trafilatura`
 
 ### Tools exposed
 
@@ -121,7 +121,7 @@ Calls `/search?q=<query>&format=json`, forwarding `categories` (general/news/it/
 
 **`fetch(url: str) -> str`**
 
-Fetches the given URL and returns readable plain text via `html2text`. Caps output at 50,000 characters to avoid flooding context. Follows redirects. Uses a 15-second timeout.
+Fetches the given URL and returns its main content as readable plain text — extracted with `trafilatura`, falling back to `html2text` for pages it can't parse. Caps output at 50,000 characters to avoid flooding context. Follows redirects. Uses a 15-second timeout.
 
 ### Auth
 
