@@ -68,10 +68,10 @@ spec:
     rules:
     - alert: KuredRebootRequiredTooLong
       annotations:
-        summary: Node {{ $labels.node }} has had a pending reboot for over 48h.
-        description: kured has been signaling a required reboot on {{ $labels.node }} for more than 48h. Check the maintenance window, node drain blockers, or kured locks.
+        summary: Node {{ $labels.node }} has had a pending reboot for over 7d.
+        description: kured has been signaling a required reboot on {{ $labels.node }} for more than 7d, meaning at least one weekend maintenance window (Sat/Sun 04:00-08:00 ET) was missed. Check node drain blockers or kured locks.
       expr: max by (node) (kured_reboot_required) == 1
-      for: 48h
+      for: 7d
       labels:
         severity: warning
     - alert: KuredNodeStuckDraining
