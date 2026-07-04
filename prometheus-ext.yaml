@@ -117,6 +117,13 @@ spec:
             app.kubernetes.io/name: prometheus
             prometheus: ext
         topologyKey: kubernetes.io/hostname
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 2000
+    runAsNonRoot: true
+    fsGroup: 2000
+    seccompProfile:
+      type: RuntimeDefault
   scrapeInterval: 15s
   retention: 90d
   retentionSize: 80GB
