@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-ext
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-ext
+  namespace: monitoring
+rules:
+- apiGroups: [""]
+  resources: [configmaps]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-ext
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-ext
+subjects:
+- kind: ServiceAccount
+  name: prometheus-ext
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-ext
+rules:
+- nonResourceURLs: [/metrics]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-ext
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-ext
+subjects:
+- kind: ServiceAccount
+  name: prometheus-ext
+  namespace: monitoring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-ext
+  namespace: monitoring
+spec:
+  clusterIP: None
+  ports:
+  - name: web
+    port: 9090
+    targetPort: web
+  selector:
+    app.kubernetes.io/name: prometheus
+    prometheus: ext
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prometheus-ext-scrape-configs
+  namespace: monitoring
+stringData:
+  scrape-configs.yaml: |
+    - job_name: node-exporter
+      scrape_interval: 10s
+      static_configs:
+      - targets:
+        - ubthv01.homelab.somemissing.info:9100
+        - vmcent74deluge.homelab.somemissing.info:9100
+        - vmcent74docker.homelab.somemissing.info:9100
+        - vmcent74web02.homelab.somemissing.info:9100
+        - vmcentelk01.homelab.somemissing.info:9100
+        - vmubt1804mysql01.homelab.somemissing.info:9100
+        - vmubt1804web01.homelab.somemissing.info:9100
+    - job_name: ubthv01
+      scrape_interval: 10s
+      static_configs:
+      - targets:
+        - ubthv01.homelab.somemissing.info:9133
+        - ubthv01.homelab.somemissing.info:9134
+        - ubthv01.homelab.somemissing.info:9845
+    - job_name: libvirt
+      scrape_interval: 15s
+      static_configs:
+      - targets:
+        - ubthv01.homelab.somemissing.info:9177
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: ext
+  namespace: monitoring
+spec:
+  replicas: 2
+  serviceName: prometheus-ext
+  serviceAccountName: prometheus-ext
+  prometheusExternalLabelName: ""
+  replicaExternalLabelName: prometheus_replica
+  externalLabels:
+    cluster: ext
+    prometheus: ext
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: prometheus
+            prometheus: ext
+        topologyKey: kubernetes.io/hostname
+  scrapeInterval: 15s
+  retention: 90d
+  retentionSize: 80GB
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: zfs-generic-iscsi-csi
+        resources:
+          requests:
+            storage: 100Gi
+  remoteWrite:
+  - url: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
+    remoteTimeout: 60s
+    headers:
+      THANOS-TENANT: ext
+    metadataConfig:
+      send: false
+    sendNativeHistograms: true
+    queueConfig:
+      batchSendDeadline: 30s
+      maxSamplesPerSend: 1500
+      minBackoff: 50ms
+      maxBackoff: 500ms
+      retryOnRateLimit: true
+      sampleAgeLimit: 5m
+  additionalScrapeConfigs:
+    name: prometheus-ext-scrape-configs
+    key: scrape-configs.yaml
+  ruleSelector:
+    matchLabels:
+      prometheus: ext
+  ruleNamespaceSelector: {}
+  tracingConfig:
+    clientType: grpc
+    endpoint: otel-collector.k8s.somemissing.info:4317
+    insecure: false
+    samplingParam: 1
