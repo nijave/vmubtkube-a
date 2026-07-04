@@ -156,6 +156,15 @@ spec:
       maxBackoff: 500ms
       retryOnRateLimit: true
       sampleAgeLimit: 5m
+  serviceMonitorSelector:
+    matchLabels:
+      prometheus: ext
+  podMonitorSelector:
+    matchLabels:
+      prometheus: ext
+  scrapeConfigSelector:
+    matchLabels:
+      prometheus: ext
   additionalScrapeConfigs:
     name: prometheus-ext-scrape-configs
     key: scrape-configs.yaml
