@@ -160,4 +160,4 @@ spec:
     clientType: grpc
     endpoint: otel-collector.k8s.somemissing.info:4317
     insecure: false
-    samplingParam: 1
+    samplingFraction: 1
