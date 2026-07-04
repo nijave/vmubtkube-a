@@ -151,4 +151,4 @@ spec:
       storageClassName: zfs-generic-iscsi-csi
       resources:
         requests:
-          storage: 250Gi
+          storage: 300Gi
