@@ -85,7 +85,6 @@ stringData:
         - vmcent74web02.homelab.somemissing.info:9100
         - vmcentelk01.homelab.somemissing.info:9100
         - vmubt1804mysql01.homelab.somemissing.info:9100
-        - vmubt1804web01.homelab.somemissing.info:9100
     - job_name: ubthv01
       scrape_interval: 10s
       static_configs:
