@@ -96,7 +96,7 @@ Remaining unmanaged CRDs (expected — managed by tigera-operator, not ArgoCD):
 | Namespace | Kind | Name | Notes |
 |-----------|------|------|-------|
 | media | Secret | gluetun-airvpn | VPN secret, not in ArgoCD |
-| thanos | Secret | thanos-objectstorage | Not tracked |
+| thanos | Secret | ~~thanos-objectstorage~~ | ExternalSecret added 2026-07-03 (`thanos/thanos-objectstorage-externalsecret.yaml`); requires `thanos-objectstorage-{access,secret}-key` entries in Bitwarden Secrets Manager |
 | immich | Backup | immich-pre-v3-upgrade | One-off backup CR |
 | immich/woodpecker | ConfigMap | cnpg-default-monitoring | Created by CNPG operator |
 | cluster | Namespace | external-secrets, monitoring, tigera-operator | Not managed by ArgoCD |
@@ -118,7 +118,7 @@ metrics-server was originally installed by hand via `kubectl apply -f https://gi
 4. ~~**`default` namespace PVCs**~~ — Cleaned up 2026-07-02
 5. ~~**`monitoring` namespace secrets**~~ — `argocd-initial-admin-secret`, `argocd-redis` deleted 2026-07-02
 6. **3 unmanaged namespaces**: `external-secrets`, `monitoring`, `tigera-operator`
-7. **`media/gluetun-airvpn`** and **`thanos/thanos-objectstorage`** secrets — manually created, not in git
+7. **`media/gluetun-airvpn`** secret — manually created, not in git. ~~`thanos/thanos-objectstorage`~~ — ExternalSecret added 2026-07-03, pending Bitwarden entries
 8. ~~**`kube-system/metrics-server`**~~ — Brought under ArgoCD via vendir 2026-07-02
 9. ~~**`kube-system/kubelet-rubber-stamp`**~~ — Brought under ArgoCD via vendir 2026-07-02
 10. ~~**`operators/clickhouse-operator` stale Deployment**~~ — Deleted 2026-07-02 (pre-Helm v0.25.6 running alongside Helm-managed v0.27.1)
