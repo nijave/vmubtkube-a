@@ -141,6 +141,12 @@ spec:
                 for: 5m
                 annotations:
                   summary: Frigate doesn't appear to be doing any work.
+              - alert: FrigateLowEventRate
+                expr: |
+                  sum(rate(frigate_camera_events_total[1h])) < 5
+                for: 1h
+                annotations:
+                  summary: Frigate camera event rate is unusually low.
         prometheus:
           service:
             annotations:
