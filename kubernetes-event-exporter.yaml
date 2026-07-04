@@ -9,8 +9,8 @@ kind: ClusterRole
 metadata:
   name: event-exporter
 rules:
-- apiGroups: ["*"]
-  resources: ["*"]
+- apiGroups: ["", "events.k8s.io"]
+  resources: ["events"]
   verbs: ["get", "watch", "list"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
@@ -41,6 +41,9 @@ data:
     logLevel: error
     logFormat: json
     metricsNamePrefix: event_exporter_
+    # RBAC is scoped to events only, so involved-object label/annotation
+    # lookups would 403; the stdout dump doesn't use them.
+    omitLookup: true
     leaderElection:
       enabled: true
     route:
