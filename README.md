@@ -41,6 +41,18 @@ Manifests that *do* ship as Helm charts stay as ArgoCD Helm-source apps
 tracked by Renovate's `kubernetes` manager. Full design:
 `docs/superpowers/specs/2026-07-01-vendir-kustomize-design.md`.
 
+## Manifest validation
+
+CI runs `.ci/validate.sh` (kubeconform, strict; overlays validated as
+`kustomize build` output) on every PR. To run the same check locally on each
+commit:
+
+```
+pre-commit install   # needs kubeconform and kustomize-or-kubectl on PATH
+```
+
+Schemas are cached under `.tmp/`, so repeat runs take ~2s.
+
 ## DNS zones and TLS
 
 Two DNS zones, split by audience:
