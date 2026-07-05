@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vpa-recommender-rules
+  namespace: kube-system
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: vpa-recommender
+    rules:
+    - alert: VpaRecommenderDown
+      annotations:
+        summary: vpa-recommender has no ready pods.
+        description: VPA sizing recommendations are stale. Investigate the vpa-recommender deployment in kube-system.
+      expr: |
+        kube_deployment_status_replicas_ready{deployment="vpa-recommender",namespace="kube-system"}
+          < kube_deployment_spec_replicas{deployment="vpa-recommender",namespace="kube-system"}
+      for: 30m
+      labels:
+        severity: warning

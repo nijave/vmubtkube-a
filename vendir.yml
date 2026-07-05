@@ -68,6 +68,22 @@ directories:
           - deploy/role_binding.yaml
           - deploy/operator.yaml
 
+  - path: vendored/vpa/base
+    contents:
+      - path: .
+        # Recommendation-only VPA: CRDs + RBAC + recommender. The updater and
+        # admission-controller are intentionally not vendored — all VPA objects
+        # run updateMode: Off, and the admission-controller would need a
+        # TLS cert secret this repo doesn't manage.
+        git:
+          url: https://github.com/kubernetes/autoscaler
+          ref: vertical-pod-autoscaler/v1.6.0
+        newRootPath: vertical-pod-autoscaler/deploy
+        includePaths:
+          - vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
+          - vertical-pod-autoscaler/deploy/vpa-rbac.yaml
+          - vertical-pod-autoscaler/deploy/recommender-deployment.yaml
+
   - path: vendored/metrics-server/base
     contents:
       - path: .

@@ -1,0 +1,84 @@
+---
+# Recommendation-only VPAs (updateMode: Off) for the top resource consumers.
+# The recommender is deployed from vendored/vpa (application.vendored-vpa.yaml);
+# the updater/admission-controller are intentionally not installed, so these
+# never evict or mutate pods. Read recommendations with:
+#   kubectl get vpa -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,TARGET:.status.recommendation.containerRecommendations[*].target
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-prometheus
+  namespace: monitoring
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: prometheus-prom-kp-prometheus
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-thanos-receive-ingestor
+  namespace: thanos
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: thanos-receive-ingestor-default
+  updatePolicy:
+    updateMode: "Off"
+---
+# clickhouse-operator generates one StatefulSet per replica
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-clickhouse-0
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-hyperdx-replicated-0-0
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-clickhouse-1
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chi-hyperdx-replicated-0-1
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-immich-server
+  namespace: immich
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: immich-server
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-jellyfin
+  namespace: media
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jellyfin
+  updatePolicy:
+    updateMode: "Off"
