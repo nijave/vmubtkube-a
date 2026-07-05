@@ -43,6 +43,14 @@ directories:
     path: .
   path: vendored/kubelet-rubber-stamp/base
 - contents:
+  - git:
+      commitTitle: Update VPA default version to 1.6.0
+      sha: 9196162ba12e637ce4482107e1c17bcb80599050
+      tags:
+      - vertical-pod-autoscaler/v1.6.0
+    path: .
+  path: vendored/vpa/base
+- contents:
   - githubRelease:
       tag: v0.8.1
       url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/281050386
