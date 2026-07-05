@@ -23,6 +23,16 @@ when:
     branch: main
 
 steps:
+  validate:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.36.2
+    environment:
+      # renovate: datasource=github-releases depName=yannh/kubeconform
+      KUBECONFORM_VERSION: v0.8.0
+    commands:
+      - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - sh .ci/validate.sh
+
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.36.2
