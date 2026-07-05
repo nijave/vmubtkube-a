@@ -34,6 +34,10 @@ steps:
     environment:
       # renovate: datasource=github-releases depName=carvel-dev/vendir
       VENDIR_VERSION: v0.46.0
+      # Write-access GitHub deploy key for pushing sync results back to the
+      # PR branch. Woodpecker repo secret scoped to this image + pull_request.
+      VENDIR_PUSH_SSH_KEY:
+        from_secret: vendir_push_ssh_key
     commands:
       - wget -qO /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
       - chmod +x /usr/local/bin/vendir
