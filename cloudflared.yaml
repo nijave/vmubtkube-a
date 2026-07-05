@@ -40,6 +40,17 @@ spec:
         sysctls:
           - name: net.ipv4.ping_group_range
             value: "0 2147483647"
+      affinity:
+        podAntiAffinity:
+          # Preferred, not required: the tunnel should still run somewhere if
+          # only one node is schedulable.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    pod: cloudflared
+                topologyKey: kubernetes.io/hostname
       containers:
       - name: cloudflared
         image: registry.apps.nickv.me/cloudflare/cloudflared:2026.6.1
@@ -67,6 +78,14 @@ spec:
           failureThreshold: 1
           initialDelaySeconds: 10
           periodSeconds: 10
+        readinessProbe:
+          # Same endpoint: a replica without an edge connection shouldn't
+          # count toward availability during rollouts.
+          httpGet:
+            path: /ready
+            port: 2000
+          initialDelaySeconds: 5
+          periodSeconds: 10
         resources:
           limits:
             memory: 256Mi
@@ -74,3 +93,14 @@ spec:
           requests:
             memory: 32Mi
             cpu: 5m
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudflared
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      pod: cloudflared
