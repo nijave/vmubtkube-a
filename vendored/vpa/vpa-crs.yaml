@@ -1,8 +1,9 @@
 ---
 # Recommendation-only VPAs (updateMode: Off) for right-sizing insight.
-# The recommender is deployed from vendored/vpa (application.vendored-vpa.yaml);
-# the updater/admission-controller are intentionally not installed, so these
-# never evict or mutate pods. Excluded on purpose: CNPG clusters (operator
+# Lives in the vpa Application alongside the CRD install, so ArgoCD skips the
+# dry-run for these CRs automatically on cold bootstrap (CRD sorts first in
+# the same sync). The updater/admission-controller are intentionally not
+# installed, so these never evict or mutate pods. Excluded on purpose: CNPG clusters (operator
 # owns pod resources), buildkit (usage is per-build, idle-time stats mislead),
 # Jobs/CronJobs, and static control-plane pods. Read recommendations with:
 #   kubectl get vpa -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,TARGET:.status.recommendation.containerRecommendations[*].target
