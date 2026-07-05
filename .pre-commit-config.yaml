@@ -11,3 +11,11 @@ repos:
         language: system
         types_or: [yaml]
         pass_filenames: false
+      - id: helm-validate
+        name: helm render + kubeconform (same as CI validate-helm step)
+        entry: env KUBECONFORM_CACHE=.tmp/kubeconform-cache sh .ci/validate-helm.sh
+        language: system
+        # Chart downloads are slow; only fire when a Helm app (or the script)
+        # actually changed — mirrors the CI step's path gate. Needs helm + yq.
+        files: ^(application\..*\.yaml|\.ci/validate-helm\.sh)$
+        pass_filenames: false
