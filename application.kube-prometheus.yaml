@@ -18,6 +18,7 @@ spec:
     - PruneLast=true
     - ServerSideApply=true
     - ApplyOutOfSyncOnly=true
+    - CreateNamespace=true
     retry:
       backoff:
         duration: 5s
