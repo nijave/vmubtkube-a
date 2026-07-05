@@ -32,23 +32,41 @@ spec:
       data:
         snmp.merge.yml: |
           auths:
-            #tor-switch:
-            #  community: {{ .torSwitchCommunity }}
-            #  version: 2
-            home-ap:
-              community: {{ .homeApCommunity }}
+            tor-switch:
+              community: {{ .torSwitchCommunity }}
+              version: 2
+            tp-link-omada:
+              community: {{ .omadaCommunity }}
+              version: 2
+            office-switch:
+              community: {{ .officeSwitchCommunity }}
+              version: 2
+            core-switch:
+              community: {{ .coreSwitchCommunity }}
               version: 2
   data:
   - secretKey: torSwitchCommunity
     remoteRef:
       conversionStrategy: Default
-      key: snmp-tor-switch-community
+      key: snmp-tor-switch
       decodingStrategy: None
       metadataPolicy: None
-  - secretKey: homeApCommunity
+  - secretKey: omadaCommunity
     remoteRef:
       conversionStrategy: Default
-      key: snmp-home-ap-community
+      key: snmp-tp-link-omada
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: officeSwitchCommunity
+    remoteRef:
+      conversionStrategy: Default
+      key: snmp-office-switch
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: coreSwitchCommunity
+    remoteRef:
+      conversionStrategy: Default
+      key: snmp-core-switch
       decodingStrategy: None
       metadataPolicy: None
 
@@ -147,7 +165,7 @@ spec:
   endpoints:
   - targetPort: &targetPort 9116
     path: &path /snmp
-    interval: &interval 10s
+    interval: &interval 30s
     relabelings: &relabelings
       - action: replace
         sourceLabels: [__param_target]
@@ -155,14 +173,54 @@ spec:
       - regex: '(container|endpoint)'
         action: labeldrop
     params:
-      auth: [home-ap]
-      target: ["172.16.1.10"]
-      module: [if_mib,ip_mib,eap]
-  # - targetPort: *targetPort
-  #   path: *path
-  #   interval: *interval
-  #   relabelings: *relabelings
-  #   params:
-  #     auth: [tor-switch]
-  #     target: ["172.16.1.6"]
-  #     module: [if_mib,mikrotik]
+      auth: [tor-switch]
+      target: ["172.16.1.6"]
+      module: [if_mib,mikrotik]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [core-switch]
+      target: ["172.16.1.11"]
+      module: [if_mib]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [tp-link-omada]
+      target: ["172.16.1.13"]
+      module: [if_mib,eap]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [tp-link-omada]
+      target: ["172.16.1.14"]
+      module: [if_mib,eap]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [tp-link-omada]
+      target: ["172.16.1.21"]
+      module: [if_mib]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [office-switch]
+      target: ["172.16.1.22"]
+      module: [if_mib]
+  - targetPort: *targetPort
+    path: *path
+    interval: *interval
+    relabelings: *relabelings
+    params:
+      auth: [tp-link-omada]
+      target: ["172.16.1.23"]
+      module: [if_mib,eap]
