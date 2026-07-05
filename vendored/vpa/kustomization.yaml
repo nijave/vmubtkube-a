@@ -9,3 +9,6 @@ resources:
   - service.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
+  # Recommendation-only VPA objects live in the same Application as the CRD
+  # install so cold-bootstrap syncs don't need SkipDryRunOnMissingResource.
+  - vpa-crs.yaml
