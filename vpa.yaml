@@ -1,8 +1,10 @@
 ---
-# Recommendation-only VPAs (updateMode: Off) for the top resource consumers.
+# Recommendation-only VPAs (updateMode: Off) for right-sizing insight.
 # The recommender is deployed from vendored/vpa (application.vendored-vpa.yaml);
 # the updater/admission-controller are intentionally not installed, so these
-# never evict or mutate pods. Read recommendations with:
+# never evict or mutate pods. Excluded on purpose: CNPG clusters (operator
+# owns pod resources), buildkit (usage is per-build, idle-time stats mislead),
+# Jobs/CronJobs, and static control-plane pods. Read recommendations with:
 #   kubectl get vpa -A -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,TARGET:.status.recommendation.containerRecommendations[*].target
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
@@ -30,7 +32,58 @@ spec:
   updatePolicy:
     updateMode: "Off"
 ---
-# clickhouse-operator generates one StatefulSet per replica
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-thanos-store
+  namespace: thanos
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: thanos-store
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-thanos-compact
+  namespace: thanos
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: thanos-compact
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-thanos-query
+  namespace: thanos
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: thanos-query
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-thanos-receive-router
+  namespace: thanos
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: thanos-receive-router
+  updatePolicy:
+    updateMode: "Off"
+---
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
@@ -60,6 +113,71 @@ spec:
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
+  name: vpa-hyperdx-keeper-0
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-hyperdx-keeper-0-0
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-keeper-1
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-hyperdx-keeper-0-1
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-keeper-2
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: chk-hyperdx-keeper-0-2
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-mongo
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: hyperdx
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-hyperdx-otel-collector
+  namespace: hyperdx
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hyperdx-otel-collector
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
   name: vpa-immich-server
   namespace: immich
 spec:
@@ -73,6 +191,19 @@ spec:
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
+  name: vpa-immich-machine-learning
+  namespace: immich
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: immich-machine-learning
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
   name: vpa-jellyfin
   namespace: media
 spec:
@@ -80,5 +211,148 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: jellyfin
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-radarr
+  namespace: media
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: radarr
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-sonarr
+  namespace: media
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sonarr
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-prowlarr
+  namespace: media
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: prowlarr
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-sabnzbd
+  namespace: media
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sabnzbd
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-searxng
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: searxng
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-reloader
+  namespace: default
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: reloader-reloader
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-woodpecker-server
+  namespace: woodpecker
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: woodpecker-server
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-woodpecker-agent
+  namespace: woodpecker
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: woodpecker-agent
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-otel-collector
+  namespace: monitoring
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otel-collector-opentelemetry-collector
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-otel-logs
+  namespace: monitoring
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: DaemonSet
+    name: otel-logs-opentelemetry-collector-agent
+  updatePolicy:
+    updateMode: "Off"
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vpa-otel-collector-contour
+  namespace: projectcontour
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otel-collector
   updatePolicy:
     updateMode: "Off"
