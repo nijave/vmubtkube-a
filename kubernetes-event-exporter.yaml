@@ -95,6 +95,19 @@ spec:
         ports:
         - name: metrics
           containerPort: 2112
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 10
         volumeMounts:
         - name: cfg
           mountPath: /data
