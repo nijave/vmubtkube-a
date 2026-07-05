@@ -150,3 +150,13 @@ spec:
     caSecret: cert-manager/k8s-ca
     subjectName: python-envoy-authz
 ---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: python-envoy-authz
+  namespace: projectcontour
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: python-envoy-authz
