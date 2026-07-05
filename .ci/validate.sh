@@ -16,11 +16,25 @@ KUBECONFORM="kubeconform
   -schema-location default
   -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 
+# Cache downloaded schemas across runs (used by the pre-commit hook; CI pods
+# are ephemeral so caching there is pointless).
+if [ -n "${KUBECONFORM_CACHE:-}" ]; then
+  mkdir -p "$KUBECONFORM_CACHE"
+  KUBECONFORM="$KUBECONFORM -cache $KUBECONFORM_CACHE"
+fi
+
+# alpine/k8s ships a kustomize binary; local machines may only have kubectl.
+if command -v kustomize >/dev/null 2>&1; then
+  kustomize_build() { kustomize build "$1"; }
+else
+  kustomize_build() { kubectl kustomize "$1"; }
+fi
+
 echo "=== hand-written manifests ==="
 # Everything tracked except: vendored inputs (validated rendered below),
 # kustomize-rendered dirs, kustomization files themselves, and non-k8s YAML.
 git ls-files '*.yaml' \
-  | grep -vE '^(vendored/|fluentbit/|docs/|\.woodpecker\.yaml|renovate\.json|vendir)' \
+  | grep -vE '^(vendored/|fluentbit/|docs/|\.|renovate\.json|vendir)' \
   | grep -v 'kustomization\.yaml' \
   | xargs $KUBECONFORM
 
@@ -28,7 +42,7 @@ echo "=== kustomize overlays ==="
 for kz in $(git ls-files '*/kustomization.yaml' | grep -v '/base/'); do
   dir=$(dirname "$kz")
   echo "--- $dir"
-  kustomize build "$dir" | $KUBECONFORM -
+  kustomize_build "$dir" | $KUBECONFORM -
 done
 
 echo "=== plain vendored bases (no overlay) ==="
