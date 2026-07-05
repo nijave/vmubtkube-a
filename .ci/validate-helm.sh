@@ -47,7 +47,13 @@ for f in application.*.yaml; do
   echo "--- $f ($chart@$version)"
   case "$repo" in
     http*) chart_ref="$chart"; repo_flag="--repo $repo" ;;
-    *)     chart_ref="oci://$repo/$chart"; repo_flag="" ;;
+    *)
+      # Pull OCI charts first and template the local tarball: some helm
+      # versions print registry pull chatter (Pulled:/Digest:) to stdout,
+      # which corrupts the piped manifest stream.
+      helm pull "oci://$repo/$chart" --version "$version" -d "$WORKDIR" >/dev/null
+      chart_ref="$WORKDIR/$chart-$version.tgz"; repo_flag=""
+      ;;
   esac
   # shellcheck disable=SC2086
   helm template "$release" "$chart_ref" $repo_flag \
