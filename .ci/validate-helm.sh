@@ -9,8 +9,28 @@ set -euo pipefail
 # --kube-version / --api-versions approximate the live cluster so charts that
 # gate on .Capabilities (e.g. VPA templates) render the same objects ArgoCD
 # applies. Bump KUBE_VERSION when the cluster upgrades.
-KUBE_VERSION="1.35"
-API_VERSIONS="--api-versions autoscaling.k8s.io/v1 --api-versions monitoring.coreos.com/v1"
+# Match the live cluster version (cukk auto-upgrades it); CI step pods can
+# GET /version via the default SA (system:public-info-viewer), local runs use
+# kubeconfig. Falls back to a pinned floor when no cluster is reachable.
+if [ -z "${KUBE_VERSION:-}" ]; then
+  KUBE_VERSION=$(kubectl version -o json 2>/dev/null | yq '.serverVersion.gitVersion // ""' || true)
+  KUBE_VERSION=${KUBE_VERSION#v}
+fi
+[ -n "$KUBE_VERSION" ] || { echo "WARNING: cluster version undetectable; using fallback"; KUBE_VERSION="1.35.0"; }
+echo "rendering against Kubernetes $KUBE_VERSION"
+
+# Discover the cluster's API versions (group/version plus group/version/Kind,
+# matching what ArgoCD passes) so .Capabilities-gated templates render exactly
+# what the cluster gets. Needs only the discovery endpoints, which
+# system:discovery grants to every authenticated principal — no extra RBAC.
+API_VERSIONS=$( {
+  kubectl api-versions 2>/dev/null
+  kubectl api-resources --no-headers 2>/dev/null | awk '{print $(NF-2)"/"$NF}'
+} | sort -u | sed 's/^/--api-versions /' | tr '\n' ' ' ) || true
+if [ -z "$API_VERSIONS" ]; then
+  echo "WARNING: API discovery unavailable; using fallback capability list"
+  API_VERSIONS="--api-versions autoscaling.k8s.io/v1 --api-versions monitoring.coreos.com/v1"
+fi
 
 # -ignore-missing-schemas: charts ship CRs of their own CRDs (rendered in the
 # same release) that the CRDs-catalog may not carry; missing-schema kinds are
@@ -19,6 +39,7 @@ KUBECONFORM="kubeconform
   -strict -summary
   -ignore-missing-schemas
   -skip CustomResourceDefinition
+  -kubernetes-version $KUBE_VERSION
   -schema-location default
   -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 if [ -n "${KUBECONFORM_CACHE:-}" ]; then
