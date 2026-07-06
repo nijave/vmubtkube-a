@@ -69,12 +69,10 @@ steps:
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.36.2
+    # No `when:` filter: mirror-images depends_on this step, and Woodpecker
+    # rejects a DAG whose dependency is filtered out by conditions. The
+    # equivalent gating (PR event + vendir file changes) lives in the script.
     depends_on: [validate, validate-pluto]
-    when:
-      - event: pull_request
-        path:
-          - "vendir.yml"
-          - "vendir.lock.yml"
     environment:
       # renovate: datasource=github-releases depName=carvel-dev/vendir
       VENDIR_VERSION: v0.46.0
