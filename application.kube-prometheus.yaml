@@ -249,6 +249,52 @@ spec:
                 - action: drop
                   sourceLabels: [__name__]
                   regex: 'workqueue_(queue|work)_duration_seconds_bucket'
+                # Third pass, informed by Grafana Cloud's Kubernetes
+                # Monitoring allow lists (grafana/k8s-monitoring-helm
+                # allowLists/): metrics their dashboards don't use and
+                # nothing here queries. Join/info metrics are deliberately
+                # KEPT even though Grafana drops them: kube_replicaset_owner
+                # (pod->deployment), node_disk_info (device identity),
+                # kube_persistentvolume_{info,claim_ref,capacity_bytes},
+                # device_udev_link_info. container_pressure_* (PSI) and
+                # container_oom_events_total are also kept intentionally.
+                # ReplicaSet spec/status duplicates deployment-level data
+                # and churns a full series set on every rollout.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'kube_replicaset_(created|metadata_generation|spec_replicas|status_(replicas|ready_replicas|fully_labeled_replicas|observed_generation|terminating_replicas))'
+                # Per-dataset ZIL transaction accounting; dataset I/O stats
+                # (nread/nwritten/reads/writes/nunlink*) are kept.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'node_zfs_zpool_dataset_zil_.*'
+                # Latency histogram buckets (probe, CRI, CSI ops); _sum and
+                # _count siblings are kept for averages.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: '(prober_probe_duration_seconds|kubelet_runtime_operations_duration_seconds|storage_operation_duration_seconds)_bucket'
+                # cadvisor detail beyond the working-set/usage/fs/network
+                # core: memory accounting internals, per-device blkio,
+                # process/thread/socket counts, spec mirrors, fs latency
+                # internals. container_fs_{reads,writes}(_bytes)_total and
+                # container_memory_{working_set,rss,cache,swap} etc stay.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'container_(blkio_device_usage_total|memory_failures_total|memory_max_usage_bytes|memory_failcnt|memory_kernel_usage|memory_total_(active|inactive)_file_bytes|memory_mapped_file|threads|threads_max|sockets|processes|ulimits_soft|cpu_load_d_average_10s|cpu_load_average_10s|cpu_(user|system)_seconds_total|last_seen|start_time_seconds|tasks_state|spec_.*|file_descriptors|fs_(usage_bytes|limit_bytes|inodes_.*|io_.*|read_seconds_total|write_seconds_total|sector_.*|(reads|writes)_merged_total))'
+                # node_disk detail: discard/flush/merged/queue-depth counters;
+                # core read/write bytes+time and node_disk_info (join) stay.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'node_disk_(discard.*|flush_requests.*|(reads|writes)_merged_total|io_now)'
+                # One-hot QoS class (5 series/pod, static) and PV metadata
+                # duplicated by kube_persistentvolume_info.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'kube_pod_status_qos_class|kube_persistentvolume_(created|volume_mode)'
+                # node-exporter self-telemetry and scheduler/thermal detail.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'node_(scrape_collector_.*|cpu_scaling_governor|schedstat_.*|cooling_device_.*)'
             resources:
               limits:
                 memory: 4Gi
