@@ -106,6 +106,25 @@ spec:
       decodingStrategy: None
       metadataPolicy: None
 ---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: democratic-csi-controller
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: democratic-csi
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: democratic-csi
+      app.kubernetes.io/csi-role: controller
+  podMetricsEndpoints:
+    # chart doesn't declare container ports, so target by number
+    - portNumber: 8080 # external-provisioner
+    - portNumber: 8081 # external-attacher
+    - portNumber: 8082 # external-resizer
+    - portNumber: 8083 # external-snapshotter
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -147,6 +166,21 @@ spec:
           config:
             driver: ""
         controller:
+          # expose csi_sidecar_operations_seconds so controller-side CSI op
+          # latency (CreateVolume, DeleteVolume, snapshots) lands in Thanos;
+          # kubelet only covers node-side ops
+          externalProvisioner:
+            extraArgs:
+              - --http-endpoint=:8080
+          externalAttacher:
+            extraArgs:
+              - --http-endpoint=:8081
+          externalResizer:
+            extraArgs:
+              - --http-endpoint=:8082
+          externalSnapshotter:
+            extraArgs:
+              - --http-endpoint=:8083
           driver:
             image:
               # renovate: datasource=docker depName=democraticcsi/democratic-csi
