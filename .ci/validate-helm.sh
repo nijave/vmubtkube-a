@@ -47,6 +47,18 @@ if [ -n "${KUBECONFORM_CACHE:-}" ]; then
   KUBECONFORM="$KUBECONFORM -cache $KUBECONFORM_CACHE"
 fi
 
+# Also tee rendered output through pluto (deprecated/removed apiVersions in
+# the NEXT minor) when the binary is available — charts are the most likely
+# place a to-be-removed API hides.
+if command -v pluto >/dev/null 2>&1; then
+  PLUTO_TARGET="${PLUTO_TARGET:-$(echo "$KUBE_VERSION" | awk -F. '{printf "v%d.%d.0", $1, $2+1}')}"
+  echo "checking deprecations against Kubernetes $PLUTO_TARGET"
+  PLUTO="pluto detect - --ignore-deprecations --target-versions k8s=$PLUTO_TARGET"
+else
+  echo "WARNING: pluto not installed; skipping deprecation checks" >&2
+  PLUTO=""
+fi
+
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
@@ -80,8 +92,9 @@ for f in application.*.yaml; do
   helm template "$release" "$chart_ref" $repo_flag \
     --version "$version" --namespace "$namespace" \
     --values "$WORKDIR/values.yaml" --include-crds \
-    --kube-version "$KUBE_VERSION" $API_VERSIONS \
-    | $KUBECONFORM -
+    --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
+  $KUBECONFORM "$WORKDIR/rendered.yaml"
+  [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
   rendered=$((rendered + 1))
 done
 

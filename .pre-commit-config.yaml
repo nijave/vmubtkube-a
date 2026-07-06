@@ -1,6 +1,7 @@
-# Runs the same manifest validation as the CI validate step (.ci/validate.sh).
+# Runs the same manifest validation as the CI validate steps (.ci/validate*.sh).
 # Setup:   pre-commit install
-# Needs:   kubeconform (https://github.com/yannh/kubeconform) and
+# Needs:   kubeconform (https://github.com/yannh/kubeconform),
+#          pluto (https://github.com/FairwindsOps/pluto), and
 #          kustomize or kubectl on PATH.
 repos:
   - repo: local
@@ -8,6 +9,12 @@ repos:
       - id: kubeconform-validate
         name: kubeconform (same as CI validate step)
         entry: env KUBECONFORM_CACHE=.tmp/kubeconform-cache sh .ci/validate.sh
+        language: system
+        types_or: [yaml]
+        pass_filenames: false
+      - id: pluto-validate
+        name: pluto deprecated-API check (same as CI validate-pluto step)
+        entry: sh .ci/validate-pluto.sh
         language: system
         types_or: [yaml]
         pass_filenames: false

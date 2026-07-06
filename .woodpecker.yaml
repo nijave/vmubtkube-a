@@ -5,6 +5,11 @@
 #
 # Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
+#
+# Step DAG (depends_on): validate, validate-pluto, and validate-helm run in
+# parallel from the start; vendir-sync waits for the steps that read
+# vendored/ (it rewrites those files in the shared workspace); mirror-images
+# waits for vendir-sync (it git-diffs the same workspace).
 clone:
   git:
     # renovate: datasource=docker depName=woodpeckerci/plugin-git
@@ -33,6 +38,16 @@ steps:
       - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - sh .ci/validate.sh
 
+  validate-pluto:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.36.2
+    environment:
+      # renovate: datasource=github-releases depName=FairwindsOps/pluto
+      PLUTO_VERSION: v5.24.0
+    commands:
+      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
+      - sh .ci/validate-pluto.sh
+
   validate-helm:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.36.2
@@ -44,13 +59,17 @@ steps:
     environment:
       # renovate: datasource=github-releases depName=yannh/kubeconform
       KUBECONFORM_VERSION: v0.8.0
+      # renovate: datasource=github-releases depName=FairwindsOps/pluto
+      PLUTO_VERSION: v5.24.0
     commands:
       - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-helm.sh
 
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.36.2
+    depends_on: [validate, validate-pluto]
     when:
       - event: pull_request
         path:
@@ -71,6 +90,7 @@ steps:
   mirror-images:
     # renovate: datasource=docker depName=ghcr.io/regclient/regctl
     image: ghcr.io/regclient/regctl:v0.11.5-alpine
+    depends_on: [vendir-sync]
     backend_options:
       kubernetes:
         hostUsers: false
