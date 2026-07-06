@@ -202,6 +202,38 @@ spec:
                   # Require ; and at least 1 other character (both pod and server can't be empty)
                   regex: '.{2,};minio|scrapeConfig/minio-tenant/minio.*'
                   replacement: minio-default-minio-job
+                # Reduce Thanos Receive cardinality (~22% of stored series).
+                # Dropped from long-term storage only: local Prometheus keeps
+                # 7d of everything, so alerts and recording rules (including
+                # the apiserver SLO rules built on _bucket series) still
+                # evaluate normally and their aggregated outputs are written
+                # through to Thanos.
+                # apiserver/etcd classic-histogram buckets: keep _sum/_count
+                # (average latency survives); per-le percentile detail older
+                # than 7d is intentionally sacrificed.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'apiserver_(request_duration_seconds|request_body_size_bytes|request_sli_duration_seconds|response_sizes|watch_cache_read_wait_seconds|watch_list_duration_seconds|watch_events_sizes)_bucket'
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'etcd_request_duration_seconds_bucket'
+                # Constant feature-gate flags exported per control-plane
+                # process; pure noise in long-term storage.
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'kubernetes_feature_enabled'
+                # kube-state-metrics per-pod detail with no query/alert use:
+                # tolerations is static spec data; status_reason is ~always 0
+                # (kube_pod_status_phase covers the useful signal).
+                - action: drop
+                  sourceLabels: [__name__]
+                  regex: 'kube_pod_(tolerations|status_reason)'
+                # etcd gRPC method x code explosion. Scoped by job because
+                # ArgoCD and Thanos expose the same metric name and those
+                # stay. etcd alerting evaluates on local Prometheus.
+                - action: drop
+                  sourceLabels: [__name__, job]
+                  regex: 'grpc_server_handled_total;kube-etcd'
             resources:
               limits:
                 memory: 4Gi
