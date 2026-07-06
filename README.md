@@ -48,7 +48,7 @@ CI runs `.ci/validate.sh` (kubeconform, strict; overlays validated as
 commit:
 
 ```
-pre-commit install   # needs kubeconform and kustomize-or-kubectl on PATH
+pre-commit install   # needs kubeconform, pluto, and kustomize-or-kubectl on PATH
 ```
 
 Schemas are cached under `.tmp/`, so repeat runs take ~2s.

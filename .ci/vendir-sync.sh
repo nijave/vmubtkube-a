@@ -5,6 +5,19 @@ set -euo pipefail
 # files back to the branch. The Woodpecker step's `path:` filter ensures this
 # only runs when vendir.yml or vendir.lock.yml actually changed.
 
+# Gating formerly done by the Woodpecker `when:` filter (the step must always
+# exist because mirror-images depends_on it — Woodpecker rejects DAG edges to
+# condition-filtered steps).
+if [ "${CI_PIPELINE_EVENT:-}" != "pull_request" ]; then
+  echo "Not a pull_request event; vendir sync only runs on PRs."
+  exit 0
+fi
+git fetch --quiet origin "${CI_COMMIT_TARGET_BRANCH:-main}"
+if git diff --quiet FETCH_HEAD -- vendir.yml vendir.lock.yml; then
+  echo "vendir.yml/vendir.lock.yml unchanged vs ${CI_COMMIT_TARGET_BRANCH:-main}; skipping sync."
+  exit 0
+fi
+
 echo "Running vendir sync..."
 vendir sync
 
