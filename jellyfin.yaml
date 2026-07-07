@@ -93,6 +93,7 @@ spec:
   restic:
     pruneIntervalDays: 14
     repository: restic-repo-jellyfin
+    cacheCapacity: 4Gi
     moverSecurityContext:
       runAsUser: 1009
       runAsGroup: 1001
