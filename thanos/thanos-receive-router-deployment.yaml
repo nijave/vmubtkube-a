@@ -86,7 +86,7 @@ spec:
               name: thanos-tracing
               key: tracing.yaml
         # renovate: datasource=docker registryUrl=https://quay.io depName=thanos/thanos
-        image: registry.apps.nickv.me/thanos/thanos:v0.41.0
+        image: registry.apps.nickv.me/thanos/thanos:v0.42.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 8
