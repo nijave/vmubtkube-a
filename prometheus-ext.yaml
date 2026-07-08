@@ -159,6 +159,23 @@ spec:
       maxBackoff: 500ms
       retryOnRateLimit: true
       sampleAgeLimit: 5m
+    # Same node-exporter drops as the kube-prometheus remote write (see
+    # application.kube-prometheus.yaml and
+    # docs/thanos-receive-memory-optimization.md). External ZFS hosts
+    # send these through this Prometheus, which the original rules did
+    # not cover. Kept: ZFS dataset I/O stats
+    # (nread/nwritten/reads/writes/nunlink*), node_disk_info (device
+    # identity join), core disk read/write bytes+time.
+    writeRelabelConfigs:
+    - action: drop
+      sourceLabels: [__name__]
+      regex: 'node_zfs_zpool_dataset_zil_.*'
+    - action: drop
+      sourceLabels: [__name__]
+      regex: 'node_disk_(discard.*|flush_requests.*|(reads|writes)_merged_total|io_now)'
+    - action: drop
+      sourceLabels: [__name__]
+      regex: 'node_(scrape_collector_.*|cpu_scaling_governor|schedstat_.*|cooling_device_.*)'
   serviceMonitorSelector:
     matchLabels:
       prometheus: ext
