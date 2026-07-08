@@ -61,7 +61,7 @@ spec:
         - --block-files-concurrency=2
         - --compact.concurrency=1
         - --compact.blocks-fetch-concurrency=2
-        - --downsample.concurrency=8
+        - --downsample.concurrency=2
         - --compact.enable-vertical-compaction
         # - --downsampling.disable
         - --deduplication.replica-label=prometheus_replica
@@ -108,10 +108,10 @@ spec:
         resources:
           limits:
             cpu: 1000m
-            memory: 768Mi
+            memory: 2Gi
           requests:
             cpu: 100m
-            memory: 200Mi
+            memory: 512Mi
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /var/thanos/compact
