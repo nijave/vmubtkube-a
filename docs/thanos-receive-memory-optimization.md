@@ -89,7 +89,8 @@ enumerated (e.g. `kube_replicaset_(created|...)` instead of
 |---|---|---|---|
 | [#212](https://github.com/nijave/vmubtkube-a/pull/212) | 7 apiserver `_bucket` families, `etcd_request_duration_seconds_bucket`, `kubernetes_feature_enabled`, `kube_pod_tolerations`, `kube_pod_status_reason`, `grpc_server_handled_total` scoped to `job=kube-etcd` | ~89k | **merged 2026-07-06 00:55Z** |
 | [#213](https://github.com/nijave/vmubtkube-a/pull/213) | `kube_pod_status_{ready,scheduled}` one-hot `condition="false"/"unknown"` (keep `true` — full signal), `workqueue_{queue,work}_duration_seconds_bucket` | ~5.7k | open |
-| [#215](https://github.com/nijave/vmubtkube-a/pull/215) | Third pass informed by Grafana Cloud allow lists: ReplicaSet spec/status mirrors, ZFS ZIL detail, probe/CRI/CSI buckets, cadvisor internals, node_disk discard/flush/merged, QoS class, PV metadata, node-exporter self-telemetry | ~46.4k | open, stacked on #213 |
+| [#215](https://github.com/nijave/vmubtkube-a/pull/215) | Third pass informed by Grafana Cloud allow lists: ReplicaSet spec/status mirrors, probe/CRI/CSI buckets, cadvisor internals, node_disk discard/flush/merged, QoS class, PV metadata, node-exporter self-telemetry | ~46.4k | merged 2026-07-08 20:55Z |
+| [#223](https://github.com/nijave/vmubtkube-a/pull/223) | Rollout-validation follow-up: mirrors the node-exporter drops onto prometheus-ext (which had no filtering); reverts the ZFS ZIL drop everywhere — NAS zpools have ZIL/SLOG worth observing, k8s nodes have no ZFS | ~6.3k | open |
 
 Multipliers: logical × 2 (HA senders) = unique; unique × 3 (replication) =
 stored. Projected cumulative effect when all three are merged:
@@ -114,8 +115,11 @@ Grafana's lists drop several things this cluster deliberately keeps:
   resource investigations.
 - `container_oom_events_total` — needed for OOM forensics (used twice during
   this very investigation).
-- ZFS dataset basic I/O (`node_zfs_zpool_dataset_{nread,nwritten,reads,writes,nunlink*}`)
-  — only the `..._zil_*` transaction detail is dropped.
+- **All ZFS metrics including `node_zfs_zpool_dataset_zil_*`** — the NAS
+  (scraped by prometheus-ext) has zpools with ZIL/SLOG worth observing.
+  A zil drop rule briefly existed but was reverted (#223); the k8s nodes
+  run no ZFS at all, so no zil rule is needed on the kube-prometheus
+  side either.
 - `prometheus_replica` label — required for query-time dedup (HA senders).
 - `_sum`/`_count` siblings of every dropped `_bucket` family — averages
   survive long-term.
