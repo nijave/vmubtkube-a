@@ -75,7 +75,9 @@ done > "$OVERRIDES"
 # `# renovate: ... registryUrl=... depName=...` comment instead of
 # packageRules registryUrls. packageRules entries stay first in the file, so
 # they win the awk first-match lookup below.
-grep -rh --include='*.yaml' --include='*.yml' -E '#[[:space:]]*renovate:.*registryUrl=' . 2>/dev/null \
+# git grep, not grep -r --include: the CI image's busybox grep lacks --include.
+# Returns 1 on no match, which is fine — guard so set -e doesn't kill us.
+{ git grep -h -E '#[[:space:]]*renovate:.*registryUrl=' -- '*.yaml' '*.yml' || true; } \
   | awk '{
       url = ""; name = ""
       for (i = 1; i <= NF; i++) {
