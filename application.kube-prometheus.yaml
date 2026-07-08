@@ -263,11 +263,6 @@ spec:
                 - action: drop
                   sourceLabels: [__name__]
                   regex: 'kube_replicaset_(created|metadata_generation|spec_replicas|status_(replicas|ready_replicas|fully_labeled_replicas|observed_generation|terminating_replicas))'
-                # Per-dataset ZIL transaction accounting; dataset I/O stats
-                # (nread/nwritten/reads/writes/nunlink*) are kept.
-                - action: drop
-                  sourceLabels: [__name__]
-                  regex: 'node_zfs_zpool_dataset_zil_.*'
                 # Latency histogram buckets (probe, CRI, CSI ops); _sum and
                 # _count siblings are kept for averages.
                 - action: drop

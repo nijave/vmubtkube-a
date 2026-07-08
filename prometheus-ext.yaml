@@ -159,6 +159,20 @@ spec:
       maxBackoff: 500ms
       retryOnRateLimit: true
       sampleAgeLimit: 5m
+    # Node-exporter drops mirroring the kube-prometheus remote write
+    # (see application.kube-prometheus.yaml and
+    # docs/thanos-receive-memory-optimization.md). ZFS metrics
+    # (including ZIL detail) are deliberately NOT dropped here: this
+    # Prometheus scrapes the NAS, whose zpools have ZIL/SLOG worth
+    # observing. Kept: node_disk_info (device identity join), core
+    # disk read/write bytes+time.
+    writeRelabelConfigs:
+    - action: drop
+      sourceLabels: [__name__]
+      regex: 'node_disk_(discard.*|flush_requests.*|(reads|writes)_merged_total|io_now)'
+    - action: drop
+      sourceLabels: [__name__]
+      regex: 'node_(scrape_collector_.*|cpu_scaling_governor|schedstat_.*|cooling_device_.*)'
   serviceMonitorSelector:
     matchLabels:
       prometheus: ext
