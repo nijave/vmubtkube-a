@@ -6,6 +6,9 @@
 #   - registryAliases["registry.apps.nickv.me"] -> default upstream registry
 #   - packageRules[].matchPackageNames + registryUrls -> per-image overrides
 #   - ignoreDeps -> mirror paths to skip (locally-built images)
+# plus `# renovate: ... registryUrl=<url> depName=<name>` annotations in the
+# manifests themselves (used where renovate's registryAliases can't express
+# the upstream, e.g. thanos/thanos living on quay.io).
 #
 # Convention assumed: the mirror path equals the upstream repo path, so e.g.
 # registry.apps.nickv.me/thanos/thanos is copied from quay.io/thanos/thanos.
@@ -67,6 +70,24 @@ jq -r '
   printf '%s %s\n' "$name" "$(strip_url "$url")"
 done > "$OVERRIDES"
 
+# Manifest annotations are a second override source: renovate rules that are
+# handled by the regex manager (e.g. thanos/thanos) carry their upstream in a
+# `# renovate: ... registryUrl=... depName=...` comment instead of
+# packageRules registryUrls. packageRules entries stay first in the file, so
+# they win the awk first-match lookup below.
+grep -rh --include='*.yaml' --include='*.yml' -E '#[[:space:]]*renovate:.*registryUrl=' . 2>/dev/null \
+  | awk '{
+      url = ""; name = ""
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^registryUrl=/) url = substr($i, 13)
+        if ($i ~ /^depName=/) name = substr($i, 9)
+      }
+      if (url != "" && name != "") print name, url
+    }' \
+  | sort -u | while read -r name url; do
+      printf '%s %s\n' "$name" "$(strip_url "$url")"
+    done >> "$OVERRIDES"
+
 jq -r '.ignoreDeps[]? // empty' "$RENOVATE_FILE" > "$IGNORE"
 
 # Pick a diff base appropriate for the trigger, then mirror refs found on
@@ -99,7 +120,9 @@ echo "diff base: $BASE_REF"
 # Detect git diff failure explicitly — without this, a missing merge-base
 # (e.g. shallow clone) silently produces empty $REFS and CI passes with
 # mirrored=0 failed=0, masking the failure.
-if ! git diff --unified=0 "$BASE_REF"...HEAD > "$RAW_DIFF" 2>&1; then
+# Restrict to YAML: docs (*.md) legitimately quote mirror refs in prose and
+# must not trigger mirroring.
+if ! git diff --unified=0 "$BASE_REF"...HEAD -- '*.yaml' '*.yml' > "$RAW_DIFF" 2>&1; then
   echo "ERROR: git diff against $BASE_REF failed:" >&2
   cat "$RAW_DIFF" >&2
   exit 1
