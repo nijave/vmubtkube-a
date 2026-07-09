@@ -34,6 +34,9 @@ steps:
     environment:
       # renovate: datasource=github-releases depName=yannh/kubeconform
       KUBECONFORM_VERSION: v0.8.0
+      # git-mirror the schema repos instead of per-URL downloads from the
+      # flaky raw.githubusercontent.com CDN (see .ci/sync-schemas.sh)
+      SCHEMA_MIRROR: .tmp/schemas
     commands:
       - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - sh .ci/validate.sh
@@ -61,6 +64,8 @@ steps:
       KUBECONFORM_VERSION: v0.8.0
       # renovate: datasource=github-releases depName=FairwindsOps/pluto
       PLUTO_VERSION: v5.24.0
+      # see validate step
+      SCHEMA_MIRROR: .tmp/schemas
     commands:
       - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
