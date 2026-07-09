@@ -14,8 +14,8 @@ directories:
   path: vendored/barman-cloud-plugin/base
 - contents:
   - githubRelease:
-      tag: v1.20.3
-      url: https://api.github.com/repos/cert-manager/cert-manager/releases/344757217
+      tag: v1.21.0
+      url: https://api.github.com/repos/cert-manager/cert-manager/releases/351202071
     path: .
   path: vendored/cert-manager/base
 - contents:
