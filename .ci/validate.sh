@@ -10,12 +10,6 @@ set -euo pipefail
 # for the CRD kind itself (kubernetes-json-schema gap); CRD contents are
 # upstream-generated anyway. The CRDs-catalog location validates our CRs
 # (Application, ExternalSecret, HTTPProxy, Cluster, VPA, ...).
-KUBECONFORM="kubeconform
-  -strict -summary
-  -skip CustomResourceDefinition
-  -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
-
 # Match validation to the live cluster version (cukk auto-upgrades the
 # cluster, so never hardcode it). Works in CI step pods via the default SA
 # (GET /version is allowed by system:public-info-viewer) and locally via
@@ -24,6 +18,36 @@ if [ -z "${KUBE_VERSION:-}" ]; then
   KUBE_VERSION=$(kubectl version -o json 2>/dev/null | yq '.serverVersion.gitVersion // ""' || true)
   KUBE_VERSION=${KUBE_VERSION#v}
 fi
+export KUBE_VERSION
+
+# Prefer local schema mirrors (see sync-schemas.sh): kubeconform re-requests
+# every miss on every run (CR kinds 404 the default location regardless of
+# -cache) and raw.githubusercontent.com is flaky. The mirrors are complete
+# copies of both upstream repos, so when they're usable we validate against
+# them exclusively — offline and deterministic; a kind absent upstream is a
+# miss either way. Anything else falls back to the remote locations.
+SCHEMA_LOCATIONS="
+  -schema-location default
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+if [ -n "${SCHEMA_MIRROR:-}" ]; then
+  sh "$(dirname "$0")/sync-schemas.sh" \
+    || echo "WARNING: schema mirror sync failed; continuing with what's on disk" >&2
+  if [ -n "$KUBE_VERSION" ] \
+    && [ -d "$SCHEMA_MIRROR/kubernetes-json-schema/v${KUBE_VERSION}-standalone-strict" ] \
+    && [ -d "$SCHEMA_MIRROR/CRDs-catalog/.git" ]; then
+    SCHEMA_LOCATIONS="
+  -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json
+  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  else
+    echo "WARNING: schema mirror unusable; validating against remote locations" >&2
+  fi
+fi
+
+KUBECONFORM="kubeconform
+  -strict -summary
+  -skip CustomResourceDefinition
+  $SCHEMA_LOCATIONS"
+
 if [ -n "$KUBE_VERSION" ]; then
   echo "validating against Kubernetes $KUBE_VERSION"
   KUBECONFORM="$KUBECONFORM -kubernetes-version $KUBE_VERSION"
