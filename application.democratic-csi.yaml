@@ -47,6 +47,10 @@ spec:
           zfs:
             cli:
               sudoEnabled: true
+            # snapshots created outside democratic-csi (sanoid, etc) inherit
+            # democratic-csi:managed_resource and would block DeleteVolume forever;
+            # only snapshots with the property set locally/received count as managed
+            deleteVolumeIgnoreForeignSnapshots: true
           
             # can be used to set arbitrary values on the dataset/zvol
             # can use handlebars templates with the parameters from the storage class/CO
@@ -183,9 +187,10 @@ spec:
               - --http-endpoint=:8083
           driver:
             image:
-              # renovate: datasource=docker depName=democraticcsi/democratic-csi
-              registry: registry.apps.nickv.me/democraticcsi/democratic-csi
-              tag: v1.9.5
+              # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
+              # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
+              registry: registry.apps.nickv.me/democratic-csi/democratic-csi
+              tag: foreign-snapshots
         node:
           cleanup:
             image:
@@ -194,9 +199,10 @@ spec:
               tag: 1.38.0
           driver:
             image:
-              # renovate: datasource=docker depName=democraticcsi/democratic-csi
-              registry: registry.apps.nickv.me/democraticcsi/democratic-csi
-              tag: v1.9.5
+              # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
+              # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
+              registry: registry.apps.nickv.me/democratic-csi/democratic-csi
+              tag: foreign-snapshots
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
