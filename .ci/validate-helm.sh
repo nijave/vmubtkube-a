@@ -32,6 +32,24 @@ if [ -z "$API_VERSIONS" ]; then
   API_VERSIONS="--api-versions autoscaling.k8s.io/v1 --api-versions monitoring.coreos.com/v1"
 fi
 
+# Prefer local schema mirrors when usable, exclusively — same rationale as
+# validate.sh (offline, deterministic; the mirrors are complete copies).
+SCHEMA_LOCATIONS="
+  -schema-location default
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+if [ -n "${SCHEMA_MIRROR:-}" ]; then
+  KUBE_VERSION="$KUBE_VERSION" sh "$(dirname "$0")/sync-schemas.sh" \
+    || echo "WARNING: schema mirror sync failed; continuing with what's on disk" >&2
+  if [ -d "$SCHEMA_MIRROR/kubernetes-json-schema/v${KUBE_VERSION}-standalone-strict" ] \
+    && [ -d "$SCHEMA_MIRROR/CRDs-catalog/.git" ]; then
+    SCHEMA_LOCATIONS="
+  -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json
+  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  else
+    echo "WARNING: schema mirror unusable; validating against remote locations" >&2
+  fi
+fi
+
 # -ignore-missing-schemas: charts ship CRs of their own CRDs (rendered in the
 # same release) that the CRDs-catalog may not carry; missing-schema kinds are
 # reported in the summary as skipped, not failed.
@@ -40,8 +58,7 @@ KUBECONFORM="kubeconform
   -ignore-missing-schemas
   -skip CustomResourceDefinition
   -kubernetes-version $KUBE_VERSION
-  -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  $SCHEMA_LOCATIONS"
 if [ -n "${KUBECONFORM_CACHE:-}" ]; then
   mkdir -p "$KUBECONFORM_CACHE"
   KUBECONFORM="$KUBECONFORM -cache $KUBECONFORM_CACHE"
