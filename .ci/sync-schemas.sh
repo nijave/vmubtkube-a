@@ -35,7 +35,9 @@ if [ ! -d "$KJS/.git" ]; then
   git -C "$KJS" sparse-checkout set --no-cone "/$VDIR/*"
   git -C "$KJS" checkout --quiet master
 elif [ ! -d "$KJS/$VDIR" ]; then
-  git -C "$KJS" sparse-checkout add --no-cone "/$VDIR/*"
+  # 'add' accepts no mode flag ('set'/'init' only) and inherits the
+  # non-cone mode already persisted by 'set --no-cone' at clone time
+  git -C "$KJS" sparse-checkout add "/$VDIR/*"
 fi
 if [ ! -d "$KJS/$VDIR" ]; then
   # version directory landed upstream after our pinned commit
