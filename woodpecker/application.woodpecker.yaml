@@ -96,11 +96,11 @@ spec:
               labels:
                 release: prom
         agent:
-          image:
-            registry: registry.apps.nickv.me
-            repository: woodpeckerci/woodpecker-agent
-            # https://github.com/woodpecker-ci/woodpecker/pull/6710
-            tag: v3.15.0-aa87bcb21
+          # Agent image intentionally left at the chart default (docker.io/
+          # woodpeckerci/woodpecker-agent at appVersion).  k8s userns support
+          # landed upstream in v3.16.0 (woodpecker-ci/woodpecker#6710), so the
+          # previous forked registry.apps.nickv.me build is retired and Renovate
+          # keeps server + agent in sync via the chart bump.
           replicaCount: 1
           env:
             WOODPECKER_SERVER: woodpecker-server:9000
