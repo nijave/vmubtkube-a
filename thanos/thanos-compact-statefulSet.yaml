@@ -56,7 +56,7 @@ spec:
         - --debug.accept-malformed-index
         - --retention.resolution-raw=14d
         - --retention.resolution-5m=14d
-        - --retention.resolution-1h=395d
+        - --retention.resolution-1h=1825d
         - --delete-delay=1h
         - --block-files-concurrency=2
         - --compact.concurrency=1
