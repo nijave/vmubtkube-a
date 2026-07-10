@@ -107,7 +107,11 @@ spec:
           periodSeconds: 5
         resources:
           limits:
-            cpu: 1000m
+            # Downsampling runs 2 blocks concurrently but was pinned at
+            # 1 CPU with 93% of CFS periods throttled (measured
+            # 2026-07-08, ~1h40m per 14d block). 2 CPUs gives each
+            # in-flight downsample a full core.
+            cpu: 2000m
             memory: 2Gi
           requests:
             cpu: 100m
