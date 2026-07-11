@@ -27,7 +27,7 @@ spec:
   source:
     chart: opentelemetry-collector
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-    targetRevision: 0.164.1
+    targetRevision: 0.165.0
     helm:
       releaseName: otel-logs
       valuesObject:
