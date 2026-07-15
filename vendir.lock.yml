@@ -52,8 +52,8 @@ directories:
   path: vendored/vpa/base
 - contents:
   - githubRelease:
-      tag: v0.8.1
-      url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/281050386
+      tag: v0.9.0
+      url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/353064132
     path: .
   path: vendored/metrics-server/base
 kind: LockConfig

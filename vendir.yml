@@ -89,6 +89,6 @@ directories:
       - path: .
         githubRelease:
           slug: kubernetes-sigs/metrics-server
-          tag: v0.8.1
+          tag: v0.9.0
           assetNames: ["high-availability.yaml"]
           disableAutoChecksumValidation: true   # checksums ship in a release asset, not parseable from notes
