@@ -118,6 +118,9 @@ spec:
   - name: http
     port: 80
     targetPort: http
+  - name: https
+    port: 443
+    targetPort: https
   - name: metrics
     port: 9707
     targetPort: metrics
@@ -133,6 +136,10 @@ metadata:
   labels:
     app.kubernetes.io/component: sonarr
     app.kubernetes.io/name: arr
+  annotations:
+    # Sonarr loads its SSL cert at startup and does not hot-reload it, so have
+    # Reloader roll the pod when cert-manager rotates the TLS secret.
+    secret.reloader.stakater.com/reload: sonarr-k8s-somemissing-info-tls
 spec:
   replicas: 1
   strategy:
@@ -157,9 +164,23 @@ spec:
           value: "1002"
         - name: PGID
           value: "1001"
+        - name: SONARR__SERVER__ENABLESSL
+          value: "True"
+        - name: SONARR__SERVER__SSLPORT
+          value: "9898"
+        - name: SONARR__SERVER__SSLCERTPATH
+          value: /cert/keystore.p12
+        - name: SONARR__SERVER__SSLCERTPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: sonarr-ssl-cert-password
+              key: password
         ports:
         - containerPort: 8989
           name: http
+          protocol: TCP
+        - containerPort: 9898
+          name: https
           protocol: TCP
         startupProbe:
           tcpSocket:
@@ -182,6 +203,9 @@ spec:
           mountPath: /config
         - name: media
           mountPath: /media
+        - name: tls
+          mountPath: /cert
+          readOnly: true
         resources:
           requests:
             memory: 256Mi
@@ -220,4 +244,46 @@ spec:
       - name: media
         persistentVolumeClaim:
           claimName: sonarr-media
+      - name: tls
+        secret:
+          secretName: sonarr-k8s-somemissing-info-tls
 ---
+# mittwald kubernetes-secret-generator auto-fills data.password with a random
+# value; Sonarr reads it as the PFX password. With ServerSideApply the
+# controller owns the `data` field, so ArgoCD self-heal won't clobber it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sonarr-ssl-cert-password
+  namespace: media
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+    secret-generator.v1.mittwald.de/secret-type: password
+    secret-generator.v1.mittwald.de/password-length: "32"
+type: Opaque
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sonarr-k8s-somemissing-info-cert
+  namespace: media
+spec:
+  secretName: sonarr-k8s-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn sonarr.k8s.somemissing.info
+  dnsNames:
+    - *cn
+  # cert-manager writes keystore.p12 into the Secret alongside tls.crt/tls.key;
+  # Sonarr's single SSL cert path wants a PFX containing the private key, which
+  # cert-manager produces natively (no init container/openssl). LegacyDES for
+  # maximal reader compatibility — cipher strength is moot, tls.key is in the
+  # same Secret. The password is shared with Sonarr via passwordSecretRef.
+  keystores:
+    pkcs12:
+      create: true
+      profile: LegacyDES
+      passwordSecretRef:
+        name: sonarr-ssl-cert-password
+        key: password
