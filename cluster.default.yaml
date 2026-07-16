@@ -1,0 +1,177 @@
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-default-user
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: default
+---
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-superuser
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: postgres
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: default
+  namespace: default
+spec:
+  instances: 2
+  startDelay: 300
+  stopDelay: 300
+  primaryUpdateStrategy: unsupervised
+
+  # renovate: datasource=docker depName=ghcr.io/cloudnative-pg/postgresql
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.4
+  postgresql:
+    parameters:
+      shared_buffers: 128MB
+      random_page_cost: '1.1'
+      pg_stat_statements.max: '10000'
+      pg_stat_statements.track: all
+
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: postgres-superuser
+
+  storage:
+    size: 20Gi
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: kubernetes.io/hostname
+
+  enablePDB: true
+
+  plugins:
+  - enabled: true
+    name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: true
+    parameters:
+      barmanObjectName: default-s3
+
+  managed:
+    roles:
+    - name: default
+      ensure: present
+      inherit: true
+      connectionLimit: -1
+      login: true
+      superuser: false
+      passwordSecret:
+        name: postgres-default-user
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: postgres-default
+  namespace: default
+spec:
+  cluster:
+    name: default
+  name: default
+  owner: default
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres
+  namespace: default
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: default
+  podMetricsEndpoints:
+  - port: metrics
+---
+# Reuses the shared volsync restic repo S3 credentials (same MinIO/S3 endpoint
+# at vmubthh01.s.nickv.me).  The cnpg-default/ prefix in the bucket must exist
+# or be auto-creatable by the configured account.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: barman-s3-creds
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: barman-s3-creds
+    template:
+      type: Opaque
+      data:
+        ACCESS_KEY_ID: "{{ .accessKey }}"
+        ACCESS_SECRET_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: default-s3
+  namespace: default
+spec:
+  configuration:
+    destinationPath: s3://cnpg-default/
+    endpointURL: https://vmubthh01.s.nickv.me
+    s3Credentials:
+      accessKeyId:
+        name: barman-s3-creds
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: barman-s3-creds
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+      jobs: 2
+  retentionPolicy: "30d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: default-daily-backup
+  namespace: default
+spec:
+  schedule: "0 0 5 * * *"
+  backupOwnerReference: self
+  method: plugin
+  cluster:
+    name: default
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
