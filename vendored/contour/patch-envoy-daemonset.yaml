@@ -4,6 +4,13 @@ metadata:
   name: envoy
   namespace: projectcontour
 spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Surge new pods before terminating old ones (zero-downtime). Requires
+      # the envoy listener hostPorts to be removed — see kustomization.yaml.
+      maxUnavailable: 0
+      maxSurge: 2
   template:
     spec:
       containers:
@@ -24,11 +31,6 @@ spec:
           limits:
             cpu: 1000m
             memory: 512Mi
-        ports:
-        - containerPort: 8002
-          hostPort: 8002
-          name: metrics
-          protocol: TCP
       initContainers:
       - name: envoy-initconfig
         resources:

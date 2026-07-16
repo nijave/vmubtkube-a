@@ -9,8 +9,23 @@ patches:
   - path: patch-configmap.yaml
   # Add resource limits to the contour Deployment
   - path: patch-contour-deployment.yaml
-  # Set envoy image (private mirror), resource limits, and metrics hostPort
+  # Set envoy image (private mirror), resource limits, and a surge-based
+  # rolling update (maxSurge with maxUnavailable=0) for zero-downtime rollouts.
   - path: patch-envoy-daemonset.yaml
+  # Drop vestigial envoy listener hostPorts (80/443). They predate the
+  # Calico-BGP LoadBalancer setup: kube-proxy now DNATs the VIP to the pod
+  # containerPort, and hostPorts block DaemonSet maxSurge (two pods can't
+  # bind the same node port during overlap). Metrics (:8002) are scraped via
+  # the containerPort, so that hostPort (formerly added above) is gone too.
+  - target:
+      kind: DaemonSet
+      name: envoy
+      namespace: projectcontour
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/1/ports/0/hostPort
+      - op: remove
+        path: /spec/template/spec/containers/1/ports/1/hostPort
   # Change the upstream envoy Service from LoadBalancer to ClusterIP
   # (external traffic uses the separate envoy-lb Service instead)
   - target:
