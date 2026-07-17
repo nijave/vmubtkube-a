@@ -1,0 +1,102 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vikunja-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - ApplyOutOfSyncOnly=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
+  source:
+    # OCI chart published from the official go-vikunja/helm-chart repo.
+    repoURL: ghcr.io/go-vikunja/helm-chart
+    chart: vikunja
+    targetRevision: 1.0.0
+    helm:
+      releaseName: vikunja
+      valuesObject:
+        # Postgres is provided by the shared cnpg `default` cluster (see the
+        # postgres-vikunja-user Secret, vikunja managed role, and vikunja
+        # Database in cluster.default.yaml). Redis is only needed for
+        # multi-replica deployments and typesense (full-text search) is
+        # optional, so all three bundled subcharts stay off.
+        postgresql:
+          enabled: false
+        redis:
+          enabled: false
+        typesense:
+          enabled: false
+        vikunja:
+          image:
+            # The upstream image (docker.io/vikunja/vikunja) is mirrored to
+            # registry.apps.nickv.me like other Docker Hub images in this repo;
+            # registryAliases maps registry.apps.nickv.me -> index.docker.io so
+            # Renovate and .ci/mirror-images.sh resolve the upstream.
+            #
+            # This bjw-s chart renders <repository>:<tag> and ignores the
+            # `registry` key, so `repository` carries the full mirror path.
+            # `registry`+`tag` duplicate it because mirror-images.sh only
+            # extracts sibling registry/tag keys and Renovate's regex manager
+            # keys off them too.
+            repository: registry.apps.nickv.me/vikunja/vikunja
+            # renovate: datasource=docker depName=vikunja/vikunja
+            registry: registry.apps.nickv.me/vikunja/vikunja
+            tag: "0.24.6"
+          # This cluster routes through Contour HTTPProxy, not the chart's
+          # nginx-oriented Ingress. Expose vikunja separately (and set
+          # service.publicurl in the api-config below) when adding routing.
+          ingress:
+            main:
+              enabled: false
+          persistence:
+            # Holds task attachments, avatars, project backgrounds and data
+            # exports — required even with an external database.
+            data:
+              enabled: true
+              accessMode: ReadWriteOnce
+              size: 5Gi
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          configMaps:
+            api-config:
+              enabled: true
+              data:
+                config.yml: |
+                  # https://vikunja.io/docs/config-options/
+                  service:
+                    # Set to the public URL once vikunja is exposed via an
+                    # HTTPProxy (e.g. https://vikunja.apps.somemissing.info).
+                    publicurl:
+          env:
+            VIKUNJA_DATABASE_TYPE: postgres
+            VIKUNJA_DATABASE_HOST: default-rw.default.svc.cluster.local
+            VIKUNJA_DATABASE_USER: vikunja
+            VIKUNJA_DATABASE_NAME: vikunja
+            # In-cluster traffic to cnpg is plaintext.
+            VIKUNJA_DATABASE_SSLMODE: disable
+            VIKUNJA_DATABASE_PASSWORD:
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-vikunja-user
+                  key: password
