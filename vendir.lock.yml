@@ -28,10 +28,11 @@ directories:
   path: vendored/contour/base
 - contents:
   - git:
-      commitTitle: 'feat(doppler): include HTTP status in API errors (#6489)...'
-      sha: e215053f3e68504de7483f9542b49f19f98293a1
+      commitTitle: 'fix(oracle): cache default WorkloadIdentity provider to prevent
+        tcp port exhaustion (#6421)...'
+      sha: 2e0f135f739eff1543b0a86cbedf9331756432d5
       tags:
-      - v2.7.0
+      - v2.8.0
     path: .
   path: vendored/external-secrets-crds/base
 - contents:

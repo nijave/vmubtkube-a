@@ -50,7 +50,7 @@ directories:
         # chart. Source the bundled CRDs from git at the tag matching chart 2.7.0.
         git:
           url: https://github.com/external-secrets/external-secrets
-          ref: v2.7.0
+          ref: v2.8.0
         newRootPath: deploy/crds
         includePaths:
           - deploy/crds/bundle.yaml
