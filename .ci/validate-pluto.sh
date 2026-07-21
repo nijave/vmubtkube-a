@@ -56,6 +56,7 @@ echo "=== plain vendored bases (no overlay) ==="
 for base in vendored/*/base; do
   overlay=$(dirname "$base")
   [ -f "$overlay/kustomization.yaml" ] && continue
+  [ -f "$base/Chart.yaml" ] && continue   # Helm chart base; rendered by .ci/validate-helm.sh
   echo "--- $base"
   awk 'FNR==1 && NR>1 {print "---"} {print}' "$base"/*.yaml | $PLUTO
 done

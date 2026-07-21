@@ -88,6 +88,7 @@ echo "=== plain vendored bases (no overlay) ==="
 for base in vendored/*/base; do
   overlay=$(dirname "$base")
   [ -f "$overlay/kustomization.yaml" ] && continue
+  [ -f "$base/Chart.yaml" ] && continue   # Helm chart base; rendered by .ci/validate-helm.sh
   echo "--- $base"
   $KUBECONFORM "$base"/*.yaml
 done
