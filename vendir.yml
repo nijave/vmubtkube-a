@@ -92,3 +92,28 @@ directories:
           tag: v0.9.0
           assetNames: ["high-availability.yaml"]
           disableAutoChecksumValidation: true   # checksums ship in a release asset, not parseable from notes
+
+  # go-vikunja/helm-chart is a thin bjw-s `common` wrapper. OCI publishing
+  # (ghcr.io) stalled at chart 2.0.0, so vendor the chart from git tags to keep
+  # it Renovate-updatable, and vendor the `common` dependency into charts/
+  # alongside it (the chart repo commits only Chart.lock, not charts/) so ArgoCD
+  # renders base/ offline without `helm dependency build`. The Vikunja app
+  # version is pinned via vikunja.image.tag in application.vikunja.yaml, NOT the
+  # chart's appVersion — bump the chart tag and common version together
+  # (Chart.lock pins the common version the chart expects).
+  - path: vendored/vikunja/base
+    contents:
+      - path: .
+        git:
+          url: https://github.com/go-vikunja/helm-chart
+          ref: v2.0.2
+        includePaths:
+          - Chart.yaml
+          - Chart.lock
+          - values.yaml
+          - templates/**
+        excludePaths:
+          # helm-unittest fixtures, not manifests — the chart's .helmignore
+          # strips /templates/tests when packaging; git vendoring bypasses that,
+          # so exclude them here or helm renders a kind-less doc.
+          - templates/tests/**

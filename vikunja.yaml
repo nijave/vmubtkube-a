@@ -1,0 +1,68 @@
+# volsync backup for the vikunja data PVC (task attachments, avatars, project
+# backgrounds and data exports). The chart-rendered PVC is `vikunja-data` in the
+# default namespace; the cnpg database is backed up separately via barman (see
+# cluster.default.yaml). Mirrors the restic-repo + ReplicationSource pattern the
+# other stateful apps use (jellyfin, sonarr, ...).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: restic-repo-vikunja
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        RESTIC_REPOSITORY: s3:https://vmubthh01.s.nickv.me:/volsync-vikunja
+        RESTIC_PASSWORD: "{{ .password }}"
+        AWS_ACCESS_KEY_ID: "{{ .accessKey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: password
+    remoteRef:
+      key: volsync-restic-password-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: vikunja-data
+  namespace: default
+spec:
+  sourcePVC: vikunja-data
+  trigger:
+    schedule: "*/30 * * * *"
+  restic:
+    pruneIntervalDays: 14
+    repository: restic-repo-vikunja
+    cacheCapacity: 1Gi
+    # Match the chart's pod fsGroup so the mover can read the cloned volume.
+    moverSecurityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+    retain:
+      hourly: 6
+      daily: 5
+      weekly: 4
+      monthly: 3
+      yearly: 0
+    copyMethod: Clone

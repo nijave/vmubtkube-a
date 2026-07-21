@@ -9,6 +9,19 @@ metadata:
 stringData:
   username: default
 ---
+# Dedicated role/secret for the vikunja deployment, consumed via
+# VIKUNJA_DATABASE_PASSWORD in application.vikunja.yaml.
+apiVersion: v1
+type: kubernetes.io/basic-auth
+kind: Secret
+metadata:
+  name: postgres-vikunja-user
+  namespace: default
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: vikunja
+---
 apiVersion: v1
 type: kubernetes.io/basic-auth
 kind: Secret
@@ -78,6 +91,14 @@ spec:
       superuser: false
       passwordSecret:
         name: postgres-default-user
+    - name: vikunja
+      ensure: present
+      inherit: true
+      connectionLimit: -1
+      login: true
+      superuser: false
+      passwordSecret:
+        name: postgres-vikunja-user
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
@@ -89,6 +110,17 @@ spec:
     name: default
   name: default
   owner: default
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: postgres-vikunja
+  namespace: default
+spec:
+  cluster:
+    name: default
+  name: vikunja
+  owner: vikunja
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor

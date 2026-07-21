@@ -86,7 +86,26 @@ for f in application.*.yaml; do
   # a multi-doc file emits one fallback per filtered-out document.
   yq "$APP_Q" "$f" > "$WORKDIR/app.yaml"
   chart=$(yq '.spec.source.chart // ""' "$WORKDIR/app.yaml")
-  [ -z "$chart" ] && continue   # git-source app; covered by validate.sh
+  if [ -z "$chart" ]; then
+    # git-source app. If its path is a vendored Helm chart (local Chart.yaml
+    # with its deps built into charts/), render it from disk the way ArgoCD
+    # does; otherwise it's plain manifests, covered by validate.sh.
+    path=$(yq '.spec.source.path // ""' "$WORKDIR/app.yaml")
+    if [ -n "$path" ] && [ -f "$path/Chart.yaml" ]; then
+      release=$(yq '.spec.source.helm.releaseName // .metadata.name' "$WORKDIR/app.yaml")
+      namespace=$(yq '.spec.destination.namespace // "default"' "$WORKDIR/app.yaml")
+      yq '.spec.source.helm.valuesObject // {}' "$WORKDIR/app.yaml" > "$WORKDIR/values.yaml"
+      echo "--- $f (local chart $path)"
+      # shellcheck disable=SC2086
+      helm template "$release" "$path" --namespace "$namespace" \
+        --values "$WORKDIR/values.yaml" --include-crds \
+        --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
+      $KUBECONFORM "$WORKDIR/rendered.yaml"
+      [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
+      rendered=$((rendered + 1))
+    fi
+    continue
+  fi
 
   repo=$(yq '.spec.source.repoURL' "$WORKDIR/app.yaml")
   version=$(yq '.spec.source.targetRevision' "$WORKDIR/app.yaml")
