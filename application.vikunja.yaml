@@ -47,12 +47,24 @@ spec:
             # renovate: datasource=docker depName=vikunja/vikunja
             registry: registry.apps.nickv.me/vikunja/vikunja
             tag: "2.4.0"
-          # This cluster routes through Contour HTTPProxy, not the chart's
-          # nginx-oriented Ingress. Expose vikunja separately (and set
-          # service.publicurl in the config below) when adding routing.
+          # Exposed via an external-dns annotation on the chart's ClusterIP
+          # Service (service.main below) rather than the chart's
+          # nginx-oriented Ingress or a Contour HTTPProxy; the cluster Service
+          # network is LAN-routable, matching the prowlarr/sonarr pattern.
           ingress:
             main:
               enabled: false
+          service:
+            main:
+              # external-dns publishes an A record (vikunja.k8s.somemissing.info)
+              # for the ClusterIP. Front the container's 3456 with port 80 so the
+              # public URL needs no port suffix.
+              annotations:
+                external-dns.alpha.kubernetes.io/hostname: vikunja.k8s.somemissing.info
+              ports:
+                http:
+                  port: 80
+                  targetPort: 3456
           persistence:
             # Holds task attachments, avatars, project backgrounds and data
             # exports — required even with an external database. Backed up via
@@ -77,9 +89,10 @@ spec:
                 config.yml: |
                   # https://vikunja.io/docs/config-options/
                   service:
-                    # Set to the public URL once vikunja is exposed via an
-                    # HTTPProxy (e.g. https://vikunja.apps.somemissing.info).
-                    publicurl:
+                    # Must match the external-dns hostname on service.main above.
+                    # Plain HTTP: traffic reaches the ClusterIP directly with no
+                    # TLS-terminating proxy in front.
+                    publicurl: http://vikunja.k8s.somemissing.info
           env:
             VIKUNJA_DATABASE_TYPE: postgres
             VIKUNJA_DATABASE_HOST: default-rw.default.svc.cluster.local
