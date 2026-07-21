@@ -56,4 +56,12 @@ directories:
       url: https://api.github.com/repos/kubernetes-sigs/metrics-server/releases/353064132
     path: .
   path: vendored/metrics-server/base
+- contents:
+  - git:
+      commitTitle: 'chore: release v2.0.2'
+      sha: 5ddf675726ca29f137b13b11c0a73fe823949adb
+      tags:
+      - v2.0.2
+    path: .
+  path: vendored/vikunja/base
 kind: LockConfig

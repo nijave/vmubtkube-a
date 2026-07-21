@@ -21,6 +21,24 @@ fi
 echo "Running vendir sync..."
 vendir sync
 
+# Vendored Helm charts (git source) ship only Chart.lock, not their dependency
+# charts/ — vendir can't manage the nested charts/ path, and ArgoCD's
+# repo-server can't `helm dependency build` a git source whose dep repo isn't
+# registered. Build the locked deps into charts/ here so ArgoCD renders the
+# vendored chart offline. `dependency build` honors Chart.lock exactly and does
+# not rewrite it, so the tarballs are byte-stable and this stays idempotent.
+for chart_yaml in vendored/*/base/Chart.yaml; do
+  [ -f "$chart_yaml" ] || continue
+  chart_dir=$(dirname "$chart_yaml")
+  [ -f "$chart_dir/Chart.lock" ] || continue
+  yq -r '.dependencies[]?.repository | select(test("^https?://"))' "$chart_yaml" \
+    | sort -u | while read -r url; do
+        helm repo add "dep-$(printf '%s' "$url" | cksum | cut -d' ' -f1)" "$url" >/dev/null 2>&1 || true
+      done
+  echo "Building Helm dependencies for $chart_dir..."
+  helm dependency build "$chart_dir"
+done
+
 if git diff --quiet && git diff --cached --quiet; then
   echo "vendir sync produced no file changes."
   exit 0
