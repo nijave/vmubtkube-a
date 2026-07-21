@@ -25,53 +25,45 @@ spec:
         maxDuration: 3m0s
       limit: 2
   source:
-    # OCI chart published from the official go-vikunja/helm-chart repo.
-    repoURL: ghcr.io/go-vikunja/helm-chart
-    chart: vikunja
-    targetRevision: 1.0.0
+    # go-vikunja/helm-chart vendored from git (v2.0.2) into vendored/vikunja/base
+    # with its bjw-s `common` dependency built into charts/ (see vendir.yml), so
+    # ArgoCD renders it offline. OCI publishing stalled at chart 2.0.0; git tags
+    # stay current. The Vikunja app version is set by vikunja.image.tag below,
+    # not the chart's appVersion.
+    repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    path: vendored/vikunja/base
+    targetRevision: HEAD
     helm:
       releaseName: vikunja
       valuesObject:
-        # Postgres is provided by the shared cnpg `default` cluster (see the
-        # postgres-vikunja-user Secret, vikunja managed role, and vikunja
-        # Database in cluster.default.yaml). Redis is only needed for
-        # multi-replica deployments and typesense (full-text search) is
-        # optional, so all three bundled subcharts stay off.
-        postgresql:
-          enabled: false
-        redis:
-          enabled: false
-        typesense:
-          enabled: false
         vikunja:
           image:
-            # The upstream image (docker.io/vikunja/vikunja) is mirrored to
-            # registry.apps.nickv.me like other Docker Hub images in this repo;
-            # registryAliases maps registry.apps.nickv.me -> index.docker.io so
-            # Renovate and .ci/mirror-images.sh resolve the upstream.
-            #
-            # This bjw-s chart renders <repository>:<tag> and ignores the
-            # `registry` key, so `repository` carries the full mirror path.
-            # `registry`+`tag` duplicate it because mirror-images.sh only
-            # extracts sibling registry/tag keys and Renovate's regex manager
-            # keys off them too.
+            # bjw-s common renders <repository>:<tag> and ignores the `registry`
+            # key, so `repository` carries the full mirror path. The
+            # `registry`+`tag` siblings exist so .ci/mirror-images.sh (which
+            # greps sibling registry/tag maps) and Renovate's regex manager
+            # resolve the upstream docker.io/vikunja/vikunja.
             repository: registry.apps.nickv.me/vikunja/vikunja
             # renovate: datasource=docker depName=vikunja/vikunja
             registry: registry.apps.nickv.me/vikunja/vikunja
-            tag: "0.24.6"
+            tag: "2.4.0"
           # This cluster routes through Contour HTTPProxy, not the chart's
           # nginx-oriented Ingress. Expose vikunja separately (and set
-          # service.publicurl in the api-config below) when adding routing.
+          # service.publicurl in the config below) when adding routing.
           ingress:
             main:
               enabled: false
           persistence:
             # Holds task attachments, avatars, project backgrounds and data
-            # exports — required even with an external database.
+            # exports — required even with an external database. Backed up via
+            # volsync (see vikunja.yaml).
             data:
               enabled: true
               accessMode: ReadWriteOnce
               size: 5Gi
+            # SQLite DB PVC — unused with the external cnpg Postgres wired below.
+            database:
+              enabled: false
           resources:
             requests:
               cpu: 50m
@@ -79,7 +71,7 @@ spec:
             limits:
               memory: 512Mi
           configMaps:
-            api-config:
+            config:
               enabled: true
               data:
                 config.yml: |
