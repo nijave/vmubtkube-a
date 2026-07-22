@@ -105,3 +105,126 @@ spec:
                 secretKeyRef:
                   name: postgres-vikunja-user
                   key: password
+        # One-time (idempotent) bootstrap of the initial user, rendered through
+        # the chart's additionalObjects hook so it stays inside this Application.
+        # The official vikunja image is FROM scratch (no shell), so an
+        # initContainer copies a static (uclibc) busybox into a shared volume and
+        # the main container runs the vikunja CLI under it to check-then-create.
+        # The CLI talks to Postgres directly, so this needs neither the running
+        # server nor the API. Admin is intentionally not set: instance-admin is a
+        # no-op without a Vikunja Pro license (and the set-admin CLI refuses).
+        additionalObjects:
+          # Random password for the bootstrap user. mittwald secret-generator
+          # fills data.password once and never rotates it. Retrieve with:
+          #   kubectl -n default get secret vikunja-bootstrap-nick \
+          #     -o jsonpath='{.data.password}' | base64 -d
+          - apiVersion: v1
+            kind: Secret
+            metadata:
+              name: vikunja-bootstrap-nick
+              namespace: default
+              annotations:
+                secret-generator.v1.mittwald.de/autogenerate: password
+            stringData:
+              username: nick
+          - apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: vikunja-bootstrap-user
+              namespace: default
+              annotations:
+                # Re-run every sync (the script is idempotent). Modelled as a
+                # hook so ArgoCD recreates the immutable Job instead of failing
+                # to patch it; the previous run is removed before the next.
+                argocd.argoproj.io/hook: Sync
+                argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+            spec:
+              backoffLimit: 6
+              ttlSecondsAfterFinished: 86400
+              template:
+                spec:
+                  restartPolicy: OnFailure
+                  securityContext:
+                    runAsUser: 1000
+                    runAsGroup: 1000
+                    fsGroup: 1000
+                  initContainers:
+                    # Static busybox runs inside the scratch vikunja image and
+                    # gives the main container a shell for the check-then-create.
+                    - name: copy-busybox
+                      # renovate: datasource=docker depName=busybox
+                      image: busybox:1.37.0-uclibc
+                      command: [cp, /bin/busybox, /shared/busybox]
+                      volumeMounts:
+                        - name: shared
+                          mountPath: /shared
+                  containers:
+                    - name: bootstrap
+                      # Same image/tag as the Deployment so the migrations the
+                      # CLI runs on startup match the server's schema.
+                      image: "{{ $.Values.vikunja.image.repository }}:{{ $.Values.vikunja.image.tag }}"
+                      command:
+                        - /shared/busybox
+                        - sh
+                        - -c
+                        - |
+                          set -eu
+                          # Exit-code existence gate (0 = found). Deliberately not
+                          # `create ... || true`, which would also swallow real
+                          # failures (DB down, bad creds).
+                          if /app/vikunja/vikunja user list -e nick@venenga.com >/dev/null 2>&1; then
+                            echo "user nick already exists; nothing to do"
+                            exit 0
+                          fi
+                          echo "creating user nick"
+                          /app/vikunja/vikunja user create \
+                            -u nick -e nick@venenga.com -p "$BOOTSTRAP_PASSWORD"
+                      env:
+                        - name: VIKUNJA_DATABASE_TYPE
+                          value: postgres
+                        - name: VIKUNJA_DATABASE_HOST
+                          value: default-rw.default.svc.cluster.local
+                        - name: VIKUNJA_DATABASE_USER
+                          value: vikunja
+                        - name: VIKUNJA_DATABASE_NAME
+                          value: vikunja
+                        - name: VIKUNJA_DATABASE_SSLMODE
+                          value: disable
+                        - name: VIKUNJA_DATABASE_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: postgres-vikunja-user
+                              key: password
+                        # secretKeyRef to the generated password. If mittwald
+                        # hasn't populated it yet the pod waits (retries) rather
+                        # than creating the user with an empty password.
+                        - name: BOOTSTRAP_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: vikunja-bootstrap-nick
+                              key: password
+                      volumeMounts:
+                        - name: shared
+                          mountPath: /shared
+                        # Same config the Deployment mounts. The CLI runs full
+                        # config validation on startup (FullInit), which requires
+                        # service.publicurl; without it both `user list` and
+                        # `user create` abort before touching the database.
+                        - name: config
+                          mountPath: /etc/vikunja/config.yml
+                          subPath: config.yml
+                          readOnly: true
+                        # FullInit also initialises the file-storage handler,
+                        # which must be able to create its basepath. The server
+                        # gets this from its data PVC; give the short-lived Job a
+                        # throwaway writable dir (nothing is actually stored).
+                        - name: files
+                          mountPath: /app/vikunja/files
+                  volumes:
+                    - name: shared
+                      emptyDir: {}
+                    - name: config
+                      configMap:
+                        name: vikunja-config
+                    - name: files
+                      emptyDir: {}
