@@ -14,6 +14,9 @@ _SERIALIZATION_OPTIONS = SerializationOptions(strip_string_quotes=True, with_com
 class User:
     key: dict
     ekus: list
+    # Resolved list of {"oid", "value_b64", "critical"} — the shape engine.issue
+    # consumes. Authored in HCL as a name->value_b64 map plus the top-level
+    # `oids` registry; load_config() converts human-readable names to dotted OIDs.
     extra_extensions: list
     devices: list
 
@@ -37,10 +40,40 @@ def _unwrap(value):
     return value
 
 
+def _oid_registry(raw):
+    """Parse the top-level `oids` map: human-readable name -> {oid, critical}."""
+    registry = {}
+    for name, spec in _unwrap(raw.get("oids", {})).items():
+        spec = _unwrap(spec)
+        registry[name] = {"oid": spec["oid"], "critical": bool(spec.get("critical", False))}
+    return registry
+
+
+def _resolve_extensions(ext_map, registry, user):
+    """Convert a user's extra_extensions map (oid-name -> value_b64) into the
+    internal list [{oid, value_b64, critical}] using the OID registry."""
+    ext_map = _unwrap(ext_map)
+    if isinstance(ext_map, list):
+        if ext_map:
+            raise ValueError(f"user {user!r}: extra_extensions must be a map of oid-name -> value_b64")
+        return []
+    resolved = []
+    for oid_name, value_b64 in ext_map.items():
+        if oid_name not in registry:
+            raise ValueError(
+                f"user {user!r} references unknown OID name {oid_name!r}; "
+                f"add it to the top-level `oids` registry"
+            )
+        entry = registry[oid_name]
+        resolved.append({"oid": entry["oid"], "value_b64": value_b64, "critical": entry["critical"]})
+    return resolved
+
+
 def load_config(path: str) -> Config:
     with open(path) as f:
         raw = hcl2.load(f, serialization_options=_SERIALIZATION_OPTIONS)
 
+    registry = _oid_registry(raw)
     users_raw = _unwrap(raw["users"])
     revoked = _unwrap(raw.get("revoked_serials", []))
 
@@ -50,7 +83,7 @@ def load_config(path: str) -> Config:
         users[name] = User(
             key=_unwrap(u["key"]),
             ekus=u.get("ekus", []),
-            extra_extensions=u.get("extra_extensions", []),
+            extra_extensions=_resolve_extensions(u.get("extra_extensions", {}), registry, name),
             devices=u["devices"],
         )
     return Config(users=users, revoked_serials=revoked)
