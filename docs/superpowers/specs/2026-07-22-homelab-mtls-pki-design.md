@@ -34,9 +34,10 @@ A one-shot **Kubernetes Job** runs a container bundling **OpenTofu** + **CFSSL**
 the desired certs, a **reconciler pre-step** computes the concrete per-serial
 plan against current state, CFSSL signs leaves and generates the CRL, OpenSSL
 packages PKCS#12, and the `kubernetes` provider publishes CA / leaf / CRL
-Secrets. OpenTofu state lives in the **`kubernetes` backend** (a Secret). The Job
-runs only when triggered (manual, Argo, or an optional `CronJob`), satisfying the
-"must not run continually" constraint.
+Secrets. OpenTofu state lives in the **`kubernetes` backend** (a Secret). It runs
+only when triggered — an immediate `Job` on config change plus a required
+periodic CRL-refresh `CronJob` (see Trigger) — never as a long-running service,
+satisfying the "must not run continually" constraint.
 
 Rationale for the composition: no native Terraform/OpenTofu provider and no
 in-cluster controller (cert-manager, step-ca, Vault) satisfies *both* arbitrary
