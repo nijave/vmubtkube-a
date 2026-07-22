@@ -64,6 +64,17 @@ spec:
             # SQLite DB PVC — unused with the external cnpg Postgres wired below.
             database:
               enabled: false
+            # cnpg's self-signed cluster CA. Mount only ca.crt — the default-ca
+            # secret also holds the private ca.key.
+            pgca:
+              enabled: true
+              type: secret
+              name: default-ca
+              mountPath: /etc/vikunja/pgca
+              readOnly: true
+              items:
+                - key: ca.crt
+                  path: ca.crt
           resources:
             requests:
               cpu: 50m
@@ -85,8 +96,8 @@ spec:
             VIKUNJA_DATABASE_HOST: default-rw.default.svc.cluster.local
             VIKUNJA_DATABASE_USER: vikunja
             VIKUNJA_DATABASE_NAME: vikunja
-            # In-cluster traffic to cnpg is plaintext.
-            VIKUNJA_DATABASE_SSLMODE: disable
+            VIKUNJA_DATABASE_SSLMODE: verify-full
+            VIKUNJA_DATABASE_SSLROOTCERT: /etc/vikunja/pgca/ca.crt
             VIKUNJA_DATABASE_PASSWORD:
               valueFrom:
                 secretKeyRef:
