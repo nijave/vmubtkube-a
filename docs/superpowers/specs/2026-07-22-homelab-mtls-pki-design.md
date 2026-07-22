@@ -91,7 +91,7 @@ Secret writes.
 | CA key source | Loaded once into the same secret backend, surfaced to the Job via ExternalSecret → mounted Secret. Never in git. |
 | CRL distribution | Job **publishes the CRL back into the `default` `ClusterSecretStore`** (key `crl-ha.apps.somemissing.info`); each consuming namespace pulls it via its own `ExternalSecret` at **`refreshInterval: 15s`** (fast poll is trivial — all in-cluster) — mirroring CA-cert distribution. |
 | Namespaces | Job + state + per-device Secrets in `homelab-pki`; CRL pulled via `ExternalSecret` in both `default` (for the HA `HTTPProxy`) and `projectcontour` (for `python-envoy-authz`) |
-| Observability | OpenTofu native OTel traces (**≥1.11**) + wrapper spans; OTLP → collector → HyperDX/ClickHouse. See Observability. |
+| Observability | OpenTofu native OTel traces (**≥1.11**) + wrapper spans; OTLP **direct to `otel-collector.k8s.somemissing.info:4317`** (central, TLS) → HyperDX/ClickHouse. No namespaced collector. See Observability. |
 
 ### Provider cache cleanup
 
@@ -356,6 +356,15 @@ never run concurrently.
 Every reconciler run (config-change Job and CRL-refresh CronJob) emits a trace so
 that issuance, revocation, and CRL regeneration are visible in HyperDX/ClickHouse.
 
+> **Phasing — separate post-MVP commit.** Tracing is **not** part of the MVP. The
+> MVP (CA import, issuance, CRL, Secrets, consumption/wiring, dual triggers) ships
+> first and is verified working. Tracing lands afterward in its **own commit**,
+> which contains: the OTel env vars on the Job/CronJob, the wrapper-span
+> entrypoint, the central-collector `tail_sampling` policy change
+> (`application.otel-collector.yaml`), and the clarifying comment on
+> `application.otel-collector-contour.yaml`. None of those collector edits are
+> made until the MVP is done.
+
 ### What is instrumented
 
 - **OpenTofu native tracing** (experimental, **OpenTofu ≥ 1.11** — 1.10 covered
@@ -364,10 +373,11 @@ that issuance, revocation, and CRL regeneration are visible in HyperDX/ClickHous
 
   ```
   OTEL_TRACES_EXPORTER=otlp
-  OTEL_EXPORTER_OTLP_ENDPOINT=<collector OTLP endpoint>
-  OTEL_SERVICE_NAME=opentofu-pki
-  OTEL_RESOURCE_ATTRIBUTES=service.namespace=homelab-pki
-  # OTEL_EXPORTER_OTLP_INSECURE / protocol set to match the collector below
+  OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.k8s.somemissing.info:4317
+  # Do NOT set OTEL_SERVICE_NAME — leave OpenTofu's default service.name so one
+  # collector policy can match *all* tofu runs by instrumentation scope (below).
+  # Identify this specific run with resource attributes instead:
+  OTEL_RESOURCE_ATTRIBUTES=service.namespace=homelab-pki,tofu.project=homelab-pki
   ```
 
   OpenTofu samples 100% at source when enabled (no source-side sampling knob).
@@ -378,31 +388,67 @@ that issuance, revocation, and CRL regeneration are visible in HyperDX/ClickHous
   the shell-out steps nest under it (via `otel-cli` or a small SDK helper). Result:
   one trace per run, root `pki-run` → child spans per phase.
 
-### Collector routing (repo pattern)
+### Collector routing (connect directly to the central collector)
 
-Follows the existing per-component collector pattern (`otel-collector-contour`):
-a namespaced **`otel-collector`** (opentelemetry-collector Helm chart, `deployment`
-mode, pinned to the repo's current `0.165.0`) runs in `homelab-pki`, receives OTLP
-gRPC on `:4317`, and forwards to the central gateway
-(`otel-collector.k8s.somemissing.info:4317`), which tail-samples and exports to
-`hyperdx-otel-collector.hyperdx:4317`. The Job points
-`OTEL_EXPORTER_OTLP_ENDPOINT` at the in-namespace collector.
+The Job/CronJob exports OTLP **directly to the central collector**,
+`otel-collector.k8s.somemissing.info:4317` (TLS; the collector serves a
+cert-manager cert for that hostname). This is the repo's standard pattern — Argo
+CD, Grafana/kube-prometheus, Thanos, and prometheus-ext all point straight at
+`otel-collector.k8s.somemissing.info:4317`. The central collector tail-samples
+and exports to `hyperdx-otel-collector.hyperdx:4317`.
 
-> **Tradeoff flagged:** a namespaced collector is an always-on Deployment, which
-> is heavier than needed for an infrequent Job. The lighter alternative is to
-> point the Job's OTLP exporter **directly** at the central collector
-> (`otel-collector.monitoring:4317`, TLS) and add no new always-on component.
-> Decide during planning; default to the pattern-consistent namespaced collector
-> unless the always-on cost is unwanted.
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.k8s.somemissing.info:4317
+# TLS verifies against the cluster/public trust for that hostname — not insecure.
+```
 
-### Central tail-sampling must keep these traces
+**No namespaced collector.** The `otel-collector-contour` collector in
+`projectcontour` is **not** the general pattern — it exists solely because
+Contour wires Envoy tracing through a Contour **`ExtensionService`**
+(`contour-tracing.yaml`), which can only target a local in-cluster Service over
+h2c and cannot point at the TLS central endpoint directly. It bounces traces to
+`otel-collector.k8s.somemissing.info:4317`. That limitation does not apply here:
+a plain workload setting `OTEL_EXPORTER_OTLP_ENDPOINT` connects directly, so this
+project adds **no** always-on collector Deployment.
+
+### Central tail-sampling — keep all OpenTofu traces (scope-based)
 
 The central collector's `tail_sampling` keeps errors and
-`service.name == "claude-code"`, else **1% probabilistic**. PKI runs are
-infrequent but important, so at 1% they would almost always be dropped unless
-they error. **Add a keep-policy for `service.name == "opentofu-pki"`** (mirroring
-the existing `claude-code` OTTL policy) in `application.otel-collector.yaml`.
-This edit is part of the implementation, not optional.
+`service.name == "claude-code"`, else **1% probabilistic**. Tofu runs are
+infrequent but important, so at 1% they would usually be dropped.
+
+**Scope the keep-policy to *any* OpenTofu run anywhere, not to this PKI service.**
+Match the OpenTofu **instrumentation scope** rather than a bespoke `service.name`,
+so every present and future tofu run is retained without per-deployment
+coordination:
+
+```yaml
+# application.otel-collector.yaml — new tail_sampling policy (post-MVP commit)
+- name: opentofu
+  type: ottl_condition
+  ottl_condition:
+    error_mode: ignore
+    span:
+      # Exact scope string TBD — confirm from a real trace before committing.
+      - 'IsMatch(instrumentation_scope.name, ".*opentofu.*")'
+```
+
+`tail_sampling` decides per-trace, so any span carrying the OpenTofu scope keeps
+the whole trace (including the `pki-run` wrapper spans that share the trace id).
+The PKI run is then found in HyperDX by filtering on the
+`service.namespace=homelab-pki` / `tofu.project=homelab-pki` resource attributes.
+
+**Best-practice notes / caveats:**
+- OTel *does* recommend an explicit `service.name` (the SDK default is
+  `unknown_service`), so leaving it default is a deliberate trade to get one
+  global tofu policy. Matching the scope (the producing library) rather than
+  `service.name` keeps that policy correct regardless of service naming.
+- **Confirm the exact OpenTofu instrumentation-scope name from a real trace**
+  before pinning the regex — do not guess it into production.
+- If scope-matching proves unreliable, the fallback is a shared convention:
+  set the same `OTEL_SERVICE_NAME` (e.g. `opentofu`) on *all* tofu deployments
+  and match that — more OTel-idiomatic, but requires enforcing the convention
+  everywhere. Prefer scope-based unless it doesn't work.
 
 ---
 
@@ -427,9 +473,11 @@ This edit is part of the implementation, not optional.
   config-hash Job); an unchanged config does not re-run; CronJob and config Job
   never run concurrently (`Forbid`).
 - Manifest validation: `.ci/validate.sh` (kubeconform) on all rendered YAML.
-- Tracing: a run produces one trace (root `pki-run` + phase spans) visible in
-  HyperDX; confirm the `service.name == "opentofu-pki"` tail-sampling policy
-  keeps it (not dropped by the 1% sampler).
+- Tracing (post-MVP): a run produces one trace (root `pki-run` + phase spans)
+  visible in HyperDX, filterable by `service.namespace=homelab-pki`; confirm the
+  scope-based `opentofu` tail-sampling policy keeps 100% of tofu traces (not
+  dropped by the 1% sampler), and that the pinned instrumentation-scope regex was
+  verified against a real trace.
 
 ---
 
@@ -439,7 +487,4 @@ This edit is part of the implementation, not optional.
   manual load vs. a bootstrap path).
 - Whether the optional plugin-cache PV is provisioned now or deferred.
 - PKCS#12 passphrase source (keep literal default vs. per-user secret).
-- Trace collector path: namespaced `otel-collector` in `homelab-pki` (pattern-
-  consistent, always-on) vs. direct-to-central `otel-collector.monitoring`
-  (lighter, no new Deployment).
 - OpenTofu version pin (≥1.11 for provider-call span coverage).
