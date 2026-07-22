@@ -62,6 +62,9 @@ Secret writes.
   (`clientValidation.crlSecret`) and the `python-envoy-authz` ext_authz service.
 - In this repo: the manifest-side wiring for python-envoy-authz (its
   `ExternalSecret` + CRL env/volume + `reloader` annotation).
+- **OpenTelemetry tracing** of each reconciler run (OpenTofu native traces +
+  wrapper spans for the cfssl/openssl/reconcile phases) exported to HyperDX /
+  ClickHouse via the repo's collector pattern.
 
 **Out of scope**
 
@@ -78,15 +81,16 @@ Secret writes.
 
 | Concern | Decision |
 |---|---|
-| Delivery vehicle | One-shot **Kubernetes Job** (optional `CronJob`, `concurrencyPolicy: Forbid`) |
+| Delivery vehicle | **Immediate one-shot `Job` on config change** (Argo-driven) **and** a **required periodic CRL-refresh `CronJob`** — same image/logic, `concurrencyPolicy: Forbid`. See Trigger + CRL freshness. |
 | Declarative engine | **OpenTofu** running inside the Job container |
 | X.509 engine | **CFSSL** (sign + `gencrl`), **OpenSSL** (PKCS#12 packaging) |
 | Tofu state | **`kubernetes` backend** — state stored in a Secret in-cluster |
 | Provider cache | Optional PV mounted at `TF_PLUGIN_CACHE_DIR`; pruned when pinned provider versions change |
 | CA cert source | Existing `default` `ClusterSecretStore`, key `ca-ha.apps.somemissing.info` |
 | CA key source | Loaded once into the same secret backend, surfaced to the Job via ExternalSecret → mounted Secret. Never in git. |
-| CRL distribution | Job **publishes the CRL back into the `default` `ClusterSecretStore`** (e.g. key `crl-ha.apps.somemissing.info`); each consuming namespace pulls it via its own `ExternalSecret` — mirroring how the CA cert is distributed today. |
+| CRL distribution | Job **publishes the CRL back into the `default` `ClusterSecretStore`** (key `crl-ha.apps.somemissing.info`); each consuming namespace pulls it via its own `ExternalSecret` at **`refreshInterval: 15s`** (fast poll is trivial — all in-cluster) — mirroring CA-cert distribution. |
 | Namespaces | Job + state + per-device Secrets in `homelab-pki`; CRL pulled via `ExternalSecret` in both `default` (for the HA `HTTPProxy`) and `projectcontour` (for `python-envoy-authz`) |
+| Observability | OpenTofu native OTel traces (**≥1.11**) + wrapper spans; OTLP → collector → HyperDX/ClickHouse. See Observability. |
 
 ### Provider cache cleanup
 
@@ -233,9 +237,11 @@ must also honor the CRL. A revoked cert must be rejected in **both** places.
 
 The Job publishes the CRL into the `default` `ClusterSecretStore` under
 `crl-ha.apps.somemissing.info`. Each consuming namespace pulls it with its own
-`ExternalSecret` (as is already done for `ca-ha.apps.somemissing.info` in both
-`default` and `projectcontour`). The tool does not write namespace Secrets
-directly for the CRL.
+`ExternalSecret` at **`refreshInterval: 15s`** (as is already done for
+`ca-ha.apps.somemissing.info` in both `default` and `projectcontour`, but faster
+— the CA cert uses 300s; a 15s poll is trivial since it is all in-cluster). The
+tool does not write namespace Secrets directly for the CRL. The tight poll keeps
+end-to-end revocation latency low (see Reload, latency, and freshness).
 
 ### 1. Envoy TLS layer — HA `HTTPProxy` (`proxy_homeassistant.yaml`)
 
@@ -272,6 +278,39 @@ the "revocation actually blocks a device" guarantee.
 `optionalClientCertificate` stays `true` during migration; flipping to required
 is a follow-up decision once every device is on a new cert.
 
+### Reload, latency, and CRL freshness
+
+- **Envoy hot-reloads the CRL — no restart.** Contour delivers the client
+  validation context (`caSecret` + `crlSecret`) to Envoy over **SDS/xDS** and
+  watches the referenced Secrets; on change it re-renders and pushes the updated
+  validation context, which Envoy applies dynamically. (The Envoy "CRL file
+  hot-reload" caveats — `cp` vs `mv`/inotify races — are about **file-based**
+  `DataSource.filename`; they do **not** apply to Contour's server-pushed SDS.)
+- **Revocation latency chain:** CRL published → `ExternalSecret` poll
+  (**15s**) → k8s Secret updated → Contour watch (near-instant) → Envoy SDS push
+  (near-instant). So a revocation takes effect within ~15s at the TLS layer.
+  `python-envoy-authz` picks up the new CRL when `reloader` restarts it on the
+  same Secret change (also ~15s + rollout), once its source reads the CRL.
+- **Only new handshakes are affected; HA holds a long-lived WebSocket.** CRL is
+  checked at the TLS handshake, so an **already-open** connection is not
+  re-validated. The HA route uses `enableWebsockets: true` and
+  `timeoutPolicy.response: 24h`, so a revoked device with a live session can stay
+  connected until it drops/reconnects. Immediate cutoff would require draining
+  existing connections (e.g. restarting Envoy) — out of scope; noted as a
+  known limitation.
+- **CRL freshness is load-bearing (why the CronJob is required).** Envoy fails
+  verification once the CRL's `nextUpdate` lapses (`CRL has expired`), and that
+  fails **all** client certs from the chain — not just revoked ones. So the
+  periodic CronJob must regenerate the CRL well before `nextUpdate`. Concretely:
+  pick a CRL validity window and a CronJob cadence with comfortable margin (e.g.
+  validity 7d, regenerate daily), so a missed run or two cannot expire the CRL.
+- **Single-level CA → one CRL covers the chain.** Envoy requires a CRL for
+  *every* CA in the trust chain, else all certs from that chain fail. The HA CA
+  is a single self-signed, name-constrained CA that signs leaves directly (one
+  level), so the single CRL suffices. **Assumption to preserve:** do not
+  introduce an intermediate without also CRL-covering it (or setting
+  `crlOnlyVerifyLeafCert: true` on the `HTTPProxy`).
+
 ---
 
 ## Operational flows
@@ -291,10 +330,78 @@ is a follow-up decision once every device is on a new cert.
 
 ## Trigger
 
-Manual Job (kubectl / Argo) by default. Optional `CronJob`
-(`concurrencyPolicy: Forbid`) to refresh the CRL and re-render Secrets on a
-schedule. Concurrency-forbid is the locking story for the `kubernetes` state
-backend in a single-cluster homelab.
+Two triggers, same container image and reconciler logic:
+
+1. **Immediate, on config change (`Job`).** When the HCL config changes in git,
+   Argo CD syncs and runs the reconciler **immediately** — so issuance and
+   revocation take effect as soon as the change lands, not on the next cron tick.
+   Implemented as an Argo **Sync hook** Job, or a Job whose name/annotations carry
+   a **hash of the rendered config** (Jobs are immutable, so a new hash → a new
+   Job created + old pruned; an unchanged hash → no re-run). Manual `kubectl` /
+   Argo re-sync remains available for ad-hoc runs.
+2. **Periodic (`CronJob`), required.** Re-runs the reconciler on a schedule purely
+   to keep the CRL fresh (regenerate before `nextUpdate`; see CRL freshness),
+   independent of whether the config changed.
+
+`concurrencyPolicy: Forbid` on the CronJob and single-active-run enforcement
+(the config-hash Job is naturally singular) are the locking story for the
+`kubernetes` state backend in a single-cluster homelab — the two triggers must
+never run concurrently.
+
+---
+
+## Observability — OpenTelemetry tracing
+
+Every reconciler run (config-change Job and CRL-refresh CronJob) emits a trace so
+that issuance, revocation, and CRL regeneration are visible in HyperDX/ClickHouse.
+
+### What is instrumented
+
+- **OpenTofu native tracing** (experimental, **OpenTofu ≥ 1.11** — 1.10 covered
+  only `init`; 1.11 adds provider gRPC-call spans across plan/apply). Enabled by
+  environment variables on the Job/CronJob:
+
+  ```
+  OTEL_TRACES_EXPORTER=otlp
+  OTEL_EXPORTER_OTLP_ENDPOINT=<collector OTLP endpoint>
+  OTEL_SERVICE_NAME=opentofu-pki
+  OTEL_RESOURCE_ATTRIBUTES=service.namespace=homelab-pki
+  # OTEL_EXPORTER_OTLP_INSECURE / protocol set to match the collector below
+  ```
+
+  OpenTofu samples 100% at source when enabled (no source-side sampling knob).
+
+- **Wrapper spans** for the non-OpenTofu phases (reconciler state read, `cfssl
+  sign`, `cfssl gencrl`, `openssl` PKCS#12, Secret publish). The container
+  entrypoint opens a root `pki-run` span and exports `TRACEPARENT`; OpenTofu and
+  the shell-out steps nest under it (via `otel-cli` or a small SDK helper). Result:
+  one trace per run, root `pki-run` → child spans per phase.
+
+### Collector routing (repo pattern)
+
+Follows the existing per-component collector pattern (`otel-collector-contour`):
+a namespaced **`otel-collector`** (opentelemetry-collector Helm chart, `deployment`
+mode, pinned to the repo's current `0.165.0`) runs in `homelab-pki`, receives OTLP
+gRPC on `:4317`, and forwards to the central gateway
+(`otel-collector.k8s.somemissing.info:4317`), which tail-samples and exports to
+`hyperdx-otel-collector.hyperdx:4317`. The Job points
+`OTEL_EXPORTER_OTLP_ENDPOINT` at the in-namespace collector.
+
+> **Tradeoff flagged:** a namespaced collector is an always-on Deployment, which
+> is heavier than needed for an infrequent Job. The lighter alternative is to
+> point the Job's OTLP exporter **directly** at the central collector
+> (`otel-collector.monitoring:4317`, TLS) and add no new always-on component.
+> Decide during planning; default to the pattern-consistent namespaced collector
+> unless the always-on cost is unwanted.
+
+### Central tail-sampling must keep these traces
+
+The central collector's `tail_sampling` keeps errors and
+`service.name == "claude-code"`, else **1% probabilistic**. PKI runs are
+infrequent but important, so at 1% they would almost always be dropped unless
+they error. **Add a keep-policy for `service.name == "opentofu-pki"`** (mirroring
+the existing `claude-code` OTTL policy) in `application.otel-collector.yaml`.
+This edit is part of the implementation, not optional.
 
 ---
 
@@ -308,10 +415,20 @@ backend in a single-cluster homelab.
   `revoked_serials`; a revoked leaf is rejected by a client configured with the
   CRL.
 - End-to-end revocation: revoke a test device's serial, confirm the CRL Secret
-  propagates via `ExternalSecret` to both `default` and `projectcontour`, and
-  confirm a request with the revoked cert is denied — at the Envoy TLS layer and
-  (once the authz source change ships) by `python-envoy-authz`.
+  propagates via `ExternalSecret` (~15s) to both `default` and `projectcontour`,
+  and confirm a request with the revoked cert is denied at the Envoy TLS layer
+  (new handshake) and (once the authz source change ships) by
+  `python-envoy-authz`.
+- CRL freshness: confirm the CronJob regenerates the CRL before `nextUpdate`;
+  verify that an expired CRL fails *all* client auth (negative test) so the
+  freshness margin is understood and monitored.
+- Trigger behavior: a config change produces an immediate reconciler run (new
+  config-hash Job); an unchanged config does not re-run; CronJob and config Job
+  never run concurrently (`Forbid`).
 - Manifest validation: `.ci/validate.sh` (kubeconform) on all rendered YAML.
+- Tracing: a run produces one trace (root `pki-run` + phase spans) visible in
+  HyperDX; confirm the `service.name == "opentofu-pki"` tail-sampling policy
+  keeps it (not dropped by the 1% sampler).
 
 ---
 
@@ -321,3 +438,7 @@ backend in a single-cluster homelab.
   manual load vs. a bootstrap path).
 - Whether the optional plugin-cache PV is provisioned now or deferred.
 - PKCS#12 passphrase source (keep literal default vs. per-user secret).
+- Trace collector path: namespaced `otel-collector` in `homelab-pki` (pattern-
+  consistent, always-on) vs. direct-to-central `otel-collector.monitoring`
+  (lighter, no new Deployment).
+- OpenTofu version pin (≥1.11 for provider-call span coverage).
