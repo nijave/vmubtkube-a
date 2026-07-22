@@ -58,9 +58,10 @@ Secret writes.
   including custom-OID extensions and `clientAuth` EKU.
 - Generate a single **CRL** from a declarative revoked-serials list.
 - Publish CA cert, per-device `.crt`/`.key`/`.p12`, and the CRL as Secrets.
-- Distribute the CRL via the **secret backend** (matching the CA-cert pattern)
-  and enforce it at **both** CRL enforcement points — the HA `HTTPProxy`
-  (`clientValidation.crlSecret`) and the `python-envoy-authz` ext_authz service.
+- Distribute the CRL by an **in-cluster k8s→k8s copy** (external-secrets
+  kubernetes provider) and enforce it at **both** CRL enforcement points — the HA
+  `HTTPProxy` (`clientValidation.crlSecret`) and the `python-envoy-authz`
+  ext_authz service.
 - In this repo: the manifest-side wiring for python-envoy-authz (its
   `ExternalSecret` + CRL env/volume + `reloader` annotation).
 - **OpenTelemetry tracing** of each reconciler run (OpenTofu native traces +
@@ -89,7 +90,7 @@ Secret writes.
 | Provider cache | Optional PV mounted at `TF_PLUGIN_CACHE_DIR`; pruned when pinned provider versions change |
 | CA cert source | Existing `default` `ClusterSecretStore`, key `ca-ha.apps.somemissing.info` |
 | CA key source | Loaded once into the same secret backend, surfaced to the Job via ExternalSecret → mounted Secret. Never in git. |
-| CRL distribution | Job **publishes the CRL back into the `default` `ClusterSecretStore`** (key `crl-ha.apps.somemissing.info`); each consuming namespace pulls it via its own `ExternalSecret` at **`refreshInterval: 15s`** (fast poll is trivial — all in-cluster) — mirroring CA-cert distribution. |
+| CRL distribution | Reconciler writes the `pki-crl` Secret in `homelab-pki`; each consumer namespace **copies it k8s→k8s** via an external-secrets **kubernetes-provider** `SecretStore` (`remoteNamespace: homelab-pki`) + `ExternalSecret` at **`refreshInterval: 15s`** — the same pattern as the `k8s-ca` copy in `clusterissuer.yaml`. **No Bitwarden round-trip** (the CRL originates in-cluster; Bitwarden is only for the CA key). |
 | Namespaces | Job + state + per-device Secrets in `homelab-pki`; CRL pulled via `ExternalSecret` in both `default` (for the HA `HTTPProxy`) and `projectcontour` (for `python-envoy-authz`) |
 | Observability | OpenTofu native OTel traces (**≥1.11**) + wrapper spans; OTLP **direct to `otel-collector.k8s.somemissing.info:4317`** (central, TLS) → HyperDX/ClickHouse. No namespaced collector. See Observability. |
 
@@ -216,8 +217,8 @@ CA, so those constraints are inherited unchanged.
 |---|---|---|---|
 | `<name>-<serial>` (per stored cert) | `homelab-pki` | `tls.crt`, `tls.key`, `<name>.p12` | manual retrieval → device install |
 | CA cert Secret | `default`, `projectcontour` | `ca.crt` | already distributed via `ExternalSecret` from backend key `ca-ha.apps.somemissing.info` |
-| CRL (backend) | `default` `ClusterSecretStore` | key `crl-ha.apps.somemissing.info` | published by the Job |
-| CRL Secret (pulled) | `default`, `projectcontour` | `crl.pem` | `ExternalSecret` → HTTPProxy `clientValidation.crlSecret` and `python-envoy-authz` |
+| CRL (source) | `homelab-pki` | `pki-crl` → `crl.pem` | written by the reconciler (OpenTofu) |
+| CRL (copied) | `default`, `projectcontour` | `pki-crl` → `crl.pem` | k8s→k8s `ExternalSecret` (kubernetes provider) → HTTPProxy `clientValidation.crlSecret` + python-envoy-authz |
 | Tofu state Secret | `homelab-pki` | opaque tofu state | OpenTofu backend |
 
 PKCS#12 passphrase handling (currently the literal `password`) is carried into a
@@ -234,15 +235,18 @@ ext_authz service. That service is already injected with the HA CA cert
 (`HA_CA_CERTIFICATE`) and validates the presented client cert against it, so it
 must also honor the CRL. A revoked cert must be rejected in **both** places.
 
-### Distribution (backend → ExternalSecret, matching the CA cert)
+### Distribution (in-cluster k8s→k8s copy via external-secrets kubernetes provider)
 
-The Job publishes the CRL into the `default` `ClusterSecretStore` under
-`crl-ha.apps.somemissing.info`. Each consuming namespace pulls it with its own
-`ExternalSecret` at **`refreshInterval: 15s`** (as is already done for
-`ca-ha.apps.somemissing.info` in both `default` and `projectcontour`, but faster
-— the CA cert uses 300s; a 15s poll is trivial since it is all in-cluster). The
-tool does not write namespace Secrets directly for the CRL. The tight poll keeps
-end-to-end revocation latency low (see Reload, latency, and freshness).
+The reconciler (OpenTofu) writes the CRL to a `pki-crl` Secret in `homelab-pki`.
+Each consumer namespace copies it **in-cluster** using an external-secrets
+**kubernetes-provider** `SecretStore` (`remoteNamespace: homelab-pki`,
+`auth.serviceAccount`) plus an `ExternalSecret` at `refreshInterval: 15s` — the
+same mechanism the repo already uses to copy `k8s-ca` in `clusterissuer.yaml`.
+The consumer namespace's reader ServiceAccount is granted `get`/`list`/`watch` on
+the `pki-crl` Secret in `homelab-pki` (Role + RoleBinding there). The CRL never
+leaves the cluster — **no Bitwarden round-trip** (Bitwarden is only for the CA
+key, which originates out-of-band). The 15s poll keeps revocation latency low
+(see Reload, latency, and freshness).
 
 ### 1. Envoy TLS layer — HA `HTTPProxy` (`proxy_homeassistant.yaml`)
 
@@ -262,8 +266,9 @@ Rejects a revoked cert *if one is presented* at the edge.
 Manifest-side wiring **in this repo**, mirroring the existing
 `HA_CA_CERTIFICATE` pattern:
 
-- add an `ExternalSecret` in `projectcontour` pulling
-  `crl-ha.apps.somemissing.info` → `crl.pem`;
+- add the k8s→k8s `SecretStore` + `ExternalSecret` in `projectcontour` that
+  copies `pki-crl` from `homelab-pki` (see Distribution) → local `pki-crl`
+  (`crl.pem`);
 - surface it to the Deployment (env `HA_CRL` from the Secret, or a mounted
   volume);
 - the Deployment already has `reloader.stakater.com/auto: "true"`, so a CRL
