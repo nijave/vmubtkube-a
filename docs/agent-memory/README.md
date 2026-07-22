@@ -16,6 +16,7 @@ against the current code and environment.
 - [project argocd root app render deadlock.md](project_argocd_root_app_render_deadlock.md)
 - [project argocd secret recreated migration.md](project_argocd_secret_recreated_migration.md)
 - [project calico breaks ll ntp timesyncd.md](project_calico_breaks_ll_ntp_timesyncd.md)
+- [project coredns link local upstream pod netns.md](project_coredns_link_local_upstream_pod_netns.md)
 - [project democratic csi perf.md](project_democratic_csi_perf.md)
 - [project device udev link info join metric.md](project_device_udev_link_info_join_metric.md)
 - [project gluetun fork.md](project_gluetun_fork.md)
