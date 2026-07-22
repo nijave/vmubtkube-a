@@ -57,14 +57,20 @@ Secret writes.
   including custom-OID extensions and `clientAuth` EKU.
 - Generate a single **CRL** from a declarative revoked-serials list.
 - Publish CA cert, per-device `.crt`/`.key`/`.p12`, and the CRL as Secrets.
-- Wire the CRL into the HA `HTTPProxy` (`clientValidation.crlSecret`).
+- Distribute the CRL via the **secret backend** (matching the CA-cert pattern)
+  and enforce it at **both** CRL enforcement points — the HA `HTTPProxy`
+  (`clientValidation.crlSecret`) and the `python-envoy-authz` ext_authz service.
+- In this repo: the manifest-side wiring for python-envoy-authz (its
+  `ExternalSecret` + CRL env/volume + `reloader` annotation).
 
 **Out of scope**
 
 - Regenerating or re-keying the CA.
 - OCSP (CRL only).
 - Automatic cert distribution onto devices (the `.p12` is retrieved manually).
-- Changing the `python-envoy-authz` authorization extension.
+- The **python-envoy-authz source change** to consume the CRL — that lives in the
+  authz service repo (`registry.apps.nickv.me/nijave/python-envoy-authz`) and is
+  tracked here as a cross-repo dependency (see CRL consumption).
 
 ---
 
@@ -79,7 +85,8 @@ Secret writes.
 | Provider cache | Optional PV mounted at `TF_PLUGIN_CACHE_DIR`; pruned when pinned provider versions change |
 | CA cert source | Existing `default` `ClusterSecretStore`, key `ca-ha.apps.somemissing.info` |
 | CA key source | Loaded once into the same secret backend, surfaced to the Job via ExternalSecret → mounted Secret. Never in git. |
-| Namespaces | Job + state + per-device Secrets in `homelab-pki`; CRL Secret written into `default` (same namespace as the HA `HTTPProxy`) |
+| CRL distribution | Job **publishes the CRL back into the `default` `ClusterSecretStore`** (e.g. key `crl-ha.apps.somemissing.info`); each consuming namespace pulls it via its own `ExternalSecret` — mirroring how the CA cert is distributed today. |
+| Namespaces | Job + state + per-device Secrets in `homelab-pki`; CRL pulled via `ExternalSecret` in both `default` (for the HA `HTTPProxy`) and `projectcontour` (for `python-envoy-authz`) |
 
 ### Provider cache cleanup
 
@@ -203,8 +210,9 @@ CA, so those constraints are inherited unchanged.
 | Secret | Namespace | Contents | Consumer |
 |---|---|---|---|
 | `<name>-<serial>` (per stored cert) | `homelab-pki` | `tls.crt`, `tls.key`, `<name>.p12` | manual retrieval → device install |
-| CA cert Secret | as needed | `ca.crt` | already present in `default` for `HTTPProxy` |
-| CRL Secret | `default` | `crl.pem` | Contour `clientValidation.crlSecret` |
+| CA cert Secret | `default`, `projectcontour` | `ca.crt` | already distributed via `ExternalSecret` from backend key `ca-ha.apps.somemissing.info` |
+| CRL (backend) | `default` `ClusterSecretStore` | key `crl-ha.apps.somemissing.info` | published by the Job |
+| CRL Secret (pulled) | `default`, `projectcontour` | `crl.pem` | `ExternalSecret` → HTTPProxy `clientValidation.crlSecret` and `python-envoy-authz` |
 | Tofu state Secret | `homelab-pki` | opaque tofu state | OpenTofu backend |
 
 PKCS#12 passphrase handling (currently the literal `password`) is carried into a
@@ -214,17 +222,52 @@ Secret/config value rather than hard-coded; default preserved for compatibility.
 
 ## CRL consumption
 
-Update the HA `HTTPProxy` (`proxy_homeassistant.yaml`) client validation to add
-the CRL:
+There are **two enforcement points**, because the HA `HTTPProxy` runs
+`optionalClientCertificate: true` — Envoy does not *require* a client cert at the
+TLS layer, so the real allow/deny decision is made by the `python-envoy-authz`
+ext_authz service. That service is already injected with the HA CA cert
+(`HA_CA_CERTIFICATE`) and validates the presented client cert against it, so it
+must also honor the CRL. A revoked cert must be rejected in **both** places.
+
+### Distribution (backend → ExternalSecret, matching the CA cert)
+
+The Job publishes the CRL into the `default` `ClusterSecretStore` under
+`crl-ha.apps.somemissing.info`. Each consuming namespace pulls it with its own
+`ExternalSecret` (as is already done for `ca-ha.apps.somemissing.info` in both
+`default` and `projectcontour`). The tool does not write namespace Secrets
+directly for the CRL.
+
+### 1. Envoy TLS layer — HA `HTTPProxy` (`proxy_homeassistant.yaml`)
 
 ```yaml
 tls:
   secretName: ha-apps-somemissing-info-tls
   clientValidation:
     caSecret: ca-ha-homelab-somemissing-info-tls
-    crlSecret: <crl-secret>          # new
-    optionalClientCertificate: true  # revisit: flip to required once migration done
+    crlSecret: crl-ha-homelab-somemissing-info   # new; from ExternalSecret in default
+    optionalClientCertificate: true              # revisit: flip to required post-migration
 ```
+
+Rejects a revoked cert *if one is presented* at the edge.
+
+### 2. Authorization layer — `python-envoy-authz` (`python-envoy-authz.yaml`)
+
+Manifest-side wiring **in this repo**, mirroring the existing
+`HA_CA_CERTIFICATE` pattern:
+
+- add an `ExternalSecret` in `projectcontour` pulling
+  `crl-ha.apps.somemissing.info` → `crl.pem`;
+- surface it to the Deployment (env `HA_CRL` from the Secret, or a mounted
+  volume);
+- the Deployment already has `reloader.stakater.com/auto: "true"`, so a CRL
+  update triggers a rollout.
+
+**Cross-repo dependency (out of this repo):** the `python-envoy-authz` source
+(`registry.apps.nickv.me/nijave/python-envoy-authz`) must be changed to load the
+CRL and deny when the presented client cert's serial is listed. Until that ships,
+enforcement point #2 is inert and only the Envoy TLS layer honors the CRL — which
+is insufficient under `optionalClientCertificate: true`. This dependency gates
+the "revocation actually blocks a device" guarantee.
 
 `optionalClientCertificate` stays `true` during migration; flipping to required
 is a follow-up decision once every device is on a new cert.
@@ -264,6 +307,10 @@ backend in a single-cluster homelab.
 - CRL validation: `openssl crl -in crl.pem -noout -text` shows exactly
   `revoked_serials`; a revoked leaf is rejected by a client configured with the
   CRL.
+- End-to-end revocation: revoke a test device's serial, confirm the CRL Secret
+  propagates via `ExternalSecret` to both `default` and `projectcontour`, and
+  confirm a request with the revoked cert is denied — at the Envoy TLS layer and
+  (once the authz source change ships) by `python-envoy-authz`.
 - Manifest validation: `.ci/validate.sh` (kubeconform) on all rendered YAML.
 
 ---
