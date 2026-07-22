@@ -374,9 +374,12 @@ that issuance, revocation, and CRL regeneration are visible in HyperDX/ClickHous
   ```
   OTEL_TRACES_EXPORTER=otlp
   OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.k8s.somemissing.info:4317
-  # Do NOT set OTEL_SERVICE_NAME — leave OpenTofu's default service.name so one
-  # collector policy can match *all* tofu runs by instrumentation scope (below).
-  # Identify this specific run with resource attributes instead:
+  # Set service.name explicitly to OpenTofu's canonical value "opentofu"
+  # (OpenTofu hardcodes no default — unset would fall to the SDK's
+  # "unknown_service:tofu"; OpenTofu's own docs use OTEL_SERVICE_NAME=opentofu).
+  # Every tofu run should use this same value, so one collector policy matches
+  # them all. Identify THIS run via resource attributes:
+  OTEL_SERVICE_NAME=opentofu
   OTEL_RESOURCE_ATTRIBUTES=service.namespace=homelab-pki,tofu.project=homelab-pki
   ```
 
@@ -411,16 +414,14 @@ h2c and cannot point at the TLS central endpoint directly. It bounces traces to
 a plain workload setting `OTEL_EXPORTER_OTLP_ENDPOINT` connects directly, so this
 project adds **no** always-on collector Deployment.
 
-### Central tail-sampling — keep all OpenTofu traces (scope-based)
+### Central tail-sampling — keep all OpenTofu traces (`service.name == "opentofu"`)
 
 The central collector's `tail_sampling` keeps errors and
 `service.name == "claude-code"`, else **1% probabilistic**. Tofu runs are
 infrequent but important, so at 1% they would usually be dropped.
 
-**Scope the keep-policy to *any* OpenTofu run anywhere, not to this PKI service.**
-Match the OpenTofu **instrumentation scope** rather than a bespoke `service.name`,
-so every present and future tofu run is retained without per-deployment
-coordination:
+**Keep the policy scoped to *any* OpenTofu run anywhere, by matching the shared
+`service.name == "opentofu"`** (mirroring the existing `claude-code` OTTL policy):
 
 ```yaml
 # application.otel-collector.yaml — new tail_sampling policy (post-MVP commit)
@@ -429,26 +430,23 @@ coordination:
   ottl_condition:
     error_mode: ignore
     span:
-      # Exact scope string TBD — confirm from a real trace before committing.
-      - 'IsMatch(instrumentation_scope.name, ".*opentofu.*")'
+      - 'resource.attributes["service.name"] == "opentofu"'
 ```
 
-`tail_sampling` decides per-trace, so any span carrying the OpenTofu scope keeps
+`tail_sampling` decides per-trace, so any span with `service.name=opentofu` keeps
 the whole trace (including the `pki-run` wrapper spans that share the trace id).
 The PKI run is then found in HyperDX by filtering on the
 `service.namespace=homelab-pki` / `tofu.project=homelab-pki` resource attributes.
 
-**Best-practice notes / caveats:**
-- OTel *does* recommend an explicit `service.name` (the SDK default is
-  `unknown_service`), so leaving it default is a deliberate trade to get one
-  global tofu policy. Matching the scope (the producing library) rather than
-  `service.name` keeps that policy correct regardless of service naming.
-- **Confirm the exact OpenTofu instrumentation-scope name from a real trace**
-  before pinning the regex — do not guess it into production.
-- If scope-matching proves unreliable, the fallback is a shared convention:
-  set the same `OTEL_SERVICE_NAME` (e.g. `opentofu`) on *all* tofu deployments
-  and match that — more OTel-idiomatic, but requires enforcing the convention
-  everywhere. Prefer scope-based unless it doesn't work.
+**Notes:**
+- This is OTel-idiomatic: `service.name` is set explicitly (not left at the SDK's
+  `unknown_service:tofu`), to OpenTofu's own documented value `opentofu`.
+- It depends on the convention that **every** tofu run sets
+  `OTEL_SERVICE_NAME=opentofu`. This project does; any future tofu workload
+  should too, so the single policy keeps catching them.
+- The wrapper `pki-run` spans (from `otel-cli`/SDK) may carry their own
+  `service.name`; that is fine — the per-trace keep decision only needs the tofu
+  spans to match.
 
 ---
 
@@ -475,9 +473,8 @@ The PKI run is then found in HyperDX by filtering on the
 - Manifest validation: `.ci/validate.sh` (kubeconform) on all rendered YAML.
 - Tracing (post-MVP): a run produces one trace (root `pki-run` + phase spans)
   visible in HyperDX, filterable by `service.namespace=homelab-pki`; confirm the
-  scope-based `opentofu` tail-sampling policy keeps 100% of tofu traces (not
-  dropped by the 1% sampler), and that the pinned instrumentation-scope regex was
-  verified against a real trace.
+  `service.name == "opentofu"` tail-sampling policy keeps 100% of tofu traces
+  (not dropped by the 1% sampler).
 
 ---
 
