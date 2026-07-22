@@ -40,7 +40,7 @@ def main():
         u = users_by_name[name]
         return engine.issue(name, serial, ca_cert, ca_key,
                             key_algo=u.key["algorithm"], key_size=u.key["size"],
-                            ekus=tuple(u.ekus), extra_extensions=tuple(u.extra_extensions))
+                            ekus=tuple(u.ekus), identity=u.identity)
     def kept(name, serial):
         return state.read_bundle(name, serial, ns, v1)
     crl = engine.gen_crl(cfg.revoked_serials, ca_cert, ca_key)

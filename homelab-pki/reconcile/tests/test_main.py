@@ -1,6 +1,6 @@
 # homelab-pki/reconcile/tests/test_main.py
 import base64
-from reconcile.config import Config, User
+from reconcile.config import Config, User, Identity
 from reconcile.plan import reconcile
 from reconcile.main import build_tfvars
 from reconcile.engine import CertBundle
@@ -9,7 +9,7 @@ def _bundle(tag): return CertBundle(key_pem=b"K"+tag, cert_pem=b"C"+tag, p12=b"P
 
 def test_build_tfvars_creates_and_keeps():
     cfg = Config(users={"nick": User(key={"algorithm":"RSA","size":2048}, ekus=["clientAuth"],
-                                     extra_extensions=[], devices=["nick-desktop","nick-desktop"])},
+                                     identity=Identity(), devices=["nick-desktop","nick-desktop"])},
                  revoked_serials=["0x9999"])
     existing = {"nick-desktop": ["2001"]}
     # keep 2001, create 1 new: next_serial after existing max 0x2001 (floor 0x2000) is 0x2002.

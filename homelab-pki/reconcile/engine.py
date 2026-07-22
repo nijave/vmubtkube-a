@@ -22,60 +22,96 @@ def _run(cmd, **kw):
 
 
 def _profile_expiry_days(cfg_path, profile="client"):
-    """Read the cfssl signing profile's expiry (e.g. "175320h") so the final,
-    explicitly-serialed cert (see `issue`) gets the same lifetime cfssl would
-    have given it, without duplicating the value as a separate constant."""
+    """Read the cfssl signing profile's expiry (e.g. "175320h") for the leaf
+    lifetime, so the value lives in one place (ca-config.json) rather than a
+    duplicated constant. (cfssl itself is now used only for gen_crl.)"""
     with open(cfg_path) as f:
         cfg = json.load(f)
     expiry = cfg["signing"]["profiles"][profile]["expiry"]
     m = re.match(r"^(\d+)h$", expiry)
     if not m:
         raise ValueError(f"unsupported cfssl profile expiry format (want '<N>h'): {expiry!r}")
-    hours = int(m.group(1))
-    return max(1, hours // 24)
+    return max(1, int(m.group(1)) // 24)
+
+
+def _dn(name, domain, identity):
+    """openssl req config building the leaf subject DN from the identity. Field
+    names mirror python-envoy-authz's ClientIdentity; displayName is registered
+    via oid_section since openssl has no built-in short name for it."""
+    cn = getattr(identity, "common_name", None) or f"{name}.{domain}"
+    lines = [f"CN = {cn}"]
+
+    def add(field, attr):
+        val = getattr(identity, attr, None) if identity else None
+        if val:
+            lines.append(f"{field} = {val}")
+
+    add("UID", "uid")                 # 0.9.2342.19200300.100.1.1
+    # openssl has no built-in short name for displayName in this build; the
+    # `OID.<dotted>` form is the portable way to put an arbitrary OID in the DN.
+    add("OID.2.16.840.1.113730.3.1.241", "display_name")  # displayName
+    add("GN", "given_name")           # 2.5.4.42
+    add("SN", "surname")              # 2.5.4.4
+    add("O", "organization")          # 2.5.4.10
+    ous = (getattr(identity, "organizational_units", None) or []) if identity else []
+    for i, ou in enumerate(ou for ou in ous if ou):
+        lines.append(f"{i}.OU = {ou}")  # 2.5.4.11 (numbered so keys stay unique)
+
+    return (
+        "[req]\nprompt = no\ndistinguished_name = dn\n"
+        "string_mask = utf8only\nutf8 = yes\n"
+        "[dn]\n" + "\n".join(lines) + "\n"
+    )
+
+
+def _ext(name, domain, ekus, identity):
+    """openssl x509 extension file: leaf key usage/EKU/basic constraints plus a
+    SAN with the device DNS name and the identity's rfc822Name email(s)."""
+    eku = ", ".join(ekus) if ekus else "clientAuth"
+    san = [f"DNS.1 = {name}.{domain}"]
+    emails = []
+    if identity:
+        if getattr(identity, "primary_email", None):
+            emails.append(identity.primary_email)
+        emails += [e for e in (getattr(identity, "additional_email_addresses", None) or []) if e]
+    for i, email in enumerate(emails, start=1):
+        san.append(f"email.{i} = {email}")
+    return (
+        "[e]\n"
+        "basicConstraints = critical, CA:FALSE\n"
+        "keyUsage = critical, digitalSignature, keyEncipherment\n"
+        f"extendedKeyUsage = {eku}\n"
+        "subjectKeyIdentifier = hash\n"
+        "authorityKeyIdentifier = keyid, issuer\n"
+        "subjectAltName = @alt\n"
+        "[alt]\n" + "\n".join(san) + "\n"
+    )
 
 
 def issue(name, serial_hex, ca_cert, ca_key, key_algo="RSA", key_size=2048,
-          ekus=("clientAuth",), extra_extensions=(), domain=DOMAIN, p12_password="password"):
-    cn = f"{name}.{domain}"
+          ekus=("clientAuth",), identity=None, domain=DOMAIN, p12_password="password"):
     with tempfile.TemporaryDirectory() as d:
-        key = os.path.join(d, "k.pem"); csr = os.path.join(d, "c.csr")
+        key = os.path.join(d, "k.pem")
+        csr = os.path.join(d, "c.csr")
         _run(["openssl", "genrsa", "-out", key, str(key_size)])
-        # CSR carries SAN + any custom-OID extensions (copied by cfssl copy_extensions).
-        ext = [f"subjectAltName=DNS:{cn}"]
-        for e in extra_extensions:
-            crit = "critical," if e.get("critical") else ""
-            # value is plain ASCII; OpenSSL's ASN1 generator encodes it as a
-            # UTF8String and wraps it in the extension's OCTET STRING. Numeric
-            # OIDs are accepted directly as the extension name.
-            ext.append(f"{e['oid']}={crit}ASN1:UTF8String:{e['value']}")
-        cnf = os.path.join(d, "csr.cnf")
-        with open(cnf, "w") as f:
-            f.write("[req]\ndistinguished_name=dn\nreq_extensions=e\n[dn]\n[e]\n" + "\n".join(ext) + "\n")
-        _run(["openssl", "req", "-new", "-key", key, "-subj", f"/CN={cn}", "-config", cnf, "-out", csr])
 
-        # cfssl's "client" profile stamps the correct extensions (keyUsage,
-        # clientAuth EKU, basicConstraints CA:FALSE, and copies the CSR's SAN/
-        # extra extensions), but `cfssl sign` has no CLI flag for an explicit
-        # certificate serial number -- verified against cfssl 1.6.5: the CLI's
-        # SignRequest never populates the library-only `Serial` field, so any
-        # serial we passed would be silently ignored. cfssl always assigns a
-        # random serial here. We re-sign with openssl afterwards (below) to
-        # stamp the caller-supplied serial while preserving cfssl's extensions
-        # (openssl `x509 -CA` copies the input cert's extensions verbatim).
-        cfg = CA_CONFIG
-        signed = _run(["cfssl", "sign", "-ca", ca_cert, "-ca-key", ca_key,
-                       "-config", cfg, "-profile", "client",
-                       f"-hostname={cn}", csr])
-        cfssl_cert_pem = json.loads(signed.stdout)["cert"].encode()
-        cfssl_crt = os.path.join(d, "cfssl_leaf.pem")
-        with open(cfssl_crt, "wb") as f:
-            f.write(cfssl_cert_pem)
+        csr_cnf = os.path.join(d, "csr.cnf")
+        with open(csr_cnf, "w") as f:
+            f.write(_dn(name, domain, identity))
+        # subject DN comes from the config's [dn]; no -subj.
+        _run(["openssl", "req", "-new", "-key", key, "-config", csr_cnf, "-out", csr])
 
-        days = _profile_expiry_days(cfg)
+        ext_cnf = os.path.join(d, "ext.cnf")
+        with open(ext_cnf, "w") as f:
+            f.write(_ext(name, domain, ekus, identity))
+
+        # openssl x509 -req preserves the CSR's full multi-attribute subject and
+        # sets the explicit serial directly, in one signing step (cfssl sign has
+        # no serial flag and can drop non-standard subject attributes).
         crt = os.path.join(d, "leaf.pem")
-        _run(["openssl", "x509", "-in", cfssl_crt, "-CA", ca_cert, "-CAkey", ca_key,
-              "-set_serial", str(int(serial_hex, 16)), "-days", str(days), "-out", crt])
+        _run(["openssl", "x509", "-req", "-in", csr, "-CA", ca_cert, "-CAkey", ca_key,
+              "-set_serial", str(int(serial_hex, 16)), "-days", str(_profile_expiry_days(CA_CONFIG)),
+              "-sha256", "-extfile", ext_cnf, "-extensions", "e", "-out", crt])
         cert_pem = open(crt, "rb").read()
 
         p12 = os.path.join(d, "b.p12")

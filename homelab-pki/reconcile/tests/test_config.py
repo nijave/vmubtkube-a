@@ -1,19 +1,21 @@
-import pytest
-
 from reconcile.config import load_config
 
 
-def test_parses_users_counts_and_resolves_oids(tmp_path):
+def test_parses_users_counts_and_identity(tmp_path):
     (tmp_path / "c.hcl").write_text('''
-oids = {
-  user_id = { oid = "1.3.6.1.4.1.99999.1", critical = false }
-}
 revoked_serials = ["0x1000"]
 users = {
   nick = {
     key = { algorithm = "RSA", size = 2048 },
     ekus = ["clientAuth"],
-    extra_extensions = { user_id = "nick@example" },
+    identity = {
+      uid = "nick",
+      display_name = "Nick V",
+      organization = "homelab",
+      organizational_units = ["admins", "sre"],
+      primary_email = "nick@example.com",
+      additional_email_addresses = ["nick.alt@example.org"]
+    },
     devices = ["nick-desktop","nick-desktop","pixel7"]
   }
 }
@@ -23,30 +25,23 @@ users = {
     u = c.users["nick"]
     assert u.device_counts == {"nick-desktop": 2, "pixel7": 1}
     assert u.ekus == ["clientAuth"] and u.key["size"] == 2048
-    # human-readable name resolved to the registry's dotted OID + criticality;
-    # value is the plain ASCII string as authored (encoded at issue time)
-    assert u.extra_extensions == [
-        {"oid": "1.3.6.1.4.1.99999.1", "value": "nick@example", "critical": False}
-    ]
+    i = u.identity
+    assert i.uid == "nick"
+    assert i.display_name == "Nick V"
+    assert i.organization == "homelab"
+    assert i.organizational_units == ["admins", "sre"]
+    assert i.primary_email == "nick@example.com"
+    assert i.additional_email_addresses == ["nick.alt@example.org"]
+    # unset fields default to None / []
+    assert i.surname is None and i.given_name is None and i.common_name is None
 
 
-def test_empty_extensions_map_ok(tmp_path):
+def test_absent_identity_defaults_empty(tmp_path):
     (tmp_path / "c.hcl").write_text('''
-oids = {}
 users = {
-  nick = { key = { algorithm = "RSA", size = 2048 }, ekus = [], extra_extensions = {}, devices = ["d"] }
+  nick = { key = { algorithm = "RSA", size = 2048 }, ekus = [], devices = ["d"] }
 }
 ''')
     c = load_config(str(tmp_path / "c.hcl"))
-    assert c.users["nick"].extra_extensions == []
-
-
-def test_unknown_oid_name_raises(tmp_path):
-    (tmp_path / "c.hcl").write_text('''
-oids = {}
-users = {
-  nick = { key = { algorithm = "RSA", size = 2048 }, ekus = [], extra_extensions = { nope = "QUJD" }, devices = ["d"] }
-}
-''')
-    with pytest.raises(ValueError, match="unknown OID name"):
-        load_config(str(tmp_path / "c.hcl"))
+    i = c.users["nick"].identity
+    assert i.uid is None and i.organizational_units == [] and i.additional_email_addresses == []

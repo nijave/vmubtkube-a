@@ -1,36 +1,56 @@
 # homelab-pki/config.hcl
 #
-# oids: registry mapping a human-readable name -> the real OID. This is the
-# catalog of every custom extension the certs can carry; add one entry per OID.
-# Fill in each REPLACE_ME_OID_* with the actual dotted-decimal OID.
-#   oid      = dotted-decimal string, e.g. "1.3.6.1.4.1.<your-arc>.1"
-#   critical = true | false
-oids = {
-  user_id = { oid = "REPLACE_ME_OID_user_id", critical = false }
-  # Add every other OID you want available here, e.g.:
-  # role     = { oid = "REPLACE_ME_OID_role",     critical = false }
-  # tenant   = { oid = "REPLACE_ME_OID_tenant",   critical = false }
-}
+# Each user's `identity` block is baked into every one of that user's device
+# certs (subject DN + SAN email). Field names mirror python-envoy-authz's
+# ClientIdentity model exactly, so whatever you set here is what that service
+# reads back. All values are plain ASCII. Every field is optional — delete a
+# line to leave that attribute off the cert.
+#
+#   common_name                -> DN 2.5.4.3   (optional; defaults to <device>.ha.apps.somemissing.info)
+#   surname                    -> DN 2.5.4.4
+#   given_name                 -> DN 2.5.4.42
+#   display_name               -> DN 2.16.840.1.113730.3.1.241
+#   organization               -> DN 2.5.4.10
+#   organizational_units       -> DN 2.5.4.11  (list, repeatable)
+#   uid                        -> DN 0.9.2342.19200300.100.1.1
+#   primary_email              -> SAN rfc822Name (first)
+#   additional_email_addresses -> SAN rfc822Name (rest, list)
+#
+# NOTE: `common_name` is per-USER here, so setting it makes all of that user's
+# devices share one CN; leave it unset to keep the per-device hostname CN.
 
 revoked_serials = []
 
-# Each user lists a value for every OID it should carry. Keys are the names from
-# `oids` above. Values are PLAIN ASCII strings (encoded as an ASN.1 UTF8String at
-# issue time) — not base64. Omit an OID entry to leave that extension off a user.
 users = {
   nick = {
     key  = { algorithm = "RSA", size = 2048 }
     ekus = ["clientAuth"]
-    extra_extensions = {
-      user_id = "REPLACE_ME_ASCII_nick_user_id"
+    identity = {
+      # common_name                = "REPLACE_ME_nick_common_name"   # uncomment to override per-device CN
+      surname                    = "REPLACE_ME_nick_surname"
+      given_name                 = "REPLACE_ME_nick_given_name"
+      display_name               = "REPLACE_ME_nick_display_name"
+      organization               = "REPLACE_ME_nick_organization"
+      organizational_units       = ["REPLACE_ME_nick_ou"]
+      uid                        = "REPLACE_ME_nick_uid"
+      primary_email              = "REPLACE_ME_nick_primary_email"
+      additional_email_addresses = ["REPLACE_ME_nick_additional_email"]
     }
     devices = ["nick-desktop", "nick-ipad", "nick-xps", "pixel7"]
   }
   kara = {
     key  = { algorithm = "RSA", size = 2048 }
     ekus = ["clientAuth"]
-    extra_extensions = {
-      user_id = "REPLACE_ME_ASCII_kara_user_id"
+    identity = {
+      # common_name                = "REPLACE_ME_kara_common_name"
+      surname                    = "REPLACE_ME_kara_surname"
+      given_name                 = "REPLACE_ME_kara_given_name"
+      display_name               = "REPLACE_ME_kara_display_name"
+      organization               = "REPLACE_ME_kara_organization"
+      organizational_units       = ["REPLACE_ME_kara_ou"]
+      uid                        = "REPLACE_ME_kara_uid"
+      primary_email              = "REPLACE_ME_kara_primary_email"
+      additional_email_addresses = ["REPLACE_ME_kara_additional_email"]
     }
     devices = ["kara-iphone"]
   }
