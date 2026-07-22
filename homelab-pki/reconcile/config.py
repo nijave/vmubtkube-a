@@ -14,9 +14,10 @@ _SERIALIZATION_OPTIONS = SerializationOptions(strip_string_quotes=True, with_com
 class User:
     key: dict
     ekus: list
-    # Resolved list of {"oid", "value_b64", "critical"} — the shape engine.issue
-    # consumes. Authored in HCL as a name->value_b64 map plus the top-level
-    # `oids` registry; load_config() converts human-readable names to dotted OIDs.
+    # Resolved list of {"oid", "value", "critical"} — the shape engine.issue
+    # consumes. Authored in HCL as a name->value (plain ASCII) map plus the
+    # top-level `oids` registry; load_config() converts human-readable names to
+    # dotted OIDs. The ASCII value is ASN1/UTF8String-encoded at issue time.
     extra_extensions: list
     devices: list
 
@@ -58,14 +59,14 @@ def _resolve_extensions(ext_map, registry, user):
             raise ValueError(f"user {user!r}: extra_extensions must be a map of oid-name -> value_b64")
         return []
     resolved = []
-    for oid_name, value_b64 in ext_map.items():
+    for oid_name, value in ext_map.items():
         if oid_name not in registry:
             raise ValueError(
                 f"user {user!r} references unknown OID name {oid_name!r}; "
                 f"add it to the top-level `oids` registry"
             )
         entry = registry[oid_name]
-        resolved.append({"oid": entry["oid"], "value_b64": value_b64, "critical": entry["critical"]})
+        resolved.append({"oid": entry["oid"], "value": value, "critical": entry["critical"]})
     return resolved
 
 

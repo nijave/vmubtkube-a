@@ -20,6 +20,17 @@ def test_issue_client_cert(tmp_path):
                                     capture_output=True, text=True).stdout.lower()
     assert b.p12 and b.key_pem.startswith(b"-----BEGIN")
 
+def test_issue_embeds_ascii_custom_oid_extension(tmp_path):
+    crt, key = _throwaway_ca(str(tmp_path))
+    b = issue("nick-desktop", "0x2001", crt, key,
+              extra_extensions=[{"oid": "1.3.6.1.4.1.99999.1", "value": "nick@example", "critical": False}])
+    leaf = tmp_path / "leaf.pem"; leaf.write_bytes(b.cert_pem)
+    text = subprocess.run(["openssl","x509","-in",str(leaf),"-noout","-text"],
+                          capture_output=True, text=True).stdout
+    # custom OID present with the plain-ASCII value (ASN1/UTF8String-encoded)
+    assert "1.3.6.1.4.1.99999.1" in text
+    assert "nick@example" in text
+
 def test_gen_crl_lists_revoked(tmp_path):
     crt, key = _throwaway_ca(str(tmp_path))
     crl = gen_crl(["0x2002"], crt, key)

@@ -45,7 +45,10 @@ def issue(name, serial_hex, ca_cert, ca_key, key_algo="RSA", key_size=2048,
         ext = [f"subjectAltName=DNS:{cn}"]
         for e in extra_extensions:
             crit = "critical," if e.get("critical") else ""
-            ext.append(f"{e['oid']}={crit}DER:{e['value_b64']}")   # value pre-encoded; adjust if base64
+            # value is plain ASCII; OpenSSL's ASN1 generator encodes it as a
+            # UTF8String and wraps it in the extension's OCTET STRING. Numeric
+            # OIDs are accepted directly as the extension name.
+            ext.append(f"{e['oid']}={crit}ASN1:UTF8String:{e['value']}")
         cnf = os.path.join(d, "csr.cnf")
         with open(cnf, "w") as f:
             f.write("[req]\ndistinguished_name=dn\nreq_extensions=e\n[dn]\n[e]\n" + "\n".join(ext) + "\n")

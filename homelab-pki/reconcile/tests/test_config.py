@@ -13,7 +13,7 @@ users = {
   nick = {
     key = { algorithm = "RSA", size = 2048 },
     ekus = ["clientAuth"],
-    extra_extensions = { user_id = "QUJD" },
+    extra_extensions = { user_id = "nick@example" },
     devices = ["nick-desktop","nick-desktop","pixel7"]
   }
 }
@@ -23,9 +23,10 @@ users = {
     u = c.users["nick"]
     assert u.device_counts == {"nick-desktop": 2, "pixel7": 1}
     assert u.ekus == ["clientAuth"] and u.key["size"] == 2048
-    # human-readable name resolved to the registry's dotted OID + criticality
+    # human-readable name resolved to the registry's dotted OID + criticality;
+    # value is the plain ASCII string as authored (encoded at issue time)
     assert u.extra_extensions == [
-        {"oid": "1.3.6.1.4.1.99999.1", "value_b64": "QUJD", "critical": False}
+        {"oid": "1.3.6.1.4.1.99999.1", "value": "nick@example", "critical": False}
     ]
 
 
