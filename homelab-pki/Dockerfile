@@ -35,16 +35,19 @@ COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
 
 # cfssl/cfssljson are only packaged in Alpine's edge/testing repo, not the
 # pinned v3.20 repos (verified: absent from v3.20/main and v3.20/community).
-# Add edge/testing (pinned to this exact line, not a floating `edge` alias)
-# before installing it; `apk add cfssl` provides both `cfssl` and
-# `cfssljson`.
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories \
- && apk add --no-cache \
-      cfssl=1.6.5-r16 \
+# Scope edge/testing to just this `apk add --repository ...` invocation (via
+# the `--repository` flag, not `echo ... >> /etc/apk/repositories`) so the
+# untrusted edge/testing repo is NOT persisted in /etc/apk/repositories in the
+# final shipped image; everything else installs from the pinned v3.20 repos.
+# NOTE: this pins an exact edge/testing snapshot line for cfssl=1.6.5-r16 --
+# that pin may eventually need a version bump as edge/testing rolls forward.
+RUN apk add --no-cache \
       openssl=3.3.7-r0 \
       python3=3.12.13-r0 \
       py3-pip=24.0-r2 \
       ca-certificates=20260413-r0 \
+ && apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+      cfssl=1.6.5-r16 \
  && python3 -m pip install --break-system-packages --no-cache-dir \
       python-hcl2==8.1.2 \
       kubernetes==34.1.0 \
