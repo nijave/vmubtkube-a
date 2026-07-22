@@ -1,0 +1,12 @@
+{
+  "signing": {
+    "default": { "expiry": "175320h" },
+    "profiles": {
+      "client": {
+        "expiry": "175320h",
+        "usages": ["signing", "digital signature", "key encipherment", "client auth"],
+        "copy_extensions": true
+      }
+    }
+  }
+}
