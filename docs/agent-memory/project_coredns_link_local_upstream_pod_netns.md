@@ -1,0 +1,20 @@
+---
+name: project_coredns_link_local_upstream_pod_netns
+description: "kubelet copies the node's scoped link-local + global-v6 nameservers verbatim into CoreDNS (dnsPolicy Default); both are unusable from the pod netns, so forward . /etc/resolv.conf sprays onto dead upstreams and pods get intermittent DNS timeouts. Fixed by pinning CoreDNS forward to 172.16.3.254."
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: fc122898-f9a8-4099-89e0-bc2d59d236ce
+---
+
+Symptom (2026-07-22): intermittent Woodpecker step failures accessing GitHub — `clone`/`git` exit 128 `Could not resolve host: github.com (Timeout while contacting DNS servers)` and `wget: bad address 'github.com'` in alpine-based steps. Not GitHub flakiness and not query volume; it is a cluster DNS problem. All step pods share one RWO workspace PVC so they co-locate on a single node (the woodpecker pod-affinity work), which concentrates the blast radius: when the node they land on rotates onto a dead upstream, the whole pipeline fails together.
+
+Root cause: kubelet uses `--resolv-conf=/run/systemd/resolve/resolv.conf` (kubeadm default under systemd-resolved). That file lists three nameservers learned via the router's IPv6 RA/DHCPv6: `172.16.3.254` (v4, works), `fe80::29c:2ff:fea9:fdd0%3` (link-local, scope zone `%3` = a node interface index), and `2600:1700:76f0:14bf:29c:2ff:fea9:fdd0` (global v6). CoreDNS runs `dnsPolicy: Default`, inherits that file, and runs `forward . /etc/resolv.conf` with the default **random** policy. From a pod netns two of the three upstreams are dead: the `%3` zone is meaningless in the pod netns (`UDP setup ... failed: invalid file`), and the global v6 is `network unreachable` because Calico here is IPv4-only (no pod v6 egress route). So a fraction of upstream queries land on a dead server and time out. Same router link-local as the NTP break — see [[project_calico_breaks_ll_ntp_timesyncd]].
+
+kubelet does zero namespace-aware filtering — proven in `pkg/kubelet/network/dns/dns.go` `parseResolvConf`: the nameserver field is appended verbatim (no IP parse, address-family, scope, or reachability check); only later processing is truncate-to-3 and dedup. So the scoped link-local is copied into the pod unchanged. Podman fixed the identical case by stripping link-local (containers/common#2233); kubelet has not.
+
+Fix APPLIED (manual, live cluster, NOT GitOps): patched the kubeadm-managed `coredns` ConfigMap in `kube-system`, Corefile line `forward . /etc/resolv.conf {` → `forward . 172.16.3.254 {` (kept `max_concurrent 1000`), then `kubectl rollout restart deployment coredns -n kube-system`. 172.16.3.254 is the router and serves both internal `.somemissing.info` and external names, so single upstream is correct — do NOT add a public resolver (would break internal names). Verified from a pod on vmubtkube-a23: 50/50 `github.com` lookups ok, internal name `registry.apps.nickv.me` still resolves, no forward/timeout errors in CoreDNS logs.
+
+Why not ArgoCD-managed: the cluster auto-upgrades, so ArgoCD continuously reconciling a kubeadm-owned object would fight kubeadm during version bumps. Instead we rely on kubeadm's `corefile-migration` (1.16+, fixed by k8s#97016) to migrate the *existing* Corefile on upgrade and preserve the custom `forward` target rather than reset to default. DURABILITY CAVEAT: after any minor upgrade, re-check `kubectl get cm coredns -n kube-system -o jsonpath='{.data.Corefile}' | grep forward`; if it ever reverts to `/etc/resolv.conf`, re-apply the same one-line patch.
+
+Upstream: opened kubernetes/kubernetes#140844 ("kubelet copies IPv6 link-local scoped nameservers from the node resolv.conf into pods where they cannot work") as the proper long-term fix. CoreDNS is not at fault (it forwards what it is given, random policy, failover only on no-response); pinning the forward target is the one place in this cluster to express "use the upstream that works from a pod netns". k8s docs recommend exactly this (`forward . <ip>` instead of `/etc/resolv.conf`).
