@@ -153,7 +153,7 @@ spec:
                     # gives the main container a shell for the check-then-create.
                     - name: copy-busybox
                       # renovate: datasource=docker depName=busybox
-                      image: busybox:1.37.0-uclibc
+                      image: busybox:1.38.0-uclibc
                       command: [cp, /bin/busybox, /shared/busybox]
                       volumeMounts:
                         - name: shared
