@@ -28,7 +28,10 @@ def _profile_expiry_days(cfg_path, profile="client"):
     with open(cfg_path) as f:
         cfg = json.load(f)
     expiry = cfg["signing"]["profiles"][profile]["expiry"]
-    hours = int(re.match(r"^(\d+)h$", expiry).group(1))
+    m = re.match(r"^(\d+)h$", expiry)
+    if not m:
+        raise ValueError(f"unsupported cfssl profile expiry format (want '<N>h'): {expiry!r}")
+    hours = int(m.group(1))
     return max(1, hours // 24)
 
 

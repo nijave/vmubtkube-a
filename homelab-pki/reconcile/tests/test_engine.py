@@ -1,5 +1,6 @@
-import subprocess, tempfile, os
-from reconcile.engine import issue, gen_crl
+import json, subprocess, tempfile, os
+import pytest
+from reconcile.engine import issue, gen_crl, _profile_expiry_days
 
 def _throwaway_ca(d):
     key = os.path.join(d, "ca.key"); crt = os.path.join(d, "ca.crt")
@@ -25,3 +26,9 @@ def test_gen_crl_lists_revoked(tmp_path):
     out = tmp_path / "crl.pem"; out.write_bytes(crl)
     text = subprocess.run(["openssl","crl","-in",str(out),"-noout","-text"], capture_output=True, text=True).stdout
     assert "2002" in text.lower()
+
+def test_profile_expiry_rejects_unsupported_format(tmp_path):
+    cfg = tmp_path / "ca-config.json"
+    cfg.write_text(json.dumps({"signing": {"profiles": {"client": {"expiry": "7305d"}}}}))
+    with pytest.raises(ValueError):
+        _profile_expiry_days(str(cfg))
