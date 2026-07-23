@@ -26,18 +26,33 @@ export KUBE_VERSION
 # copies of both upstream repos, so when they're usable we validate against
 # them exclusively — offline and deterministic; a kind absent upstream is a
 # miss either way. Anything else falls back to the remote locations.
+# A version-agnostic fallback: the master-standalone-strict directory is kept
+# current upstream and carries every built-in kind regardless of released patch.
+# This catches the race where cukk upgrades the cluster to a brand-new patch
+# (e.g. 1.35.7) before yannh/kubernetes-json-schema publishes that patch's
+# schema dir — both the mirror and the version-keyed remote default 404 in
+# lockstep, so without this escape hatch every built-in kind errors as "could
+# not find schema". master tracks the latest Kubernetes, but built-in kinds are
+# structurally stable across patches, so it's a safe match for any recent patch.
+MASTER_STRICT_FALLBACK="-schema-location https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json"
+
 SCHEMA_LOCATIONS="
   -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  $MASTER_STRICT_FALLBACK"
 if [ -n "${SCHEMA_MIRROR:-}" ]; then
   sh "$(dirname "$0")/sync-schemas.sh" \
     || echo "WARNING: schema mirror sync failed; continuing with what's on disk" >&2
   if [ -n "$KUBE_VERSION" ] \
     && [ -d "$SCHEMA_MIRROR/kubernetes-json-schema/v${KUBE_VERSION}-standalone-strict" ] \
     && [ -d "$SCHEMA_MIRROR/CRDs-catalog/.git" ]; then
+    # Mirror first (offline, deterministic); master-standalone-strict (local if
+    # synced, else remote) as the escape hatch for a missing patch schema dir.
     SCHEMA_LOCATIONS="
   -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json
-  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json
+  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  $MASTER_STRICT_FALLBACK"
   else
     echo "WARNING: schema mirror unusable; validating against remote locations" >&2
   fi

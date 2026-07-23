@@ -26,26 +26,35 @@ if [ -z "${KUBE_VERSION:-}" ]; then
 fi
 [ -n "$KUBE_VERSION" ] || { echo "sync-schemas: no KUBE_VERSION and no cluster reachable; skipping" >&2; exit 0; }
 VDIR="v${KUBE_VERSION}-standalone-strict"
+# Version-agnostic escape hatch (see validate.sh): keeps every built-in kind
+# available even when the cluster's exact patch isn't published upstream yet.
+MDIR="master-standalone-strict"
 
 mkdir -p "$MIRROR"
 
 if [ ! -d "$KJS/.git" ]; then
   git clone --quiet --depth 1 --filter=blob:none --no-checkout \
     https://github.com/yannh/kubernetes-json-schema "$KJS"
-  git -C "$KJS" sparse-checkout set --no-cone "/$VDIR/*"
+  git -C "$KJS" sparse-checkout set --no-cone "/$VDIR/*" "/$MDIR/*"
   git -C "$KJS" checkout --quiet master
 elif [ ! -d "$KJS/$VDIR" ]; then
   # 'add' accepts no mode flag ('set'/'init' only) and inherits the
   # non-cone mode already persisted by 'set --no-cone' at clone time
-  git -C "$KJS" sparse-checkout add "/$VDIR/*"
+  git -C "$KJS" sparse-checkout add "/$VDIR/*" "/$MDIR/*"
 fi
 if [ ! -d "$KJS/$VDIR" ]; then
   # version directory landed upstream after our pinned commit
   git -C "$KJS" fetch --quiet --depth 1 origin master
   git -C "$KJS" reset --quiet --hard origin/master
 fi
+# Ensure the escape-hatch dir is materialized on mirrors cloned before MDIR
+# was added to the sparse-checkout set (the elif above only fires when VDIR is
+# missing, so a warm mirror with VDIR would otherwise never pick up MDIR).
+if [ ! -d "$KJS/$MDIR" ]; then
+  git -C "$KJS" sparse-checkout add "/$MDIR/*"
+fi
 [ -d "$KJS/$VDIR" ] \
-  || echo "WARNING: kubernetes-json-schema has no $VDIR; kubeconform will fall back to remote" >&2
+  || echo "WARNING: kubernetes-json-schema has no $VDIR; kubeconform will fall back to master/remote" >&2
 
 if [ ! -d "$CRDS/.git" ]; then
   git clone --quiet --depth 1 https://github.com/datreeio/CRDs-catalog "$CRDS"

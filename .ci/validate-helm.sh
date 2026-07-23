@@ -34,9 +34,14 @@ fi
 
 # Prefer local schema mirrors when usable, exclusively — same rationale as
 # validate.sh (offline, deterministic; the mirrors are complete copies).
+# MASTER_STRICT_FALLBACK: version-agnostic escape hatch for the cukk-upgrade
+# race (see validate.sh); without it every built-in kind is skipped during the
+# window before yannh/kubernetes-json-schema publishes the new patch's dir.
+MASTER_STRICT_FALLBACK="-schema-location https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json"
 SCHEMA_LOCATIONS="
   -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  $MASTER_STRICT_FALLBACK"
 if [ -n "${SCHEMA_MIRROR:-}" ]; then
   KUBE_VERSION="$KUBE_VERSION" sh "$(dirname "$0")/sync-schemas.sh" \
     || echo "WARNING: schema mirror sync failed; continuing with what's on disk" >&2
@@ -44,7 +49,9 @@ if [ -n "${SCHEMA_MIRROR:-}" ]; then
     && [ -d "$SCHEMA_MIRROR/CRDs-catalog/.git" ]; then
     SCHEMA_LOCATIONS="
   -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/{{.NormalizedKubernetesVersion}}-standalone{{.StrictSuffix}}/{{.ResourceKind}}{{.KindSuffix}}.json
-  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+  -schema-location $SCHEMA_MIRROR/kubernetes-json-schema/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json
+  -schema-location $SCHEMA_MIRROR/CRDs-catalog/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  $MASTER_STRICT_FALLBACK"
   else
     echo "WARNING: schema mirror unusable; validating against remote locations" >&2
   fi
