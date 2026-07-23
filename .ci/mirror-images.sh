@@ -181,6 +181,16 @@ while IFS= read -r full; do
   echo "==> $src -> $full"
   if regctl image copy "$src" "$full"; then
     mirrored=$((mirrored + 1))
+  elif ! regctl manifest head "$src" >/dev/null 2>&1; then
+    # The upstream ref doesn't exist, so there's nothing to mirror — e.g. a
+    # locally-built image (built+pushed by CI) whose mirror path has no
+    # upstream counterpart. Skip rather than fail. Prefer listing such paths
+    # in renovate.json ignoreDeps too, so this probe isn't retried every run
+    # and Renovate stops tracking them; this guard is the safety net for any
+    # that slip through. A copy failure where the source DOES exist (auth,
+    # network, digest mismatch) still counts as a real failure below.
+    echo "skip $full (upstream $src not found)"
+    skipped=$((skipped + 1))
   else
     echo "FAILED: $src -> $full" >&2
     failed=$((failed + 1))
