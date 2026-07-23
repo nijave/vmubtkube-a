@@ -1,0 +1,235 @@
+# Declarative mTLS client-cert PKI for Home Assistant.
+#
+# A reconciler image (registry.apps.nickv.me/nijave/homelab-pki) runs OpenTofu +
+# openssl + cfssl: reconcile.main mints device client certs (identity per
+# homelab-pki/config.hcl, mirroring python-envoy-authz's ClientIdentity) + a CRL,
+# then `tofu apply` writes them as Secrets (state in the kubernetes backend).
+#
+# The reconcile Job is an Argo Sync hook (runs `tofu apply` on each sync); the
+# CronJob re-runs periodically to keep the CRL fresh. Reconciliation is
+# idempotent. The CA private key is delivered from Bitwarden via ExternalSecret;
+# cert/CRL Secrets are tofu-managed (not Argo-pruned).
+#
+# NOTE: the ConfigMap below is generated from homelab-pki/config.hcl — keep in
+# sync (edit config.hcl, regenerate). The Job reads /config/config.hcl.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pki-reconciler
+  namespace: homelab-pki
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pki-reconciler
+  namespace: homelab-pki
+rules:
+  # cert/CRL Secrets + the OpenTofu kubernetes-backend state Secret.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # OpenTofu kubernetes-backend state lock.
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pki-reconciler
+  namespace: homelab-pki
+subjects:
+  - kind: ServiceAccount
+    name: pki-reconciler
+    namespace: homelab-pki
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pki-reconciler
+---
+# CA cert+key delivered from Bitwarden (ha-ca-crt / ha-ca-key). Opaque, so the
+# reconciler reads /ca/tls.crt and /ca/tls.key. Never in git.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pki-ca
+  namespace: homelab-pki
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: pki-ca
+  data:
+    - secretKey: tls.crt
+      remoteRef:
+        key: ha-ca-crt
+    - secretKey: tls.key
+      remoteRef:
+        key: ha-ca-key
+---
+apiVersion: v1
+data:
+  config.hcl: |
+    # homelab-pki/config.hcl
+    #
+    # Each user's `identity` block is baked into every one of that user's device
+    # certs (subject DN + SAN email). Field names mirror python-envoy-authz's
+    # ClientIdentity model exactly, so whatever you set here is what that service
+    # reads back. All values are plain ASCII. Every field is optional — delete a
+    # line to leave that attribute off the cert.
+    #
+    #   common_name                -> DN 2.5.4.3   (optional; defaults to <device>.ha.apps.somemissing.info)
+    #   surname                    -> DN 2.5.4.4
+    #   given_name                 -> DN 2.5.4.42
+    #   display_name               -> DN 2.16.840.1.113730.3.1.241
+    #   organization               -> DN 2.5.4.10
+    #   organizational_units       -> DN 2.5.4.11  (list, repeatable)
+    #   uid                        -> DN 0.9.2342.19200300.100.1.1
+    #   primary_email              -> SAN rfc822Name (first)
+    #   additional_email_addresses -> SAN rfc822Name (rest, list)
+    #
+    # NOTE: `common_name` is per-USER here, so setting it makes all of that user's
+    # devices share one CN; leave it unset to keep the per-device hostname CN.
+
+    revoked_serials = []
+
+    users = {
+      nick = {
+        key  = { algorithm = "RSA", size = 2048 }
+        ekus = ["clientAuth"]
+        identity = {
+          # common_name                = "REPLACE_ME_nick_common_name"   # uncomment to override per-device CN
+          surname                    = "Venenga"
+          given_name                 = "Nick"
+          display_name               = "Nick V"
+          organization               = "homelab"
+          # organizational_units       = ["REPLACE_ME_nick_ou"]
+          uid                        = "nick"
+          primary_email              = "nick@venenga.com"
+          additional_email_addresses = ["nijave@gmail.com"]
+        }
+        devices = ["nick-desktop", "nick-ipad", "nick-xps", "pixel7"]
+      }
+      kara = {
+        key  = { algorithm = "RSA", size = 2048 }
+        ekus = ["clientAuth"]
+        identity = {
+          # common_name                = "REPLACE_ME_kara_common_name"
+          surname                    = "Gilmore"
+          given_name                 = "Kara"
+          display_name               = "Kara G"
+          organization               = "homelab"
+          # organizational_units       = ["REPLACE_ME_kara_ou"]
+          uid                        = "kara"
+          primary_email              = "karakgilmore@gmail.com"
+          # additional_email_addresses = ["REPLACE_ME_kara_additional_email"]
+        }
+        devices = ["kara-iphone"]
+      }
+    }
+kind: ConfigMap
+metadata:
+  name: pki-config
+  namespace: homelab-pki
+---
+# Immediate reconcile: Argo Sync hook runs `tofu apply` on each sync (idempotent).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pki-reconcile
+  namespace: homelab-pki
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: pki-reconciler
+      containers:
+        - name: reconcile
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.1.0
+          imagePullPolicy: Always
+          env:
+            - { name: HOME, value: /work }
+            - { name: PKI_NAMESPACE, value: homelab-pki }
+            - { name: PKI_CONFIG, value: /config/config.hcl }
+            - { name: CA_CERT, value: /ca/tls.crt }
+            - { name: CA_KEY, value: /ca/tls.key }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eux
+              python -m reconcile.main
+              cp /work/secrets.auto.tfvars.json /app/tofu/
+              cd /app/tofu
+              tofu init -input=false -no-color
+              tofu apply -input=false -auto-approve -no-color
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: config, mountPath: /config, readOnly: true }
+            - { name: ca, mountPath: /ca, readOnly: true }
+            - { name: work, mountPath: /work }
+      volumes:
+        - { name: config, configMap: { name: pki-config } }
+        - { name: ca, secret: { secretName: pki-ca } }
+        - { name: work, emptyDir: {} }
+---
+# Periodic re-run to keep the CRL fresh (regenerate before nextUpdate) and
+# correct any drift. concurrencyPolicy Forbid; the OpenTofu state lock also
+# guards against overlap with the Sync-hook Job.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pki-crl-refresh
+  namespace: homelab-pki
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: pki-reconciler
+          containers:
+            - name: reconcile
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.1.0
+              imagePullPolicy: Always
+              env:
+                - { name: HOME, value: /work }
+                - { name: PKI_NAMESPACE, value: homelab-pki }
+                - { name: PKI_CONFIG, value: /config/config.hcl }
+                - { name: CA_CERT, value: /ca/tls.crt }
+                - { name: CA_KEY, value: /ca/tls.key }
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eux
+                  python -m reconcile.main
+                  cp /work/secrets.auto.tfvars.json /app/tofu/
+                  cd /app/tofu
+                  tofu init -input=false -no-color
+                  tofu apply -input=false -auto-approve -no-color
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }
+              volumeMounts:
+                - { name: config, mountPath: /config, readOnly: true }
+                - { name: ca, mountPath: /ca, readOnly: true }
+                - { name: work, mountPath: /work }
+          volumes:
+            - { name: config, configMap: { name: pki-config } }
+            - { name: ca, secret: { secretName: pki-ca } }
+            - { name: work, emptyDir: {} }
