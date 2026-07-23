@@ -30,7 +30,7 @@ FROM ghcr.io/opentofu/opentofu:1.11-minimal AS tofu
 # alpine:3.20 matches the OS the full opentofu:1.11 image (and its -minimal
 # sibling) is built against, verified via `docker run ... cat /etc/os-release`
 # (Alpine Linux v3.20, VERSION_ID=3.20.10).
-FROM alpine:3.20.10
+FROM alpine:3.24.1
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
 
 # cfssl/cfssljson are only packaged in Alpine's edge/testing repo, not the
