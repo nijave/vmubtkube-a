@@ -27,14 +27,14 @@ users = {
     ekus = ["clientAuth"]
     identity = {
       # common_name                = "REPLACE_ME_nick_common_name"   # uncomment to override per-device CN
-      surname                    = "REPLACE_ME_nick_surname"
-      given_name                 = "REPLACE_ME_nick_given_name"
-      display_name               = "REPLACE_ME_nick_display_name"
-      organization               = "REPLACE_ME_nick_organization"
-      organizational_units       = ["REPLACE_ME_nick_ou"]
-      uid                        = "REPLACE_ME_nick_uid"
-      primary_email              = "REPLACE_ME_nick_primary_email"
-      additional_email_addresses = ["REPLACE_ME_nick_additional_email"]
+      surname                    = "Venenga"
+      given_name                 = "Nick"
+      display_name               = "Nick V"
+      organization               = "homelab"
+      # organizational_units       = ["REPLACE_ME_nick_ou"]
+      uid                        = "nick"
+      primary_email              = "nick@venenga.com"
+      additional_email_addresses = ["nijave@gmail.com"]
     }
     devices = ["nick-desktop", "nick-ipad", "nick-xps", "pixel7"]
   }
@@ -43,14 +43,14 @@ users = {
     ekus = ["clientAuth"]
     identity = {
       # common_name                = "REPLACE_ME_kara_common_name"
-      surname                    = "REPLACE_ME_kara_surname"
-      given_name                 = "REPLACE_ME_kara_given_name"
-      display_name               = "REPLACE_ME_kara_display_name"
-      organization               = "REPLACE_ME_kara_organization"
-      organizational_units       = ["REPLACE_ME_kara_ou"]
-      uid                        = "REPLACE_ME_kara_uid"
-      primary_email              = "REPLACE_ME_kara_primary_email"
-      additional_email_addresses = ["REPLACE_ME_kara_additional_email"]
+      surname                    = "Gilmore"
+      given_name                 = "Kara"
+      display_name               = "Kara G"
+      organization               = "homelab"
+      # organizational_units       = ["REPLACE_ME_kara_ou"]
+      uid                        = "kara"
+      primary_email              = "karakgilmore@gmail.com"
+      # additional_email_addresses = ["REPLACE_ME_kara_additional_email"]
     }
     devices = ["kara-iphone"]
   }
