@@ -81,6 +81,9 @@ spec:
 # Backs up the whole PVC including JELLYFIN_CACHE_DIR — volsync's restic
 # mover has no path excludes, so transcoding/image cache churn lands in
 # snapshots. Restic dedup keeps this tolerable.
+# cacheCapacity covers restic's repo cache (index + cached packs); the repo
+# holds ~7.5Gi of data plus transcode churn between prunes, which overflowed
+# the prior 4Gi cache with "no space left on device". Sized above the repo.
 apiVersion: volsync.backube/v1alpha1
 kind: ReplicationSource
 metadata:
@@ -93,7 +96,7 @@ spec:
   restic:
     pruneIntervalDays: 14
     repository: restic-repo-jellyfin
-    cacheCapacity: 4Gi
+    cacheCapacity: 8Gi
     moverSecurityContext:
       runAsUser: 1009
       runAsGroup: 1001
