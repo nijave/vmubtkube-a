@@ -25,7 +25,7 @@
 #
 # CI build step: deferred follow-up (not wired into .woodpecker.yaml yet).
 
-FROM ghcr.io/opentofu/opentofu:1.11-minimal AS tofu
+FROM ghcr.io/opentofu/opentofu:1.12-minimal AS tofu
 
 # alpine:3.20 matches the OS the full opentofu:1.11 image (and its -minimal
 # sibling) is built against, verified via `docker run ... cat /etc/os-release`
