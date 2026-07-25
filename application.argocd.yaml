@@ -34,12 +34,6 @@ spec:
     - .stringData
     - .metadata.labels
     - .metadata.annotations
-  - group: ""
-    kind: Secret
-    name: argocd-notifications-secret
-    jqPathExpressions:
-    - .data
-    - .stringData
   source:
     chart: argo-cd
     repoURL: https://argoproj.github.io/argo-helm
