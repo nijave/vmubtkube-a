@@ -16,6 +16,8 @@ type: Opaque
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: mumble-data
   namespace: default
 spec:

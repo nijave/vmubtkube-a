@@ -36,6 +36,8 @@ stringData:
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: default
   namespace: default
 spec:

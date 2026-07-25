@@ -98,6 +98,8 @@ spec:
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: hyperdx
   namespace: hyperdx
 spec:
