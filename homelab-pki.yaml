@@ -63,12 +63,21 @@ spec:
   target:
     name: pki-ca
   data:
+    # conversionStrategy/decodingStrategy/metadataPolicy are CRD defaults spelled
+    # out explicitly: Argo owns spec.data as an atomic list and diffs
+    # client-side, so omitting them reads as permanent drift.
     - secretKey: tls.crt
       remoteRef:
         key: ha-ca-crt
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
     - secretKey: tls.key
       remoteRef:
         key: ha-ca-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
 ---
 apiVersion: v1
 data:
