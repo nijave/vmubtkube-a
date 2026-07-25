@@ -1,0 +1,123 @@
+{
+  "_id": "6a519951318e69d22b7658fd",
+  "name": "claude-code model metrics",
+  "tiles": [
+    {
+      "id": "kpi-reqs",
+      "x": 0,
+      "y": 0,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        },
+        "configType": "sql",
+        "sqlTemplate": "SELECT count() AS value FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Total LLM requests"
+      }
+    },
+    {
+      "id": "kpi-retry",
+      "x": 3,
+      "y": 0,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1
+        },
+        "configType": "sql",
+        "sqlTemplate": "SELECT round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS value FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Retry rate %"
+      }
+    },
+    {
+      "id": "kpi-ttft",
+      "x": 6,
+      "y": 0,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        },
+        "configType": "sql",
+        "sqlTemplate": "SELECT round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS value FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "TTFT p95 (ms)"
+      }
+    },
+    {
+      "id": "kpi-lat",
+      "x": 9,
+      "y": 0,
+      "w": 3,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        },
+        "configType": "sql",
+        "sqlTemplate": "SELECT round(quantile(0.95)(toFloat64OrZero(SpanAttributes['duration_ms'])), 0) AS value FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Latency p95 (ms)"
+      }
+    },
+    {
+      "id": "tbl-models",
+      "x": 0,
+      "y": 3,
+      "w": 24,
+      "h": 10,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "sqlTemplate": "SELECT SpanAttributes['gen_ai.request.model'] AS model, count() AS requests, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct, round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS retry_pct, round(quantile(0.5)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p50_ms, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p95_ms, round(quantile(0.5)(toFloat64OrZero(SpanAttributes['duration_ms'])), 0) AS lat_p50_ms, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['duration_ms'])), 0) AS lat_p95_ms, round(quantile(0.99)(toFloat64OrZero(SpanAttributes['duration_ms'])), 0) AS lat_p99_ms, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 1) AS gen_toks, round(sum(toFloat64OrZero(SpanAttributes['input_tokens'])), 0) AS tok_in, round(sum(toFloat64OrZero(SpanAttributes['cache_read_tokens'])), 0) AS tok_cache, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model ORDER BY requests DESC",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Per-model metrics"
+      }
+    },
+    {
+      "id": "tbl-daily",
+      "x": 0,
+      "y": 13,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toDate(Timestamp) AS day, count() AS requests, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct, round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS retry_pct, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p95_ms, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['duration_ms'])), 0) AS lat_p95_ms FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY day ORDER BY day",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Daily trend"
+      }
+    }
+  ],
+  "team": "69d6f9db842db143c17e053b",
+  "tags": [],
+  "filters": [],
+  "savedFilterValues": [],
+  "containers": [],
+  "createdBy": "69d6f9db842db143c17e0537",
+  "updatedBy": "69d6f9db842db143c17e0537",
+  "provisioned": false,
+  "createdAt": "2026-07-11T01:16:01.829Z",
+  "updatedAt": "2026-07-11T01:16:41.339Z",
+  "__v": 0
+}
