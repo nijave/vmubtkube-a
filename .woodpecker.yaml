@@ -3,7 +3,7 @@
 # coordinates come entirely from renovate.json (registryAliases, packageRules,
 # ignoreDeps), so the mirror path must equal the upstream repo path.
 #
-# Runs on PRs so Renovate's tag delebumps mirror the new image before merge, and on
+# Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
 #
 # Step DAG (depends_on): validate, validate-pluto, and validate-helm run in
