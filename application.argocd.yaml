@@ -59,6 +59,18 @@ spec:
             resource.customizations.ignoreDifferences.apps_StatefulSet: |
               jqPathExpressions:
               - .spec.volumeClaimTemplates[].metadata.creationTimestamp
+            # Every Secret value committed to this repo is the placeholder
+            # base64 `++++++++`; the real values are filled in-cluster by
+            # secret-generator, CNPG or ESO. Argo owns the Secret shell, never
+            # its contents -- without this, a full sync writes placeholders over
+            # live credentials (Postgres, ClickHouse, Mongo, CSI, Grafana).
+            # `_Secret` is the core (empty) API group; a bare `Secret` key would
+            # silently never match.
+            # Opt a Secret back into git-managed values with:
+            #   k8s.somemissing.info/argocd-manage-secret-data: "true"
+            resource.customizations.ignoreDifferences._Secret: |
+              jqPathExpressions:
+              - 'if (.metadata.annotations."k8s.somemissing.info/argocd-manage-secret-data" // "") == "true" then empty else (.data, .stringData) end'
             resource.trackingmethod: annotation
             resource.customizations.health.postgresql.cnpg.io_Cluster: |
               hs = {}
