@@ -45,6 +45,8 @@ metadata:
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: hyperdx
   namespace: hyperdx
 spec:

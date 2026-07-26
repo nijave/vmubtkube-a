@@ -80,6 +80,8 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: woodpecker
   namespace: woodpecker
 spec:

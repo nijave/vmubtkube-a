@@ -72,6 +72,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: selfoss-data
   namespace: default
 spec:

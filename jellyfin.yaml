@@ -17,6 +17,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: jellyfin-media
   namespace: media
 spec:
@@ -31,6 +33,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
   name: jellyfin-data
   namespace: media
 spec:
