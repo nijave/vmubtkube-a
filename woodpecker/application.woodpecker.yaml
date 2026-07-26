@@ -105,6 +105,21 @@ spec:
           env:
             WOODPECKER_SERVER: woodpecker-server:9000
             WOODPECKER_BACKEND: kubernetes
+            # Concurrent workflows this agent will lease.  Upstream defaults to
+            # 1, and with replicaCount: 1 that made the whole cluster's CI a
+            # strictly serial queue.  Pipelines average ~100s, so the ceiling
+            # was ~36/hour against a push rate that peaks near 33/hour -- ~92%
+            # utilization, where queue delay grows without bound.  Observed
+            # waits hit 843s before this was raised.  4 puts the ceiling around
+            # 144/hour (~23% utilization) with room for bursts.
+            #
+            # Scaling this costs memory on the agent (it multiplexes a log
+            # stream per running workflow -- see the limit below) and multiplies
+            # concurrent iSCSI PVC attach/detach churn on democratic-csi, since
+            # each workflow provisions its own WOODPECKER_BACKEND_K8S_VOLUME_SIZE
+            # workspace.  Node CPU is not the constraint; the busiest node sits
+            # near 40%.
+            WOODPECKER_MAX_WORKFLOWS: "4"
             WOODPECKER_BACKEND_K8S_NAMESPACE: woodpecker
             # Workspace PVCs come from the only StorageClass we have,
             # zfs-generic-iscsi-csi (democratic-csi iSCSI), which is
@@ -168,6 +183,9 @@ spec:
           resources:
             requests:
               cpu: 25m
-              memory: 64Mi
+              memory: 128Mi
+            # Headroom for WOODPECKER_MAX_WORKFLOWS concurrent log streams.  At
+            # the old serial capacity 256Mi was ample; running 4 workflows at
+            # once scales the agent's buffering roughly linearly.
             limits:
-              memory: 256Mi
+              memory: 512Mi
