@@ -48,3 +48,15 @@ patches:
         path: /metadata/annotations
         value:
           argocd.argoproj.io/sync-options: "Replace=true,Force=true"
+      # The API server defaults fieldRef.apiVersion to v1, and ObjectFieldSelector
+      # is x-kubernetes-map-type: atomic, so omitting it makes desired != live on a
+      # whole-value comparison. Because Replace=true writes via Update (owner
+      # "argocd-application-controller") rather than Apply, a server-side apply then
+      # conflicts on this field. Pinning the defaulted value is a semantic no-op that
+      # keeps desired == live.
+      # NOTE: these paths are index-based because the Job name embeds the Contour
+      # version, so the target cannot select by name. Recheck the indices on a
+      # vendir bump if certgen gains containers or env vars.
+      - op: add
+        path: /spec/template/spec/containers/0/env/0/valueFrom/fieldRef/apiVersion
+        value: v1
