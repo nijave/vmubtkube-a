@@ -1008,6 +1008,11 @@ The reconciler already writes the `pki-crl` Secret in `homelab-pki` (Task 7). Co
 
 - [ ] **Step 1: In `homelab-pki.yaml`, grant consumer reader SAs read on the CRL Secret**
 
+  - [x] `projectcontour`: `pki-crl-reader` ServiceAccount plus the narrowly
+    scoped `homelab-pki` Role/RoleBinding for `pki-crl`.
+  - [ ] `default`: matching reader ServiceAccount and RoleBinding (needed for
+    the HA `HTTPProxy`, outside the python-envoy-authz migration PRs).
+
 The kubernetes-provider `SecretStore` authenticates as a ServiceAccount in the *consumer* namespace; that identity needs read on `pki-crl` in `homelab-pki`. Create a reader SA per consumer namespace and bind it in `homelab-pki`:
 
 ```yaml
@@ -1068,7 +1073,7 @@ spec:
       remoteRef: { key: pki-crl, property: crl.pem, conversionStrategy: Default, decodingStrategy: None, metadataPolicy: None }
 ```
 
-- [ ] **Step 3: In `python-envoy-authz.yaml` (`projectcontour`), add the same SecretStore + ExternalSecret**
+- [x] **Step 3: In `python-envoy-authz.yaml` (`projectcontour`), add the same SecretStore + ExternalSecret**
 
 Identical to Step 2 but `namespace: projectcontour` on both the `SecretStore` and `ExternalSecret`.
 

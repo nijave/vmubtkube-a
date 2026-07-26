@@ -19,6 +19,12 @@ metadata:
   name: pki-reconciler
   namespace: homelab-pki
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pki-crl-reader
+  namespace: projectcontour
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -35,6 +41,17 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pki-crl-reader
+  namespace: homelab-pki
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["pki-crl"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: pki-reconciler
@@ -47,6 +64,20 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: pki-reconciler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pki-crl-reader
+  namespace: homelab-pki
+subjects:
+  - kind: ServiceAccount
+    name: pki-crl-reader
+    namespace: projectcontour
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pki-crl-reader
 ---
 # CA cert+key delivered from Bitwarden (ha-ca-crt / ha-ca-key). Opaque, so the
 # reconciler reads /ca/tls.crt and /ca/tls.key. Never in git.

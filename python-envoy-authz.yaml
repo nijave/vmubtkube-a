@@ -18,6 +18,45 @@ spec:
       metadataPolicy: None
 ---
 apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: homelab-pki
+  namespace: projectcontour
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: homelab-pki
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+      auth:
+        serviceAccount:
+          name: pki-crl-reader
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pki-crl
+  namespace: projectcontour
+spec:
+  refreshInterval: 15s
+  secretStoreRef:
+    kind: SecretStore
+    name: homelab-pki
+  target:
+    name: pki-crl
+  data:
+  - secretKey: crl.pem
+    remoteRef:
+      key: pki-crl
+      property: crl.pem
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: frigate-x-proxy-secret
