@@ -1129,7 +1129,7 @@ git commit -m "feat(pki): enforce CRL at Contour HTTPProxy clientValidation"
 **Files:**
 - Modify: `python-envoy-authz.yaml`
 
-- [ ] **Step 1: Mount the CRL + env into the Deployment (mirrors `HA_CA_CERTIFICATE`)**
+- [x] **Step 1: Expose the CRL to the Deployment (mirrors `HA_CA_CERTIFICATE`)**
 
 ```yaml
         env:

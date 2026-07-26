@@ -121,6 +121,11 @@ spec:
               secretKeyRef:
                 name: ca-ha-homelab-somemissing-info-tls
                 key: ca.crt
+          - name: HA_CRL
+            valueFrom:
+              secretKeyRef:
+                name: pki-crl
+                key: crl.pem
           # Tracing is opt-in in the app: it stays off until
           # OTEL_EXPORTER_OTLP_ENDPOINT is set. Export to the in-namespace
           # collector (application.otel-collector-contour.yaml, plaintext OTLP
