@@ -59,11 +59,23 @@ Two DNS zones, split by audience:
 
 - **`*.apps.somemissing.info`** — internet-facing services, exposed through
   the Contour edge (HTTPProxy) with public DNS.
-- **`*.k8s.somemissing.info`** — internal/LAN-only services. These resolve to
-  routable ServiceIPs via the `external-dns.alpha.kubernetes.io/hostname`
-  annotation on a plain ClusterIP Service (external-dns writes the
-  `k8s.somemissing.info` zone over RFC2136) and are not reachable from the
-  internet.
+- **`*.k8s.somemissing.info`** — internal/LAN-only services, reachable from the
+  home network but not from the internet. These resolve to routable ServiceIPs
+  via the `external-dns.alpha.kubernetes.io/hostname` annotation on a plain
+  ClusterIP Service (external-dns writes the `k8s.somemissing.info` zone over
+  RFC2136).
+
+  **Why a bare ClusterIP is reachable from off-cluster:** Calico BGP-peers with
+  the default gateway (`172.16.3.254`, AS 64512 on both sides) and advertises
+  the Service CIDR `192.168.208.0/20` to it — see the `BGPConfiguration` /
+  `BGPPeer` / `BGPFilter` resources in `application.calico.yaml`. The gateway
+  therefore routes ClusterIPs straight to the nodes, so LAN clients connect to
+  the ServiceIP directly. **No LoadBalancer, NodePort, or Ingress is needed to
+  expose a service on the LAN** — reach for one only when you actually want L7
+  features, and prefer the `*.apps` Contour edge for those. (A separate
+  `192.168.240.0/28` pool is advertised for the few LoadBalancer Services that
+  do exist, e.g. syslog ingest, which needs `externalTrafficPolicy: Local` to
+  preserve the sender's source IP.)
 
 Both zones get **publicly-trusted Let's Encrypt certificates** from the
 `cert-manager-webhook-dnsimple-production` ClusterIssuer. DNS-01 validation
