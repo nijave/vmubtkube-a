@@ -62,14 +62,28 @@ gates are enabled; leave them unset. Its traces are what the connector
 normalizes.
 
 Codex reads **user-level** `~/.codex/config.toml` only — it ignores
-project-local `[otel]` blocks. Codex emits its telemetry as OTLP **logs**:
+project-local `[otel]` blocks (it warns and drops an `otel` key found in a
+project `.codex/config.toml`).
 
 ```toml
 [otel]
-environment = "homelab"
+environment = "production"
 log_user_prompt = false
-exporter = { otlp-http = { endpoint = "https://agents-otel.k8s.somemissing.info:4318/v1/logs", protocol = "binary" } }
+exporter       = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
+trace_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
 ```
+
+`otel.exporter` is the **logs** exporter and defaults to `"none"`. Codex emits
+its `codex.*` events as OTLP *logs*, not traces, so **this is the one the
+connector needs** — `trace_exporter` alone produces no canonical Codex traces.
+
+`trace_exporter` is optional here. Codex's native spans are not normalized (the
+Claude edge drops any resource that has no `claude_code.`-prefixed span, so
+there is no duplication), but pointing it at this collector still gets those
+spans the 100% sampling exemption.
+
+`metrics_exporter` defaults to Statsig rather than OTLP, so the metrics caveat
+above does not apply to Codex unless you set it explicitly.
 
 Keep `log_user_prompt = false`. The connector never copies prompt text, tool
 arguments, or tool output into generated spans, but the **raw** Codex logs are
