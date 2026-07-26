@@ -26,8 +26,8 @@ clone:
 
 when:
   - event: pull_request
-  - event: push
-    branch: main
+#  - event: push
+#    branch: main
 
 steps:
   validate:
