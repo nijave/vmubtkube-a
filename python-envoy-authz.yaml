@@ -82,10 +82,26 @@ spec:
               secretKeyRef:
                 name: ca-ha-homelab-somemissing-info-tls
                 key: ca.crt
+          # Tracing is opt-in in the app: it stays off until
+          # OTEL_EXPORTER_OTLP_ENDPOINT is set. Export to the in-namespace
+          # collector (application.otel-collector-contour.yaml, plaintext OTLP
+          # gRPC) — the same one Envoy sends its spans to, so an ext_authz
+          # Check lands as a child of the Envoy span for that request.
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://otel-collector.projectcontour:4317"
+          - name: OTEL_SERVICE_NAME
+            value: "python-envoy-authz"
+          # Keep the /healthz startup probe out of traces. Honored by the
+          # FastAPI instrumentor; matched as a substring of the request path.
+          - name: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS
+            value: "healthz"
         ports:
-          - name: http
+          - name: grpc
             protocol: TCP
             containerPort: 5000
+          - name: http
+            protocol: TCP
+            containerPort: 5001
         livenessProbe:
           exec:
             command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-no-verify"]
@@ -96,6 +112,14 @@ spec:
             command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-no-verify"]
           initialDelaySeconds: 3
           periodSeconds: 5
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 5001
+            scheme: HTTPS
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 6
         volumeMounts:
           - name: certificate
             mountPath: /var/lib/tls
@@ -117,6 +141,10 @@ spec:
       port: 443
       protocol: TCP
       targetPort: 5000
+    - name: http
+      port: 5001
+      protocol: TCP
+      targetPort: 5001
   selector:
     app: python-envoy-authz
 ---
