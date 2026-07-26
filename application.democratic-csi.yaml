@@ -176,6 +176,10 @@ spec:
           externalProvisioner:
             extraArgs:
               - --http-endpoint=:8080
+              # default 10; modest headroom for burst PVC churn (Woodpecker CI).
+              # NAS sshd MaxSessions raised to 64 to absorb the concurrency;
+              # kept conservative so concurrent zfs/targetcli ops don't contend.
+              - --worker-threads=16
           externalAttacher:
             extraArgs:
               - --http-endpoint=:8081
