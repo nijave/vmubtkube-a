@@ -16,6 +16,21 @@ set -euo pipefail
 # blob-less sparse clone holding only the requested version's strict schemas;
 # a cluster upgrade just sparse-checkout-adds the new directory.
 
+# Every git call below targets a mirror clone via `git -C`. That flag changes
+# directory but does NOT clear the environment, and GIT_DIR takes precedence
+# over repository discovery — so when git exports it, all of them silently
+# operate on *this* repo instead of the mirror.
+#
+# Git exports an absolute GIT_DIR to hooks when the checkout is a linked
+# worktree (in a plain checkout it leaves GIT_DIR unset, which is why this only
+# ever bit inside a worktree). Via the pre-commit hooks that means:
+#   - `sparse-checkout set` writes to the outer worktree, emptying it
+#     ("You are in a sparse checkout with 0% of tracked files present");
+#   - `reset --hard origin/main` on a warm mirror moves the outer worktree's
+#     branch pointer, discarding commits.
+# Both reproduced against git 2.x. Unset the discovery vars so `-C` is honored.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+
 MIRROR=${SCHEMA_MIRROR:-.tmp/schemas}
 KJS="$MIRROR/kubernetes-json-schema"
 CRDS="$MIRROR/CRDs-catalog"
