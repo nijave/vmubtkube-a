@@ -19,7 +19,6 @@ spec:
     syncOptions:
     - PruneLast=true
     - ServerSideApply=true
-    - ApplyOutOfSyncOnly=true
     - RespectIgnoreDifferences=true
     - CreateNamespace=true
     retry:
