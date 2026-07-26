@@ -10,7 +10,9 @@ workflow, terminal, and model today.
 
 Claude Code emits spans under `ServiceName = claude-code` (scope
 `com.anthropic.claude_code.tracing`) with span types `interaction`,
-`llm_request`, `tool`, `tool.execution`, `tool.blocked_on_user`. None of the
+`llm_request`, `tool`, `tool.execution`, `tool.blocked_on_user`. (These are
+also the input to the canonical coding-agent trace shape — see
+[coding-agent traces](./coding-agent-traces.md).) None of the
 span attributes nor the `ResourceAttributes` identify which project/repo the
 session ran in — `ResourceAttributes` carries only `host.arch`, `os.type`,
 `os.version`, `service.name`, `service.version`.

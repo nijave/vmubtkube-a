@@ -62,6 +62,19 @@ spec:
                   error_mode: ignore
                   span:
                     - 'resource.attributes["service.name"] == "claude-code"'
+              # Coding-agent telemetry arriving via agents-otel.k8s.somemissing.info
+              # (otel-agent-trace-connector.yaml) is kept at 100%: these are
+              # low-volume, individually interesting traces, and the canonical
+              # invoke_agent/chat/execute_tool tree is useless if a random 1% of
+              # its turns survive. The tag is applied by that collector's
+              # resource/coding_agent processor on both the raw vendor
+              # telemetry and the canonical traces it emits.
+              - name: coding-agent
+                type: ottl_condition
+                ottl_condition:
+                  error_mode: ignore
+                  span:
+                    - 'resource.attributes["telemetry.source"] == "coding-agent"'
               - name: random
                 type: probabilistic
                 probabilistic: {sampling_percentage: 1}
