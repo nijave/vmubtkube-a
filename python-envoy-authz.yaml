@@ -148,12 +148,12 @@ spec:
             containerPort: 5001
         livenessProbe:
           exec:
-            command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-no-verify", "-tls-server-name=python-envoy-authz"]
+            command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-ca-cert=/var/lib/tls/ca.crt", "-tls-server-name=python-envoy-authz"]
           initialDelaySeconds: 5
           periodSeconds: 10
         readinessProbe:
           exec:
-            command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-no-verify", "-tls-server-name=python-envoy-authz"]
+            command: ["grpc_health_probe", "-addr=:5000", "-tls", "-tls-ca-cert=/var/lib/tls/ca.crt", "-tls-server-name=python-envoy-authz"]
           initialDelaySeconds: 3
           periodSeconds: 5
         startupProbe:
