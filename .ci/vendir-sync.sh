@@ -44,15 +44,22 @@ for chart_yaml in vendored/*/base/Chart.yaml; do
   helm dependency build "$chart_dir"
 done
 
-if git diff --quiet && git diff --cached --quiet; then
+# Stage before the emptiness check: `helm dependency build` rebuilds charts/
+# deps (e.g. vendored/vikunja/base/charts/common-*.tgz) that Renovate's own
+# vendir sync deleted, and those land as *untracked* files. `git diff`/`git
+# diff --cached` ignore untracked paths, so checking before staging silently
+# skipped the restore commit and the deletion reached main. Stage first, then
+# test the staged diff.
+git config user.email "woodpecker@ci"
+git config user.name "Woodpecker CI"
+git add -A vendored/ vendir.lock.yml
+
+if git diff --cached --quiet; then
   echo "vendir sync produced no file changes."
   exit 0
 fi
 
 echo "Committing vendir sync results..."
-git config user.email "woodpecker@ci"
-git config user.name "Woodpecker CI"
-git add vendored/ vendir.lock.yml
 git commit -m "chore: vendir sync
 
 Co-authored-by: Woodpecker CI <woodpecker@ci>"
