@@ -45,7 +45,7 @@ spec:
   source:
     chart: cert-manager-webhook-dnsimple
     repoURL: https://puzzle.github.io/cert-manager-webhook-dnsimple
-    targetRevision: 0.1.15
+    targetRevision: 0.1.16
     helm:
       releaseName: cert-manager-webhook-dnsimple
       valuesObject:
