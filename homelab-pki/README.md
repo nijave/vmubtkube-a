@@ -9,9 +9,11 @@ every 6h) both run `tofu init` then one `tofu` command against this config --
 adding or removing a device is a `for_each` over `local.devices` in
 `locals.tf`, no separate reconciler step.
 
-**Staged cutover in progress:** both containers currently run `tofu plan`
-only, not `apply` -- see "One-time CA/device import" below. Once the plan
-looks right, a follow-up change flips them to `tofu apply -auto-approve`.
+**Staged cutover, phase 2 of 3 in progress:** both containers now run
+`tofu apply -auto-approve` -- phase 1's `tofu plan` run showed exactly the
+expected diff (11 to import, 12 to add, 6 to change, 6 to destroy, no
+unexpected reissues). See "One-time CA/device import" below for what this
+apply does and the required phase 3 follow-up.
 
 ## Local validation
 
@@ -63,33 +65,31 @@ rotation is security-motivated, also add the *old* serial to
 
 ## One-time CA/device import
 
-**Not yet performed against this repo's `homelab-pki` namespace.** The import
-*approach* (mechanics of bringing the existing CA and 5 devices --
-`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone` -- under
-these resource addresses) was validated byte-identical against the real CA
-and certs in a separate harness:
-`~/Documents/workspace/go/src/github.com/nijave/terraform-provider-pki/migration/homelab-pki-import/`.
-That run proved the approach works, but it did not touch production.
-
-The actual production cutover is driven by `tofu/imports.tf` -- declarative
+The production cutover is driven by `tofu/imports.tf` -- declarative
 `import` blocks (no manual `terraform import` CLI commands, no one-off pod)
-that bind the CA and 5 devices' existing keys/certs into this config's
-resource addresses. Rollout is staged across three changes:
+that bind the real CA and 5 real devices' existing keys/certs
+(`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone`) into this
+config's resource addresses. The import *mechanism* was validated
+byte-identical against the real CA and certs in a separate harness before
+being written into this config:
+`~/Documents/workspace/go/src/github.com/nijave/terraform-provider-pki/migration/homelab-pki-import/`.
+Rollout is staged across three changes:
 
-1. **This state:** `imports.tf` is in config, and the Job/CronJob run
-   `tofu plan` only. Safe to merge/deploy as-is -- review the plan in
-   `kubectl logs job/pki-reconcile -n homelab-pki`; expect "N to import",
-   the one-time `private_key_pem` pending-set, and creates for the new
-   `pki-<device>`/`pki-crl` Secrets, no unexpected reissues.
-2. Once that plan looks right, flip the Job/CronJob command to
-   `tofu apply -auto-approve`. One apply imports the CA/devices, destroys
-   the now-orphaned old `pki-<name>-<serial>` Secrets, and creates the new
+1. `imports.tf` shipped with the Job/CronJob running `tofu plan` only.
+   Reviewed in `kubectl logs job/pki-reconcile -n homelab-pki`: exactly the
+   expected diff (11 to import, 12 to add, 6 to change -- the documented
+   one-time pending-sets -- 6 to destroy -- the old `pki-<name>-<serial>`
+   Secrets and old CRL Secret -- no unexpected reissues). Done.
+2. **This state:** the Job/CronJob command is now `tofu apply
+   -auto-approve`. One apply imports the CA/devices, destroys the
+   now-orphaned old Secrets, and creates the new `pki-<device>`/`pki-crl`
    ones -- atomically and safely (see the design spec for why the ordering
    can't race).
-3. Immediately after that apply succeeds, delete `tofu/imports.tf` and
-   `locals.tf`'s `legacy_device_secrets` map. Their data sources read
-   Secrets that apply just destroyed -- left in place, every later
-   plan/apply (including the CronJob's next run) fails.
+3. **Required follow-up, promptly after this apply succeeds once** (before
+   the CronJob's next 6-hourly run): delete `tofu/imports.tf`,
+   `locals.tf`'s `legacy_device_secrets` map, and the `legacy-*`
+   volumes/volumeMounts in `homelab-pki.yaml`. They reference Secrets this
+   apply destroys -- left in place, every later plan/apply fails.
 
 Full detail in the "Migration / cutover procedure" section of
 `docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md`.
