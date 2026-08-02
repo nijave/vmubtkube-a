@@ -257,6 +257,17 @@ output "device_serials" {
 
 ## Migration / cutover procedure
 
+**Complete.** All three staged changes below landed and the real cutover ran
+successfully: `pki_certificate_authority.ca` and all 5 real devices
+(`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone`) imported
+byte-identically (`Apply complete! Resources: 11 imported, 12 added, 6
+changed, 6 destroyed.`), confirmed against the live cluster with `openssl
+verify` (a real device cert validates against the real CA, serial preserved
+exactly). `tofu/imports.tf`, `locals.tf`'s `legacy_device_secrets`, and the
+`legacy-*` volumes/volumeMounts described in step 3 below have since been
+removed, matching that step. This section is kept as a record of what the
+cutover did and how, not a pending task list.
+
 The existing kubernetes-backend state (`secret_suffix: homelab-pki`) only
 contains `kubernetes_secret.cert[*]` (keyed `pki-<name>-<serial>`) and
 `kubernetes_secret.crl[0]` — entirely different resource types/addresses than

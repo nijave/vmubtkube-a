@@ -9,11 +9,8 @@ every 6h) both run `tofu init` then one `tofu` command against this config --
 adding or removing a device is a `for_each` over `local.devices` in
 `locals.tf`, no separate reconciler step.
 
-**Staged cutover, phase 2 of 3 in progress:** both containers now run
-`tofu apply -auto-approve` -- phase 1's `tofu plan` run showed exactly the
-expected diff (11 to import, 12 to add, 6 to change, 6 to destroy, no
-unexpected reissues). See "One-time CA/device import" below for what this
-apply does and the required phase 3 follow-up.
+Both containers run `tofu apply -auto-approve`. The one-time cutover onto
+this provider is complete -- see "One-time CA/device import" below.
 
 ## Local validation
 
@@ -63,33 +60,21 @@ of the same `pki-<name>` Secret (same name -- no orphaned old Secret). If the
 rotation is security-motivated, also add the *old* serial to
 `revoked_serials` per the revocation steps above.
 
-## One-time CA/device import
+## One-time CA/device import (complete)
 
-The production cutover is driven by `tofu/imports.tf` -- declarative
-`import` blocks (no manual `terraform import` CLI commands, no one-off pod)
-that bind the real CA and 5 real devices' existing keys/certs
-(`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone`) into this
-config's resource addresses. The import *mechanism* was validated
-byte-identical against the real CA and certs in a separate harness before
+The production cutover onto this provider is done. The real CA and 5 real
+devices (`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone`)
+were imported byte-identically via a now-removed `tofu/imports.tf`
+(declarative `import` blocks, no manual `terraform import` CLI commands, no
+one-off pod) -- `Apply complete! Resources: 11 imported, 12 added, 6
+changed, 6 destroyed.` -- confirmed against the live cluster with `openssl
+verify` (a real device cert validates against the real CA, serial preserved
+exactly). The import *mechanism* was validated in a separate harness before
 being written into this config:
 `~/Documents/workspace/go/src/github.com/nijave/terraform-provider-pki/migration/homelab-pki-import/`.
-Rollout is staged across three changes:
 
-1. `imports.tf` shipped with the Job/CronJob running `tofu plan` only.
-   Reviewed in `kubectl logs job/pki-reconcile -n homelab-pki`: exactly the
-   expected diff (11 to import, 12 to add, 6 to change -- the documented
-   one-time pending-sets -- 6 to destroy -- the old `pki-<name>-<serial>`
-   Secrets and old CRL Secret -- no unexpected reissues). Done.
-2. **This state:** the Job/CronJob command is now `tofu apply
-   -auto-approve`. One apply imports the CA/devices, destroys the
-   now-orphaned old Secrets, and creates the new `pki-<device>`/`pki-crl`
-   ones -- atomically and safely (see the design spec for why the ordering
-   can't race).
-3. **Required follow-up, promptly after this apply succeeds once** (before
-   the CronJob's next 6-hourly run): delete `tofu/imports.tf`,
-   `locals.tf`'s `legacy_device_secrets` map, and the `legacy-*`
-   volumes/volumeMounts in `homelab-pki.yaml`. They reference Secrets this
-   apply destroys -- left in place, every later plan/apply fails.
-
-Full detail in the "Migration / cutover procedure" section of
-`docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md`.
+Full detail (the staged rollout, the two import gotchas, why the old
+Secrets could be destroyed safely in the same apply) is in the "Migration /
+cutover procedure" section of
+`docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md`,
+kept as a record of what happened.
