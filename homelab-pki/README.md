@@ -57,10 +57,17 @@ rotation is security-motivated, also add the *old* serial to
 
 ## One-time CA/device import
 
-Already performed for the existing CA and 5 devices (`nick-desktop`,
-`nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone`) -- see
+**Not yet performed against this repo's `homelab-pki` namespace.** The import
+*approach* (mechanics of bringing the existing CA and 5 devices --
+`nick-desktop`, `nick-ipad`, `nick-xps`, `pixel7`, `kara-iphone` -- under
+these resource addresses) was validated byte-identical against the real CA
+and certs in a separate harness:
+`~/Documents/workspace/go/src/github.com/nijave/terraform-provider-pki/migration/homelab-pki-import/`.
+That run proved the approach works, but it did not touch production.
+
+The actual production cutover -- importing the real CA and devices into the
+resource addresses this branch defines -- is still a pending manual step.
+Run it per the "Migration / cutover procedure" section of
 `docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md`
-for the full cutover procedure and
-`~/Documents/workspace/go/src/github.com/nijave/terraform-provider-pki/migration/homelab-pki-import/`
-for the validation run that proved it byte-identical against the real CA and
-certs.
+before enabling the new Job/CronJob against the live `homelab-pki`
+namespace.

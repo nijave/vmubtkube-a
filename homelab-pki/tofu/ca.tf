@@ -12,7 +12,7 @@ data "kubernetes_secret" "ca" {
 }
 
 resource "pki_certificate_authority" "ca" {
-  private_key_pem = base64decode(data.kubernetes_secret.ca.binary_data["tls.key"])
+  private_key_pem = data.kubernetes_secret.ca.data["tls.key"]
 
   validity      = "175320h"
   serial_number = "4d71d760878eb0a8831ce2e1d6028f61f1fc7d5f"
