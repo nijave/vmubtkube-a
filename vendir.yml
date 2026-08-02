@@ -99,7 +99,20 @@ directories:
   # vikunja.image.tag in application.vikunja.yaml, NOT the chart's appVersion —
   # bump the chart tag and the common helmChart entry below together
   # (Chart.lock pins the common version this chart expects).
-  - path: vendored/vikunja/base
+  #
+  # vendir can't fetch straight into vendored/vikunja/base: that directory also
+  # needs the `common` subchart (vendored separately below) and Helm requires
+  # subcharts to live physically under the parent chart's charts/, but each
+  # vendir-managed directory is fully wiped and replaced on every sync, so
+  # nesting one inside the other would let either sync silently delete the
+  # other's output (vendir also rejects this outright as an overlapping path).
+  #
+  # So this entry fetches into a plain upstream/ staging directory instead, and
+  # vendored/vikunja/base is a plain, non-vendir directory of symlinks (see
+  # vendored/vikunja/base/*) pointing into upstream/ and into
+  # vendored/bjw-s-common/base below. Since base/ is never a vendir-managed
+  # path, sync never touches it — no CI relinking step needed.
+  - path: vendored/vikunja/upstream
     contents:
       - path: .
         git:
@@ -116,16 +129,10 @@ directories:
           # so exclude them here or helm renders a kind-less doc.
           - templates/tests/**
 
-  # The chart repo commits only Chart.lock, not its charts/ dependency. vendir
-  # refuses to manage vendored/vikunja/base/charts/common directly: it treats
-  # that as an overlapping path with vendored/vikunja/base above (each managed
-  # directory is fully wiped and replaced on every sync, so nesting one inside
-  # the other would let either sync silently delete the other's output).
-  # Instead, vendor `common` here as its own sibling directory, and
-  # .ci/vendir-sync.sh re-links vendored/vikunja/base/charts/common -> this
-  # directory after every sync (that symlink itself doesn't survive the
-  # vikunja entry's own sync, since charts/ isn't in its includePaths). Helm
-  # resolves symlinked subcharts under charts/ the same as a real directory.
+  # The chart repo commits only Chart.lock, not its charts/ dependency — vendor
+  # `common` as its own directory (see vendored/vikunja/upstream comment above
+  # for why it can't live under vendored/vikunja/base directly).
+  # vendored/vikunja/base/charts/common is a symlink to this directory.
   - path: vendored/bjw-s-common/base
     contents:
       - path: .

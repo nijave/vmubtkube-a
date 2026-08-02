@@ -26,18 +26,10 @@ fi
 echo "Running vendir sync..."
 vendir sync
 
-# vikunja's charts/common isn't vendir-managed directly (see vendir.yml):
-# it's a symlink to the sibling vendored/bjw-s-common/base directory, which
-# the vikunja entry's own git sync just wiped (charts/ isn't in its
-# includePaths, so the whole-directory replace drops it every run). Relink it.
-mkdir -p vendored/vikunja/base/charts
-ln -sfn ../../../bjw-s-common/base vendored/vikunja/base/charts/common
-
 # Stage before the emptiness check: freshly vendored directories (e.g. a
-# helmChart entry's first fetch, or the symlink recreated above) land as
-# *untracked*/modified files, and `git diff`/`git diff --cached` ignore
-# untracked paths. Checking before staging would silently skip the commit.
-# Stage first, then test the staged diff.
+# helmChart entry's first fetch) land as *untracked* files, and `git diff`/
+# `git diff --cached` ignore untracked paths. Checking before staging would
+# silently skip the commit. Stage first, then test the staged diff.
 git config user.email "woodpecker@ci"
 git config user.name "Woodpecker CI"
 git add -A vendored/ vendir.lock.yml

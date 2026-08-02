@@ -64,7 +64,7 @@ directories:
       tags:
       - v2.0.2
     path: .
-  path: vendored/vikunja/base
+  path: vendored/vikunja/upstream
 - contents:
   - helmChart:
       appVersion: ""
