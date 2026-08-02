@@ -1,20 +1,19 @@
 {{/*
-Renders the serviceMonitor objects required by the chart.
+Renders the serviceMonitor object required by the chart.
 */}}
 {{- define "bjw-s.common.render.serviceMonitors" -}}
-  {{- /* Generate named services as required */ -}}
-  {{- range $name, $serviceMonitor := .Values.serviceMonitor -}}
-    {{- if $serviceMonitor.enabled -}}
-      {{- $serviceMonitorValues := $serviceMonitor -}}
+  {{- $rootContext := $ -}}
 
-      {{- if and (not $serviceMonitorValues.nameOverride) (ne $name "main") -}}
-        {{- $_ := set $serviceMonitorValues "nameOverride" $name -}}
-      {{- end -}}
+  {{- /* Generate named serviceMonitors as required */ -}}
+  {{- $enabledServiceMonitors := (include "bjw-s.common.lib.serviceMonitor.enabledServiceMonitors" (dict "rootContext" $rootContext) | fromYaml ) -}}
+  {{- range $identifier := keys $enabledServiceMonitors -}}
+    {{- /* Generate object from the raw serviceMonitor values */ -}}
+    {{- $serviceMonitorObject := (include "bjw-s.common.lib.serviceMonitor.getByIdentifier" (dict "rootContext" $rootContext "id" $identifier) | fromYaml) -}}
 
-      {{/* Include the serviceMonitor class */}}
-      {{- $_ := set $ "ObjectValues" (dict "serviceMonitor" $serviceMonitorValues) -}}
-      {{- include "bjw-s.common.class.serviceMonitor" $ | nindent 0 -}}
-      {{- $_ := unset $.ObjectValues "serviceMonitor" -}}
-    {{- end -}}
+    {{- /* Perform validations on the ServiceMonitor before rendering */ -}}
+    {{- include "bjw-s.common.lib.serviceMonitor.validate" (dict "rootContext" $rootContext "object" $serviceMonitorObject) -}}
+
+    {{- /* Include the ServiceMonitor class */ -}}
+    {{- include "bjw-s.common.class.serviceMonitor" (dict "rootContext" $rootContext "object" $serviceMonitorObject) | nindent 0 -}}
   {{- end -}}
 {{- end -}}

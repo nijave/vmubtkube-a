@@ -2,29 +2,25 @@
 Secondary entrypoint and primary loader for the common chart
 */}}
 {{- define "bjw-s.common.loader.generate" -}}
-  {{- /* Enable code-server add-on if required */ -}}
-  {{- if .Values.addons.codeserver.enabled -}}
-    {{- include "bjw-s.common.addon.codeserver" . | nindent 0 -}}
-  {{- end -}}
+  {{- $rootContext := $ -}}
 
-  {{- /* Enable VPN add-on if required */ -}}
-  {{- if .Values.addons.vpn.enabled -}}
-    {{- include "bjw-s.common.addon.vpn" . | nindent 0 -}}
-  {{- end -}}
-
-  {{- /* Enable netshoot add-on if required */ -}}
-  {{- if .Values.addons.netshoot.enabled -}}
-    {{- include "bjw-s.common.addon.netshoot" . | nindent 0 -}}
-  {{- end -}}
+  {{- /* Run global chart validations */ -}}
+  {{- include "bjw-s.common.lib.chart.validate" $rootContext -}}
 
   {{- /* Build the templates */ -}}
-  {{- include "bjw-s.common.render.pvcs" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.serviceAccount" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.controller" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.services" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.ingresses" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.serviceMonitors" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.routes" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.configmaps" . | nindent 0 -}}
-  {{- include "bjw-s.common.render.secrets" . | nindent 0 -}}
+  {{- include "bjw-s.common.render.pvcs" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.serviceAccount" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.configMaps.fromFolder" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.configMaps" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.secrets.fromFolder" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.controllers" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.services" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.ingresses" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.serviceMonitors" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.podMonitors" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.routes" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.secrets" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.networkpolicies" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.rawResources" $rootContext | nindent 0 -}}
+  {{- include "bjw-s.common.render.rbac" $rootContext | nindent 0 -}}
 {{- end -}}

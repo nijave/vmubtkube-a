@@ -2,74 +2,102 @@
 This template serves as a blueprint for all Ingress objects that are created
 within the common library.
 */}}
+
 {{- define "bjw-s.common.class.ingress" -}}
-  {{- $fullName := include "bjw-s.common.lib.chart.names.fullname" . -}}
-  {{- $ingressName := $fullName -}}
-  {{- $values := .Values.ingress -}}
+  {{- $rootContext := .rootContext -}}
+  {{- $ingressObject := .object -}}
 
-  {{- if hasKey . "ObjectValues" -}}
-    {{- with .ObjectValues.ingress -}}
-      {{- $values = . -}}
-    {{- end -}}
-  {{ end -}}
-
-  {{- if and (hasKey $values "nameOverride") $values.nameOverride -}}
-    {{- $ingressName = printf "%v-%v" $ingressName $values.nameOverride -}}
-  {{- end -}}
-
-  {{- $primaryService := get .Values.service (include "bjw-s.common.lib.service.primary" .) -}}
-  {{- $defaultServiceName := $fullName -}}
-  {{- if and (hasKey $primaryService "nameOverride") $primaryService.nameOverride -}}
-    {{- $defaultServiceName = printf "%v-%v" $defaultServiceName $primaryService.nameOverride -}}
-  {{- end -}}
-  {{- $defaultServicePort := get $primaryService.ports (include "bjw-s.common.lib.service.primaryPort" (dict "values" $primaryService)) -}}
+  {{- $labels := merge
+    ($ingressObject.labels | default dict)
+    (include "bjw-s.common.lib.metadata.allLabels" $rootContext | fromYaml)
+  -}}
+  {{- $annotations := merge
+    ($ingressObject.annotations | default dict)
+    (include "bjw-s.common.lib.metadata.globalAnnotations" $rootContext | fromYaml)
+  -}}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $ingressName }}
-  {{- with (merge ($values.labels | default dict) (include "bjw-s.common.lib.metadata.allLabels" $ | fromYaml)) }}
-  labels: {{- toYaml . | nindent 4 }}
+  name: {{ $ingressObject.name }}
+  {{- with $labels }}
+  labels:
+    {{- range $key, $value := . }}
+      {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
+    {{- end }}
   {{- end }}
-  {{- with (merge ($values.annotations | default dict) (include "bjw-s.common.lib.metadata.globalAnnotations" $ | fromYaml)) }}
-  annotations: {{- toYaml . | nindent 4 }}
+  {{- with $annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+      {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
+    {{- end }}
   {{- end }}
+  namespace: {{ $rootContext.Release.Namespace }}
 spec:
-  {{- if $values.ingressClassName }}
-  ingressClassName: {{ $values.ingressClassName }}
+  {{- if $ingressObject.className }}
+  ingressClassName: {{ $ingressObject.className }}
   {{- end }}
-  {{- if $values.tls }}
+  {{- if $ingressObject.tls }}
   tls:
-    {{- range $values.tls }}
+    {{- range $ingressObject.tls }}
     - hosts:
         {{- range .hosts }}
-        - {{ tpl . $ | quote }}
+        - {{ tpl . $rootContext | quote }}
         {{- end }}
-      {{- $secretName := tpl (default "" .secretName) $ }}
+      {{- $secretName := tpl (default "" .secretName) $rootContext }}
       {{- if $secretName }}
       secretName: {{ $secretName | quote}}
       {{- end }}
     {{- end }}
   {{- end }}
+  {{- if $ingressObject.defaultBackend }}
+  defaultBackend: {{ $ingressObject.defaultBackend | toYaml | nindent 4 }}
+  {{- else }}
   rules:
-  {{- range $values.hosts }}
-    - host: {{ tpl .host $ | quote }}
+  {{- range $ingressObject.hosts }}
+    - host: {{ tpl .host $rootContext | quote }}
       http:
         paths:
           {{- range .paths }}
-          {{- $service := $defaultServiceName -}}
-          {{- $port := $defaultServicePort.port -}}
-          {{- if .service -}}
-            {{- $service = default $service .service.name -}}
-            {{- $port = default $port .service.port -}}
-          {{- end }}
-          - path: {{ tpl .path $ | quote }}
+          - path: {{ tpl .path $rootContext | quote }}
             pathType: {{ default "Prefix" .pathType }}
             backend:
               service:
-                name: {{ $service }}
+                {{ $service := dict -}}
+                {{ $serviceName := "" -}}
+                {{ $servicePort := 0 -}}
+
+                {{ if .service.name -}}
+                  {{ $serviceName = tpl .service.name $rootContext -}}
+                {{ else if .service.identifier -}}
+                  {{ $service = (include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" $rootContext "id" .service.identifier) | fromYaml ) -}}
+                  {{ if not $service -}}
+                    {{fail (printf "No enabled Service found with this identifier. (ingress: '%s', path: '%s', identifier: '%s')" $ingressObject.identifier .path .service.identifier)}}
+                  {{ end -}}
+                  {{ $serviceName = $service.name -}}
+                {{ end -}}
+
+                {{ if empty (dig "port" nil .service) -}}
+                  {{/* Default to the Service primary port if no port has been specified */ -}}
+                  {{ if $service -}}
+                    {{ $defaultServicePort := include "bjw-s.common.lib.service.primaryPort" (dict "rootContext" $rootContext "serviceObject" $service) | fromYaml -}}
+                    {{ if $defaultServicePort -}}
+                      {{ $servicePort = $defaultServicePort.port -}}
+                    {{ end -}}
+                  {{ end -}}
+                {{ else -}}
+                  {{/* If a port number is given, use that */ -}}
+                  {{ if kindIs "float64" .service.port -}}
+                    {{ $servicePort = .service.port -}}
+                  {{ else if kindIs "string" .service.port -}}
+                    {{/* If a port name is given, try to resolve to a number */ -}}
+                    {{ $servicePort = include "bjw-s.common.lib.service.getPortNumberByName" (dict "rootContext" $rootContext "serviceID" .service.identifier "portName" .service.port) -}}
+                  {{ end -}}
+                {{ end -}}
+                name: {{ default .service.name $serviceName }}
                 port:
-                  number: {{ $port }}
+                  number: {{ $servicePort }}
           {{- end }}
+  {{- end }}
   {{- end }}
 {{- end }}

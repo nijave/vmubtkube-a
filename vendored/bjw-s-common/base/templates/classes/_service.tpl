@@ -3,98 +3,133 @@ This template serves as a blueprint for all Service objects that are created
 within the common library.
 */}}
 {{- define "bjw-s.common.class.service" -}}
-{{- $values := .Values.service -}}
-{{- if hasKey . "ObjectValues" -}}
-  {{- with .ObjectValues.service -}}
-    {{- $values = . -}}
-  {{- end -}}
-{{ end -}}
+  {{- $rootContext := .rootContext -}}
+  {{- $serviceObject := .object -}}
 
-{{- $serviceName := include "bjw-s.common.lib.chart.names.fullname" . -}}
-{{- if and (hasKey $values "nameOverride") $values.nameOverride -}}
-  {{- $serviceName = printf "%v-%v" $serviceName $values.nameOverride -}}
-{{ end -}}
-{{- $svcType := $values.type | default "" -}}
-{{- $enabledPorts := include "bjw-s.common.lib.service.enabledPorts" (dict "serviceName" $serviceName "values" $values) | fromYaml }}
-{{- $primaryPort := get $values.ports (include "bjw-s.common.lib.service.primaryPort" (dict "values" $values)) }}
+  {{- $svcType := default "ClusterIP" $serviceObject.type -}}
+  {{- $enabledPorts := include "bjw-s.common.lib.service.enabledPorts" (dict "rootContext" $rootContext "serviceObject" $serviceObject) | fromYaml }}
+  {{- $labels := merge
+    (dict "app.kubernetes.io/service" $serviceObject.name)
+    ($serviceObject.labels | default dict)
+    (include "bjw-s.common.lib.metadata.allLabels" $rootContext | fromYaml)
+  -}}
+  {{- $annotations := merge
+    ($serviceObject.annotations | default dict)
+    (include "bjw-s.common.lib.metadata.globalAnnotations" $rootContext | fromYaml)
+  -}}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $serviceName }}
+  name: {{ $serviceObject.name }}
+  {{- with $labels }}
   labels:
-    app.kubernetes.io/service: {{ $serviceName }}
-    {{- with (merge ($values.labels | default dict) (include "bjw-s.common.lib.metadata.allLabels" $ | fromYaml)) }}
-      {{- toYaml . | nindent 4 }}
+    {{- range $key, $value := . }}
+      {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
     {{- end }}
+  {{- end }}
+  {{- with $annotations }}
   annotations:
-  {{- if eq ( $primaryPort.protocol | default "" ) "HTTPS" }}
-    traefik.ingress.kubernetes.io/service.serversscheme: https
+    {{- range $key, $value := . }}
+      {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
+    {{- end }}
   {{- end }}
-  {{- with (merge ($values.annotations | default dict) (include "bjw-s.common.lib.metadata.globalAnnotations" $ | fromYaml)) }}
-    {{ toYaml . | nindent 4 }}
-  {{- end }}
+  namespace: {{ $rootContext.Release.Namespace }}
 spec:
-  {{- if (or (eq $svcType "ClusterIP") (empty $svcType)) }}
+  {{- if (eq $svcType "ClusterIP") }}
   type: ClusterIP
-  {{- if $values.clusterIP }}
-  clusterIP: {{ $values.clusterIP }}
+  {{- if $serviceObject.clusterIP }}
+  clusterIP: {{ $serviceObject.clusterIP }}
   {{end}}
   {{- else if eq $svcType "LoadBalancer" }}
   type: {{ $svcType }}
-  {{- if $values.loadBalancerIP }}
-  loadBalancerIP: {{ $values.loadBalancerIP }}
+  {{- if $serviceObject.loadBalancerIP }}
+  loadBalancerIP: {{ $serviceObject.loadBalancerIP }}
   {{- end }}
-  {{- if $values.loadBalancerSourceRanges }}
+  {{- if $serviceObject.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
-    {{ toYaml $values.loadBalancerSourceRanges | nindent 4 }}
+    {{ toYaml $serviceObject.loadBalancerSourceRanges | nindent 4 }}
   {{- end -}}
+  {{- if $serviceObject.loadBalancerClass }}
+  loadBalancerClass: {{ $serviceObject.loadBalancerClass }}
+  {{- end -}}
+  {{- else if eq $svcType "ExternalName" }}
+  type: {{ $svcType }}
+  {{- if $serviceObject.externalName }}
+  externalName: {{ $serviceObject.externalName }}
+  {{- end }}
   {{- else }}
   type: {{ $svcType }}
   {{- end }}
-  {{- if $values.externalTrafficPolicy }}
-  externalTrafficPolicy: {{ $values.externalTrafficPolicy }}
+  {{- if $serviceObject.internalTrafficPolicy }}
+  internalTrafficPolicy: {{ $serviceObject.internalTrafficPolicy }}
   {{- end }}
-  {{- if $values.sessionAffinity }}
-  sessionAffinity: {{ $values.sessionAffinity }}
-  {{- if $values.sessionAffinityConfig }}
+  {{- if $serviceObject.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ $serviceObject.externalTrafficPolicy }}
+  {{- end }}
+  {{- if hasKey $serviceObject "allocateLoadBalancerNodePorts" }}
+  allocateLoadBalancerNodePorts: {{ $serviceObject.allocateLoadBalancerNodePorts }}
+  {{- end }}
+  {{- if $serviceObject.sessionAffinity }}
+  sessionAffinity: {{ $serviceObject.sessionAffinity }}
+  {{- if $serviceObject.sessionAffinityConfig }}
   sessionAffinityConfig:
-    {{ toYaml $values.sessionAffinityConfig | nindent 4 }}
+    {{ toYaml $serviceObject.sessionAffinityConfig | nindent 4 }}
   {{- end -}}
   {{- end }}
-  {{- with $values.externalIPs }}
+  {{- with $serviceObject.externalIPs }}
   externalIPs:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- if $values.publishNotReadyAddresses }}
-  publishNotReadyAddresses: {{ $values.publishNotReadyAddresses }}
+  {{- if $serviceObject.publishNotReadyAddresses }}
+  publishNotReadyAddresses: {{ $serviceObject.publishNotReadyAddresses }}
   {{- end }}
-  {{- if $values.ipFamilyPolicy }}
-  ipFamilyPolicy: {{ $values.ipFamilyPolicy }}
+  {{- if $serviceObject.ipFamilyPolicy }}
+  ipFamilyPolicy: {{ $serviceObject.ipFamilyPolicy }}
   {{- end }}
-  {{- with $values.ipFamilies }}
+  {{- with $serviceObject.ipFamilies }}
   ipFamilies:
     {{ toYaml . | nindent 4 }}
   {{- end }}
+  {{- if and (ge ($rootContext.Capabilities.KubeVersion.Minor | int) 33) ($serviceObject.trafficDistribution) }}
+  trafficDistribution: {{ $serviceObject.trafficDistribution }}
+  {{- end }}
   ports:
   {{- range $name, $port := $enabledPorts }}
+    {{- $portProtocol := "TCP" }}
+    {{- if $port.protocol }}
+      {{- if not (has $port.protocol (list "HTTP" "HTTPS" "TCP")) }}
+        {{- $portProtocol = $port.protocol }}
+      {{- end }}
+    {{- end }}
+    {{- if $port.port }}
     - port: {{ $port.port }}
-      targetPort: {{ $port.targetPort | default $name }}
-        {{- if $port.protocol }}
-          {{- if or ( eq $port.protocol "HTTP" ) ( eq $port.protocol "HTTPS" ) ( eq $port.protocol "TCP" ) }}
-      protocol: TCP
-          {{- else }}
-      protocol: {{ $port.protocol }}
-          {{- end }}
-        {{- else }}
-      protocol: TCP
-        {{- end }}
+      targetPort: {{ $port.targetPort | default $port.port }}
+      protocol: {{ $portProtocol }}
       name: {{ $name }}
-        {{- if (and (eq $svcType "NodePort") (not (empty $port.nodePort))) }}
+        {{- if (not (empty $port.nodePort)) }}
       nodePort: {{ $port.nodePort }}
         {{ end }}
-      {{- end -}}
-  {{- with (merge ($values.extraSelectorLabels | default dict) (include "bjw-s.common.lib.metadata.selectorLabels" . | fromYaml)) }}
+        {{- if (not (empty $port.appProtocol)) }}
+      appProtocol: {{ $port.appProtocol }}
+        {{ end }}
+    {{- else if $port.portRange }}
+      {{- range $portnum := untilStep ($port.portRange.start | int) ((add $port.portRange.end 1) | int) 1 }}
+    - port: {{ $portnum }}
+      name: {{ $name }}-{{ $portnum }}
+      targetPort: {{ $portnum }}
+      protocol: {{ $portProtocol }}
+        {{- if (not (empty $port.appProtocol)) }}
+      appProtocol: {{ $port.appProtocol }}
+        {{ end }}
+      {{- end }}
+    {{- end }}
+  {{- end -}}
+  {{- with (merge
+    ($serviceObject.extraSelectorLabels | default dict)
+    (dict "app.kubernetes.io/controller" $serviceObject.controller)
+    (include "bjw-s.common.lib.metadata.selectorLabels" $rootContext | fromYaml)
+  ) }}
   selector: {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- end }}

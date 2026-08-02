@@ -1,18 +1,19 @@
-{{/* Renders the Route objects required by the chart */}}
+{{/*
+Renders the Route objects required by the chart
+*/}}
 {{- define "bjw-s.common.render.routes" -}}
+  {{- $rootContext := $ -}}
+
   {{- /* Generate named routes as required */ -}}
-  {{- range $name, $route := .Values.route }}
-    {{- if $route.enabled -}}
-      {{- $routeValues := $route -}}
+  {{- $enabledRoutes := (include "bjw-s.common.lib.route.enabledRoutes" (dict "rootContext" $rootContext) | fromYaml ) -}}
+  {{- range $identifier := keys $enabledRoutes -}}
+    {{- /* Generate object from the raw route values */ -}}
+    {{- $routeObject := (include "bjw-s.common.lib.route.getByIdentifier" (dict "rootContext" $rootContext "id" $identifier) | fromYaml) -}}
 
-      {{/* set defaults */}}
-      {{- if and (not $routeValues.nameOverride) (ne $name (include "bjw-s.common.lib.route.primary" $)) -}}
-        {{- $_ := set $routeValues "nameOverride" $name -}}
-      {{- end -}}
+    {{- /* Perform validations on the Route before rendering */ -}}
+    {{- include "bjw-s.common.lib.route.validate" (dict "rootContext" $rootContext "object" $routeObject) -}}
 
-      {{- $_ := set $ "ObjectValues" (dict "route" $routeValues) -}}
-      {{- include "bjw-s.common.class.route" $ | nindent 0 -}}
-      {{- $_ := unset $.ObjectValues "route" -}}
-    {{- end }}
-  {{- end }}
-{{- end }}
+    {{- /* Include the Route class */ -}}
+    {{- include "bjw-s.common.class.route" (dict "rootContext" $rootContext "object" $routeObject) | nindent 0 -}}
+  {{- end -}}
+{{- end -}}

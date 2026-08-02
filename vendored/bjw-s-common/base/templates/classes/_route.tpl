@@ -3,71 +3,132 @@ This template serves as a blueprint for all Route objects that are created
 within the common library.
 */}}
 {{- define "bjw-s.common.class.route" -}}
-{{- $values := .Values.route -}}
-{{- if hasKey . "ObjectValues" -}}
-  {{- with .ObjectValues.route -}}
-    {{- $values = . -}}
-  {{- end -}}
-{{ end -}}
+  {{- $rootContext := .rootContext -}}
+  {{- $routeObject := .object -}}
 
-{{- $fullName := include "bjw-s.common.lib.chart.names.fullname" . -}}
-{{- if and (hasKey $values "nameOverride") $values.nameOverride -}}
-  {{- $fullName = printf "%v-%v" $fullName $values.nameOverride -}}
-{{ end -}}
-{{- $routeKind := $values.kind | default "HTTPRoute" -}}
-{{- $primaryService := get .Values.service (include "bjw-s.common.lib.service.primary" .) -}}
-{{- $defaultServiceName := $fullName -}}
-{{- if and (hasKey $primaryService "nameOverride") $primaryService.nameOverride -}}
-  {{- $defaultServiceName = printf "%v-%v" $defaultServiceName $primaryService.nameOverride -}}
-{{- end -}}
-{{- $defaultServicePort := get $primaryService.ports (include "bjw-s.common.lib.service.primaryPort" (dict "values" $primaryService)) -}}
+  {{- $routeKind := $routeObject.kind | default "HTTPRoute" -}}
+  {{- $apiVersion := "gateway.networking.k8s.io/v1alpha2" -}}
+  {{- if $rootContext.Capabilities.APIVersions.Has (printf "gateway.networking.k8s.io/v1beta1/%s" $routeKind) }}
+    {{- $apiVersion = "gateway.networking.k8s.io/v1beta1" -}}
+  {{- end -}}
+  {{- if $rootContext.Capabilities.APIVersions.Has (printf "gateway.networking.k8s.io/v1/%s" $routeKind) }}
+    {{- $apiVersion = "gateway.networking.k8s.io/v1" -}}
+  {{- end -}}
+  {{- $labels := merge
+    ($routeObject.labels | default dict)
+    (include "bjw-s.common.lib.metadata.allLabels" $rootContext | fromYaml)
+  -}}
+  {{- $annotations := merge
+    ($routeObject.annotations | default dict)
+    (include "bjw-s.common.lib.metadata.globalAnnotations" $rootContext | fromYaml)
+  -}}
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
-{{- if and (ne $routeKind "GRPCRoute") (ne $routeKind "HTTPRoute") (ne $routeKind "TCPRoute") (ne $routeKind "TLSRoute") (ne $routeKind "UDPRoute") }}
-  {{- fail (printf "Not a valid route kind (%s)" $routeKind) }}
-{{- end }}
+apiVersion: {{ $apiVersion }}
 kind: {{ $routeKind }}
 metadata:
-  name: {{ $fullName }}
-  {{- with (merge ($values.labels | default dict) (include "bjw-s.common.lib.metadata.allLabels" $ | fromYaml)) }}
-  labels: {{- toYaml . | nindent 4 }}
+  name: {{ $routeObject.name }}
+  {{- with $labels }}
+  labels:
+    {{- range $key, $value := . }}
+    {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
+    {{- end }}
   {{- end }}
-  {{- with (merge ($values.annotations | default dict) (include "bjw-s.common.lib.metadata.globalAnnotations" $ | fromYaml)) }}
-  annotations: {{- toYaml . | nindent 4 }}
+  {{- with $annotations }}
+  annotations:
+    {{- range $key, $value := . }}
+    {{- printf "%s: %s" $key (tpl $value $rootContext | toYaml ) | nindent 4 }}
+    {{- end }}
   {{- end }}
+  namespace: {{ $rootContext.Release.Namespace }}
 spec:
   parentRefs:
-  {{- range $values.parentRefs }}
-    - group: {{ default "gateway.networking.k8s.io" .group }}
-      kind: {{ default "Gateway" .kind }}
-      name: {{ required (printf "parentRef name is required for %v %v" $routeKind $fullName) .name }}
-      namespace: {{ required (printf "parentRef namespace is required for %v %v" $routeKind $fullName) .namespace }}
+  {{- range $routeObject.parentRefs }}
+    - group: {{ .group | default "gateway.networking.k8s.io" }}
+      kind: {{ .kind | default "Gateway" }}
+      name: {{ required (printf "parentRef name is required for %v %v" $routeKind $routeObject.name) .name }}
+      {{- if .namespace }}
+      namespace: {{ .namespace | quote }}
+      {{- end }}
       {{- if .sectionName }}
       sectionName: {{ .sectionName | quote }}
       {{- end }}
+      {{- if .port }}
+      port: {{ .port }}
+      {{- end }}
   {{- end }}
-  {{- if and (ne $routeKind "TCPRoute") (ne $routeKind "UDPRoute") $values.hostnames }}
+  {{- if and (ne $routeKind "TCPRoute") (ne $routeKind "UDPRoute") $routeObject.hostnames }}
   hostnames:
-  {{- with $values.hostnames }}
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- range $routeObject.hostnames }}
+    - {{ tpl . $rootContext | quote }}
+    {{- end }}
   {{- end }}
   rules:
-  {{- range $values.rules }}
-  - backendRefs:
-    {{- range .backendRefs }}
-    - group: {{ default "" .group | quote}}
-      kind: {{ default "Service" .kind }}
-      name: {{ default $defaultServiceName .name }}
-      namespace: {{ default $.Release.Namespace .namespace }}
-      port: {{ default $defaultServicePort.port .port }}
-      weight: {{ default 1 .weight }}
-    {{- end }}
-    {{- if (eq $routeKind "HTTPRoute") }}
-      {{- with .matches }}
-    matches:
-        {{- toYaml . | nindent 6 }}
+  {{- range $routeObject.rules }}
+    - {{ with .name -}}
+        name: {{ tpl . $rootContext }}
+      {{ end -}}
+      backendRefs:
+      {{- if empty .backendRefs }}
+         []
+      {{ else -}}
+        {{- range .backendRefs -}}
+          {{- $service := dict -}}
+          {{- $serviceName := "" -}}
+          {{- $servicePort := 0 -}}
+          {{- if .name -}}
+            {{- $serviceName = tpl .name $rootContext -}}
+          {{- else if .identifier -}}
+            {{- $service = (include "bjw-s.common.lib.service.getByIdentifier" (dict "rootContext" $rootContext "id" .identifier) | fromYaml ) -}}
+            {{- if not $service -}}
+              {{- fail (printf "No enabled Service found with this identifier. (route: '%s', identifier: '%s')" $routeObject.identifier .identifier) -}}
+            {{- end -}}
+            {{- $serviceName = $service.name -}}
+          {{- end -}}
+          {{- if empty .port -}}
+            {{/*- Default to the Service primary port if no port has been specified -*/}}
+            {{- if $service -}}
+              {{- $defaultServicePort := include "bjw-s.common.lib.service.primaryPort" (dict "rootContext" $rootContext "serviceObject" $service) | fromYaml -}}
+              {{- if $defaultServicePort -}}
+                {{- $servicePort = $defaultServicePort.port -}}
+              {{- end -}}
+            {{- end -}}
+          {{- else -}}
+            {{/*- If a port number is given, use that -*/}}
+            {{- if kindIs "float64" .port -}}
+              {{- $servicePort = .port -}}
+            {{- else if kindIs "string" .port -}}
+              {{/*- If a port name is given, try to resolve to a number -*/}}
+              {{- $servicePort = include "bjw-s.common.lib.service.getPortNumberByName" (dict "rootContext" $rootContext "serviceID" $service.identifier "portName" .port) -}}
+              {{- if not $servicePort -}}
+                {{- fail (printf "No enabled Service Port found with this identifier. (route: '%s', service: '%s', identifier: '%s')" $routeObject.identifier $service.identifier .port) -}}
+              {{- end -}}
+            {{- end -}}
+          {{- end }}
+        - group: {{ .group | default "" | quote}}
+          kind: {{ .kind | default "Service" }}
+          name: {{ $serviceName }}
+          namespace: {{ .namespace | default $rootContext.Release.Namespace }}
+          {{- if $servicePort }}
+          port: {{ $servicePort }}
+          {{- end }}
+          weight: {{ include "bjw-s.common.lib.defaultKeepNonNullValue" (dict "value" .weight "default" 1) }}
+        {{- end }}
       {{- end }}
-    {{- end }}
+      {{- if or (eq $routeKind "HTTPRoute") (eq $routeKind "GRPCRoute") }}
+        {{- with .matches }}
+      matches: {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .filters }}
+      filters: {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .sessionPersistence }}
+      sessionPersistence: {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- if (eq $routeKind "HTTPRoute") }}
+        {{- with .timeouts }}
+      timeouts: {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
   {{- end }}
 {{- end }}
