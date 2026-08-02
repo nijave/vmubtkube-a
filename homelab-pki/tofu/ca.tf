@@ -1,9 +1,6 @@
-# homelab-pki/tofu/ca.tf
-#
 # The CA cert+key are delivered from Bitwarden via ExternalSecret into the
-# `pki-ca` Secret (never in git, never regenerated) -- see homelab-pki.yaml.
-# Imported once (see the migration procedure in the design spec); this
-# resource never re-signs the CA itself.
+# `pki-ca` Secret (never in git) -- see homelab-pki.yaml. This resource
+# never regenerates or re-signs the CA.
 data "kubernetes_secret_v1" "ca" {
   metadata {
     name      = "pki-ca"
@@ -28,10 +25,10 @@ resource "pki_certificate_authority" "ca" {
     }
   }
 
-  # Declared explicitly even though they equal this resource's own defaults:
-  # ImportState always populates these blocks from the real certificate's
-  # extensions, so an omitted block plans as null -- a block-shape mismatch,
-  # not a no-op -- and would force a reissue with a fresh not_before.
+  # Declared explicitly, not omitted, even though they equal this
+  # resource's schema defaults: an omitted block is null, and re-importing
+  # this CA after a state loss would then plan as a mismatch -- not a
+  # no-op -- forcing a reissue with a fresh not_before.
   basic_constraints {
     ca       = true
     critical = true

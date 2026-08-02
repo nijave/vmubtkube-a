@@ -1,11 +1,5 @@
-# homelab-pki/Dockerfile
-#
-# Image bundles OpenTofu + the tofu/ config (pki_* resources from the
-# nijave/pki provider express CA import, per-device issuance, and CRL
-# generation declaratively). Entry point is /bin/sh; the Job/CronJob run
-# sequence is:
-#   tofu -chdir=/app/tofu init
-#   tofu -chdir=/app/tofu apply -auto-approve
+# Bundles OpenTofu + the tofu/ config; entrypoint is /bin/sh (homelab-pki.yaml
+# runs `tofu init && tofu apply` in the Job/CronJob).
 #
 # NOTE on base image: `ghcr.io/opentofu/opentofu:1.12` (the full image)
 # cannot be used as a Dockerfile FROM base -- as of OpenTofu 1.10 it ships an
@@ -19,8 +13,8 @@
 #
 # Build + push (manual, until CI step lands):
 #   cd homelab-pki
-#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.4 .
-#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.4
+#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.5 .
+#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.5
 
 FROM ghcr.io/opentofu/opentofu:1.12-minimal AS tofu
 

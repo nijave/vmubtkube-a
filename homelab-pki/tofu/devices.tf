@@ -1,4 +1,3 @@
-# homelab-pki/tofu/devices.tf
 resource "pki_private_key" "device" {
   for_each = local.devices
 
@@ -33,9 +32,8 @@ resource "pki_certificate" "device" {
     ))
   }
 
-  # Declared explicitly -- see the comment on pki_certificate_authority.ca in
-  # ca.tf for why (applies to every imported device cert; harmless for new
-  # ones created fresh, since a create has no prior state to mismatch).
+  # Declared explicitly, not omitted -- see ca.tf's pki_certificate_authority.ca
+  # comment for why.
   basic_constraints {
     ca       = false
     critical = true
@@ -59,8 +57,8 @@ resource "pki_bundle" "device" {
   chain_pem       = [pki_certificate_authority.ca.certificate_pem]
   friendly_name   = each.key
 
-  # Write-only: preserves the current (non-secret) hardcoded password
-  # exactly -- never stored in state.
+  # Write-only, never stored in state. Plain literal is fine: all devices
+  # share this password and it isn't a real secret.
   password_wo         = "password"
   password_wo_version = 1
 }
