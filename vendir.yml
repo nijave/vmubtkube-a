@@ -95,13 +95,24 @@ directories:
 
   # go-vikunja/helm-chart is a thin bjw-s `common` wrapper. OCI publishing
   # (ghcr.io) stalled at chart 2.0.0, so vendor the chart from git tags to keep
-  # it Renovate-updatable, and vendor the `common` dependency into charts/
-  # alongside it (the chart repo commits only Chart.lock, not charts/) so ArgoCD
-  # renders base/ offline without `helm dependency build`. The Vikunja app
-  # version is pinned via vikunja.image.tag in application.vikunja.yaml, NOT the
-  # chart's appVersion — bump the chart tag and common version together
-  # (Chart.lock pins the common version the chart expects).
-  - path: vendored/vikunja/base
+  # it Renovate-updatable. The Vikunja app version is pinned via
+  # vikunja.image.tag in application.vikunja.yaml, NOT the chart's appVersion —
+  # bump the chart tag and the common helmChart entry below together
+  # (Chart.lock pins the common version this chart expects).
+  #
+  # vendir can't fetch straight into vendored/vikunja/base: that directory also
+  # needs the `common` subchart (vendored separately below) and Helm requires
+  # subcharts to live physically under the parent chart's charts/, but each
+  # vendir-managed directory is fully wiped and replaced on every sync, so
+  # nesting one inside the other would let either sync silently delete the
+  # other's output (vendir also rejects this outright as an overlapping path).
+  #
+  # So this entry fetches into a plain upstream/ staging directory instead, and
+  # vendored/vikunja/base is a plain, non-vendir directory of symlinks (see
+  # vendored/vikunja/base/*) pointing into upstream/ and into
+  # vendored/bjw-s-common/base below. Since base/ is never a vendir-managed
+  # path, sync never touches it — no CI relinking step needed.
+  - path: vendored/vikunja/upstream
     contents:
       - path: .
         git:
@@ -117,3 +128,16 @@ directories:
           # strips /templates/tests when packaging; git vendoring bypasses that,
           # so exclude them here or helm renders a kind-less doc.
           - templates/tests/**
+
+  # The chart repo commits only Chart.lock, not its charts/ dependency — vendor
+  # `common` as its own directory (see vendored/vikunja/upstream comment above
+  # for why it can't live under vendored/vikunja/base directly).
+  # vendored/vikunja/base/charts/common is a symlink to this directory.
+  - path: vendored/bjw-s-common/base
+    contents:
+      - path: .
+        helmChart:
+          name: common
+          version: 1.5.1
+          repository:
+            url: https://bjw-s-labs.github.io/helm-charts
