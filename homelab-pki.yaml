@@ -3,27 +3,14 @@
 # A single image (registry.apps.nickv.me/nijave/homelab-pki) bundles OpenTofu
 # + the tofu/ config: pki_certificate_authority/pki_certificate/pki_crl/etc.
 # (nijave/pki provider) express the CA import, per-device issuance, and CRL
-# generation declaratively -- one `tofu` invocation reconciles everything
-# (adding/removing a device is a for_each over the device map in
-# homelab-pki/tofu/locals.tf, no separate reconciler needed). State lives in
-# the kubernetes backend (a Secret).
+# generation declaratively -- one `tofu apply` reconciles everything. Adding
+# or removing a device is a for_each over the device map in
+# homelab-pki/tofu/locals.tf; no separate reconciler. State lives in the
+# kubernetes backend (a Secret).
 #
-# STAGED CUTOVER: complete. The real CA and 5 real devices (nick-desktop,
-# nick-ipad, nick-xps, pixel7, kara-iphone) were imported byte-identically
-# via tofu/imports.tf (11 imported, 12 added, 6 changed, 6 destroyed --
-# confirmed via `kubectl logs job/pki-reconcile` and `openssl verify`
-# against the new pki-<device> Secrets). imports.tf, locals.tf's
-# `legacy_device_secrets`, and the `legacy-*` volumes/volumeMounts that only
-# existed for that one-time import are now removed. See
-# docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md's
-# "Migration / cutover procedure" for the full rollout this completed.
-#
-# The reconcile Job is an Argo Sync hook (runs `tofu` on each sync); the
-# CronJob re-runs periodically to keep the CRL fresh. Reconciliation is
-# idempotent. The CA private key is delivered from Bitwarden via ExternalSecret
-# and read directly by homelab-pki/tofu/ca.tf via a kubernetes_secret_v1 data
-# source (no volume mount needed); cert/CRL Secrets are tofu-managed (not
-# Argo-pruned).
+# The reconcile Job is an Argo Sync hook (runs on each sync); the CronJob
+# re-runs every 6h to keep the CRL fresh. The CA private key is delivered
+# from Bitwarden via ExternalSecret and read by homelab-pki/tofu/ca.tf.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -124,8 +111,6 @@ spec:
         decodingStrategy: None
         metadataPolicy: None
 ---
-# Immediate reconcile: Argo Sync hook runs `tofu apply` on each sync
-# (idempotent).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -143,7 +128,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
-          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.4
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.5
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
@@ -156,9 +141,8 @@ spec:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
 ---
-# Periodic re-run to keep the CRL fresh (regenerate before nextUpdate) and
-# correct any drift. concurrencyPolicy Forbid; the OpenTofu state lock also
-# guards against overlap with the Sync-hook Job.
+# concurrencyPolicy Forbid; the OpenTofu state lock also guards against
+# overlap with the Sync-hook Job.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -179,7 +163,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
-              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.4
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.5
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]
               args:

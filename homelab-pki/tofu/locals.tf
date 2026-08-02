@@ -1,7 +1,3 @@
-# homelab-pki/tofu/locals.tf
-#
-# Devices/identities are native Terraform data, not a separate config.hcl +
-# ConfigMap (that required hand-syncing two copies of the same data).
 # Adding or removing a device means editing this file and rebuilding the
 # image (see homelab-pki/README.md).
 
@@ -50,11 +46,11 @@ locals {
   ]...)
 
   device_domain   = "ha.apps.somemissing.info"
-  device_validity = "175320h" # 20 years, matching the existing certificates
+  device_validity = "175320h" # 20 years
 
-  # Ordered DN attribute list per device (commonName, uid, displayName,
-  # givenName, surname, organization, then any organizationalUnits) --
-  # order matters for byte-identical import; skips unset optional fields.
+  # Ordered DN attribute list per device: fixed order (commonName, uid,
+  # displayName, givenName, surname, organization, then any
+  # organizationalUnits), skipping unset optional fields.
   device_attributes = {
     for name, d in local.devices : name => concat(
       [{ oid = "commonName", value = lookup(d, "common_name", "${name}.${local.device_domain}") }],
