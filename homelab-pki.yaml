@@ -8,17 +8,22 @@
 # homelab-pki/tofu/locals.tf, no separate reconciler needed). State lives in
 # the kubernetes backend (a Secret).
 #
-# STAGED CUTOVER: both containers below run `tofu plan` only, not `apply`.
-# tofu/imports.tf declaratively imports the real CA and 5 real devices'
-# existing keys/certs into these resource addresses; running `plan` first
-# lets that import + the resulting diff be reviewed in the Job's pod logs
-# (kubectl logs job/pki-reconcile -n homelab-pki) without mutating anything.
-# Once that plan looks right (expect only the documented one-time
-# `private_key_pem` pending-set and creates for the brand-new
-# kubernetes_secret_v1/pki_bundle/pki_crl resources -- no unexpected reissues),
-# a follow-up change flips both `tofu plan` lines below to
-# `tofu apply -auto-approve`, and a further change after that apply succeeds
-# once deletes tofu/imports.tf (see its header comment for why). See
+# STAGED CUTOVER, phase 2 of 3: both containers below now run
+# `tofu apply -auto-approve`. Phase 1's `tofu plan` run (kubectl logs
+# job/pki-reconcile -n homelab-pki) showed exactly the expected diff: 11 to
+# import (the real CA + 5 real devices' keys/certs, via tofu/imports.tf,
+# byte-identical except the documented one-time private_key_pem/
+# ca_certificate_pem/ca_private_key_pem pending-sets), 12 to add (the new
+# kubernetes_secret_v1/pki_bundle/pki_crl resources), 6 to change (those
+# pending-sets), 6 to destroy (the old serial-suffixed Secrets and old CRL
+# Secret, orphaned since this config no longer declares their resource
+# addresses) -- no unexpected reissues. This one apply performs all of that
+# atomically and safely (see the design spec for why the ordering can't
+# race). Phase 3, a follow-up change to run promptly after this apply
+# succeeds once (before the CronJob's next 6-hourly run): delete
+# tofu/imports.tf, locals.tf's `legacy_device_secrets`, and the `legacy-*`
+# volumes/volumeMounts below -- their data sources/mounts reference Secrets
+# this apply destroys, so left in place they break every later run. See
 # docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md's
 # "Migration / cutover procedure" for the full rollout.
 #
@@ -128,8 +133,8 @@ spec:
         decodingStrategy: None
         metadataPolicy: None
 ---
-# Immediate reconcile: Argo Sync hook runs `tofu plan` on each sync
-# (idempotent, non-mutating -- see the staged-cutover note above).
+# Immediate reconcile: Argo Sync hook runs `tofu apply` on each sync
+# (idempotent -- see the staged-cutover note above for what this apply does).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -155,7 +160,7 @@ spec:
               set -eux
               cd /app/tofu
               tofu init -input=false -no-color
-              tofu plan -input=false -no-color
+              tofu apply -input=false -auto-approve -no-color
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
@@ -206,7 +211,7 @@ spec:
                   set -eux
                   cd /app/tofu
                   tofu init -input=false -no-color
-                  tofu plan -input=false -no-color
+                  tofu apply -input=false -auto-approve -no-color
               resources:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: "1", memory: 512Mi }
