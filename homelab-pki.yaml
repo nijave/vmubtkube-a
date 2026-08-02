@@ -15,7 +15,7 @@
 # (kubectl logs job/pki-reconcile -n homelab-pki) without mutating anything.
 # Once that plan looks right (expect only the documented one-time
 # `private_key_pem` pending-set and creates for the brand-new
-# kubernetes_secret/pki_bundle/pki_crl resources -- no unexpected reissues),
+# kubernetes_secret_v1/pki_bundle/pki_crl resources -- no unexpected reissues),
 # a follow-up change flips both `tofu plan` lines below to
 # `tofu apply -auto-approve`, and a further change after that apply succeeds
 # once deletes tofu/imports.tf (see its header comment for why). See
@@ -25,7 +25,7 @@
 # The reconcile Job is an Argo Sync hook (runs `tofu` on each sync); the
 # CronJob re-runs periodically to keep the CRL fresh. Reconciliation is
 # idempotent. The CA private key is delivered from Bitwarden via ExternalSecret
-# and read directly by homelab-pki/tofu/ca.tf via a kubernetes_secret data
+# and read directly by homelab-pki/tofu/ca.tf via a kubernetes_secret_v1 data
 # source (no volume mount needed); cert/CRL Secrets are tofu-managed (not
 # Argo-pruned).
 ---
@@ -97,7 +97,7 @@ roleRef:
   name: pki-crl-reader
 ---
 # CA cert+key delivered from Bitwarden (ha-ca-crt / ha-ca-key). Opaque, read
-# directly by homelab-pki/tofu/ca.tf's kubernetes_secret data source. Never
+# directly by homelab-pki/tofu/ca.tf's kubernetes_secret_v1 data source. Never
 # in git.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -147,7 +147,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
-          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.2
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.3
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
@@ -198,7 +198,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
-              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.2
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.3
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]
               args:

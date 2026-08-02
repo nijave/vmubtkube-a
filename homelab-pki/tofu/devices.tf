@@ -65,7 +65,7 @@ resource "pki_bundle" "device" {
   password_wo_version = 1
 }
 
-resource "kubernetes_secret" "device" {
+resource "kubernetes_secret_v1" "device" {
   for_each = local.devices
 
   metadata {

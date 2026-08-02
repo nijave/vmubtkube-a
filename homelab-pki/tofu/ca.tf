@@ -4,7 +4,7 @@
 # `pki-ca` Secret (never in git, never regenerated) -- see homelab-pki.yaml.
 # Imported once (see the migration procedure in the design spec); this
 # resource never re-signs the CA itself.
-data "kubernetes_secret" "ca" {
+data "kubernetes_secret_v1" "ca" {
   metadata {
     name      = "pki-ca"
     namespace = "homelab-pki"
@@ -12,7 +12,7 @@ data "kubernetes_secret" "ca" {
 }
 
 resource "pki_certificate_authority" "ca" {
-  private_key_pem = data.kubernetes_secret.ca.data["tls.key"]
+  private_key_pem = data.kubernetes_secret_v1.ca.data["tls.key"]
 
   validity      = "175320h"
   serial_number = "4d71d760878eb0a8831ce2e1d6028f61f1fc7d5f"

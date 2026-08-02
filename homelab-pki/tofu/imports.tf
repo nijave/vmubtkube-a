@@ -8,7 +8,7 @@
 # pki_private_key / pki_certificate resource addresses, so the cutover
 # preserves them byte-identically instead of reissuing from scratch.
 #
-# Certificate imports read via a `kubernetes_secret` data source, `id` built
+# Certificate imports read via a `kubernetes_secret_v1` data source, `id` built
 # as `base64://${base64encode(nonsensitive(...))}`. `nonsensitive(...)` is
 # required (OpenTofu's `import` block rejects a sensitive `id` outright,
 # confirmed against a real in-cluster Secret), and it's safe here: a
@@ -34,7 +34,7 @@
 #      homelab-pki.yaml) -- safe to merge/deploy immediately, since plan
 #      never mutates the cluster. Review the plan in the Job's pod logs:
 #      expect "N to import", the documented one-time `private_key_pem`
-#      pending-set, and creates for the brand-new kubernetes_secret/
+#      pending-set, and creates for the brand-new kubernetes_secret_v1/
 #      pki_bundle/pki_crl resources -- no unexpected reissues.
 #   2. Once that plan looks right, flip the Job/CronJob command to
 #      `tofu apply -auto-approve`. This one apply imports the CA/devices,
@@ -51,7 +51,7 @@
 #      apply destroys -- left in place, every later plan/apply (including
 #      the CronJob's next 6-hourly run) would fail trying to read Secrets
 #      that no longer exist.
-data "kubernetes_secret" "legacy_device" {
+data "kubernetes_secret_v1" "legacy_device" {
   for_each = local.legacy_device_secrets
 
   metadata {
@@ -62,7 +62,7 @@ data "kubernetes_secret" "legacy_device" {
 
 import {
   to = pki_certificate_authority.ca
-  id = "base64://${base64encode(nonsensitive(data.kubernetes_secret.ca.data["tls.crt"]))}"
+  id = "base64://${base64encode(nonsensitive(data.kubernetes_secret_v1.ca.data["tls.crt"]))}"
 }
 
 import {
@@ -74,5 +74,5 @@ import {
 import {
   for_each = local.legacy_device_secrets
   to       = pki_certificate.device[each.key]
-  id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"]))}"
+  id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret_v1.legacy_device[each.key].data["tls.crt"]))}"
 }

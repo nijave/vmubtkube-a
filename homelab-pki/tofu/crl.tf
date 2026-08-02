@@ -15,7 +15,7 @@ resource "pki_crl" "ca" {
   }
 }
 
-resource "kubernetes_secret" "crl" {
+resource "kubernetes_secret_v1" "crl" {
   metadata {
     name      = "pki-crl"
     namespace = "homelab-pki"
