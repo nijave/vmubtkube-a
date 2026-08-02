@@ -71,20 +71,4 @@ locals {
   # (look up the current serial via `tofu output device_serials`), then
   # rebuild/push/apply. See homelab-pki/README.md.
   revoked_serials = []
-
-  # Pre-migration per-device Secret names, keyed by the new device name --
-  # used only by imports.tf to bind each device's existing key/cert into the
-  # new pki_private_key/pki_certificate resource addresses during the
-  # one-time cutover. TEMPORARY: once the real `tofu apply` cutover has run
-  # successfully once (old Secrets destroyed, new ones created), this map
-  # and imports.tf must be deleted -- every subsequent plan/apply would
-  # otherwise fail trying to read Secrets that no longer exist. See
-  # imports.tf and the design spec's cutover procedure.
-  legacy_device_secrets = {
-    "kara-iphone"  = "pki-kara-iphone-2000"
-    "nick-desktop" = "pki-nick-desktop-2001"
-    "nick-ipad"    = "pki-nick-ipad-2002"
-    "nick-xps"     = "pki-nick-xps-2003"
-    "pixel7"       = "pki-pixel7-2004"
-  }
 }

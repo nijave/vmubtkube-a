@@ -19,8 +19,8 @@
 #
 # Build + push (manual, until CI step lands):
 #   cd homelab-pki
-#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.3 .
-#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.3
+#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.4 .
+#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.4
 
 FROM ghcr.io/opentofu/opentofu:1.12-minimal AS tofu
 

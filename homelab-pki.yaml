@@ -8,24 +8,15 @@
 # homelab-pki/tofu/locals.tf, no separate reconciler needed). State lives in
 # the kubernetes backend (a Secret).
 #
-# STAGED CUTOVER, phase 2 of 3: both containers below now run
-# `tofu apply -auto-approve`. Phase 1's `tofu plan` run (kubectl logs
-# job/pki-reconcile -n homelab-pki) showed exactly the expected diff: 11 to
-# import (the real CA + 5 real devices' keys/certs, via tofu/imports.tf,
-# byte-identical except the documented one-time private_key_pem/
-# ca_certificate_pem/ca_private_key_pem pending-sets), 12 to add (the new
-# kubernetes_secret_v1/pki_bundle/pki_crl resources), 6 to change (those
-# pending-sets), 6 to destroy (the old serial-suffixed Secrets and old CRL
-# Secret, orphaned since this config no longer declares their resource
-# addresses) -- no unexpected reissues. This one apply performs all of that
-# atomically and safely (see the design spec for why the ordering can't
-# race). Phase 3, a follow-up change to run promptly after this apply
-# succeeds once (before the CronJob's next 6-hourly run): delete
-# tofu/imports.tf, locals.tf's `legacy_device_secrets`, and the `legacy-*`
-# volumes/volumeMounts below -- their data sources/mounts reference Secrets
-# this apply destroys, so left in place they break every later run. See
+# STAGED CUTOVER: complete. The real CA and 5 real devices (nick-desktop,
+# nick-ipad, nick-xps, pixel7, kara-iphone) were imported byte-identically
+# via tofu/imports.tf (11 imported, 12 added, 6 changed, 6 destroyed --
+# confirmed via `kubectl logs job/pki-reconcile` and `openssl verify`
+# against the new pki-<device> Secrets). imports.tf, locals.tf's
+# `legacy_device_secrets`, and the `legacy-*` volumes/volumeMounts that only
+# existed for that one-time import are now removed. See
 # docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md's
-# "Migration / cutover procedure" for the full rollout.
+# "Migration / cutover procedure" for the full rollout this completed.
 #
 # The reconcile Job is an Argo Sync hook (runs `tofu` on each sync); the
 # CronJob re-runs periodically to keep the CRL fresh. Reconciliation is
@@ -134,7 +125,7 @@ spec:
         metadataPolicy: None
 ---
 # Immediate reconcile: Argo Sync hook runs `tofu apply` on each sync
-# (idempotent -- see the staged-cutover note above for what this apply does).
+# (idempotent).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -152,7 +143,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
-          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.3
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.4
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
@@ -164,21 +155,6 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
-          volumeMounts:
-            # TEMPORARY: only for tofu/imports.tf's device private-key
-            # imports (file:// paths, never secret data through a value
-            # OpenTofu could print) -- remove alongside imports.tf.
-            - { name: legacy-kara-iphone, mountPath: /legacy/kara-iphone, readOnly: true }
-            - { name: legacy-nick-desktop, mountPath: /legacy/nick-desktop, readOnly: true }
-            - { name: legacy-nick-ipad, mountPath: /legacy/nick-ipad, readOnly: true }
-            - { name: legacy-nick-xps, mountPath: /legacy/nick-xps, readOnly: true }
-            - { name: legacy-pixel7, mountPath: /legacy/pixel7, readOnly: true }
-      volumes:
-        - { name: legacy-kara-iphone, secret: { secretName: pki-kara-iphone-2000 } }
-        - { name: legacy-nick-desktop, secret: { secretName: pki-nick-desktop-2001 } }
-        - { name: legacy-nick-ipad, secret: { secretName: pki-nick-ipad-2002 } }
-        - { name: legacy-nick-xps, secret: { secretName: pki-nick-xps-2003 } }
-        - { name: legacy-pixel7, secret: { secretName: pki-pixel7-2004 } }
 ---
 # Periodic re-run to keep the CRL fresh (regenerate before nextUpdate) and
 # correct any drift. concurrencyPolicy Forbid; the OpenTofu state lock also
@@ -203,7 +179,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
-              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.3
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.4
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]
               args:
@@ -215,16 +191,3 @@ spec:
               resources:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: "1", memory: 512Mi }
-              volumeMounts:
-                # TEMPORARY: see the matching comment on the Job above.
-                - { name: legacy-kara-iphone, mountPath: /legacy/kara-iphone, readOnly: true }
-                - { name: legacy-nick-desktop, mountPath: /legacy/nick-desktop, readOnly: true }
-                - { name: legacy-nick-ipad, mountPath: /legacy/nick-ipad, readOnly: true }
-                - { name: legacy-nick-xps, mountPath: /legacy/nick-xps, readOnly: true }
-                - { name: legacy-pixel7, mountPath: /legacy/pixel7, readOnly: true }
-          volumes:
-            - { name: legacy-kara-iphone, secret: { secretName: pki-kara-iphone-2000 } }
-            - { name: legacy-nick-desktop, secret: { secretName: pki-nick-desktop-2001 } }
-            - { name: legacy-nick-ipad, secret: { secretName: pki-nick-ipad-2002 } }
-            - { name: legacy-nick-xps, secret: { secretName: pki-nick-xps-2003 } }
-            - { name: legacy-pixel7, secret: { secretName: pki-pixel7-2004 } }
