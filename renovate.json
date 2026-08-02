@@ -48,9 +48,9 @@
   ],
   "packageRules": [
     {
-      "description": "vikunja: the image is tracked by the custom regex manager (the mirror registry+tag pattern) and the chart by the vendir manager (git ref in vendir.yml). Disable the auto helm managers on the Application valuesObject and the vendored chart — helm-values otherwise concatenates the image registry+repository into a malformed dep, and helm-values/helmv3 would raise spurious PRs editing vendir-managed Chart.yaml/values.yaml.",
+      "description": "vikunja: the image is tracked by the custom regex manager (the mirror registry+tag pattern) and the charts by the vendir manager (git ref / helmChart version in vendir.yml). Disable the auto helm managers on the Application valuesObject and the vendored charts — helm-values otherwise concatenates the image registry+repository into a malformed dep, and helm-values/helmv3 would raise spurious PRs editing vendir-managed Chart.yaml/values.yaml. vendored/bjw-s-common is the common subchart vendored as its own sibling directory (see vendir.yml) — without it here, helm-values scans its default values.yaml directly and opens PRs bumping unused addon image tags (gluetun, code-server, ...) that vendir just overwrites on the next sync.",
       "matchManagers": ["helm-values", "helmv3"],
-      "matchFileNames": ["application.vikunja.yaml", "vendored/vikunja/**"],
+      "matchFileNames": ["application.vikunja.yaml", "vendored/vikunja/**", "vendored/bjw-s-common/**"],
       "enabled": false
     },
     {
