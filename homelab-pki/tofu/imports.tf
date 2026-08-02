@@ -7,6 +7,15 @@
 # / pki_private_key / pki_certificate resource addresses, so the cutover
 # preserves them byte-identically instead of reissuing from scratch.
 #
+# The `kubernetes_secret` data sources' `data`/`binary_data` attributes are
+# schema-marked sensitive, and OpenTofu's `import` block rejects a sensitive
+# `id` outright ("The import id cannot be sensitive") -- confirmed against a
+# real in-cluster Secret before this fix, not just inferred from the error
+# text. `nonsensitive(...)` strips that marking for the `id` computation
+# only; the underlying values (a CA/device cert, and a private key already
+# read as plain config input everywhere else in this module) aren't
+# otherwise treated as secret material here.
+#
 # Rollout is staged across multiple changes, not one big-bang apply:
 #   1. Ship this file with the Job/CronJob running `tofu plan` only (see
 #      homelab-pki.yaml) -- safe to merge/deploy immediately, since plan
@@ -39,17 +48,17 @@ data "kubernetes_secret" "legacy_device" {
 
 import {
   to = pki_certificate_authority.ca
-  id = "base64://${base64encode(data.kubernetes_secret.ca.data["tls.crt"])}"
+  id = "base64://${base64encode(nonsensitive(data.kubernetes_secret.ca.data["tls.crt"]))}"
 }
 
 import {
   for_each = local.legacy_device_secrets
   to       = pki_private_key.device[each.key]
-  id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.key"])}"
+  id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.key"]))}"
 }
 
 import {
   for_each = local.legacy_device_secrets
   to       = pki_certificate.device[each.key]
-  id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"])}"
+  id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"]))}"
 }

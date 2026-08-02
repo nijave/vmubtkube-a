@@ -274,23 +274,31 @@ human has reviewed a real plan from the real Job:
    ```hcl
    import {
      to = pki_certificate_authority.ca
-     id = "base64://${base64encode(data.kubernetes_secret.ca.data["tls.crt"])}"
+     id = "base64://${base64encode(nonsensitive(data.kubernetes_secret.ca.data["tls.crt"]))}"
    }
    import {
      for_each = local.legacy_device_secrets
      to       = pki_private_key.device[each.key]
-     id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.key"])}"
+     id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.key"]))}"
    }
    import {
      for_each = local.legacy_device_secrets
      to       = pki_certificate.device[each.key]
-     id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"])}"
+     id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"]))}"
    }
    ```
+   The `nonsensitive(...)` wrapper is required, not stylistic: the
+   `kubernetes_secret` data source's `data`/`binary_data` attributes are
+   schema-marked sensitive, and OpenTofu's `import` block rejects a
+   sensitive `id` outright ("The import id cannot be sensitive") — hit for
+   real against the live Job's first plan run and reproduced against a
+   throwaway in-cluster Secret before landing the fix (the earlier
+   local-file-backed dry run that validated this mechanism didn't exercise
+   real `kubernetes_secret` data sources, so it didn't surface this).
    This mechanism (`base64://` IDs built from a data source read, fed into
    `pki_certificate_authority`/`pki_private_key`/`pki_certificate` import
-   targets) was verified end-to-end against the real provider with
-   throwaway test material before being written into this config: a
+   targets) was verified end-to-end against the real provider and a real
+   in-cluster Secret before being written into this config: a
    deliberately-mismatched config surfaced as a real plan diff (not silently
    swallowed), and a corrected config produced a clean import.
 2. **Ship `imports.tf` with the Job/CronJob running `tofu plan` only**

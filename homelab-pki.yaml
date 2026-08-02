@@ -147,7 +147,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
-          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.0
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.1
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
@@ -183,7 +183,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
-              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.0
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.1
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]
               args:
