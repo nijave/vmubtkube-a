@@ -65,4 +65,10 @@ directories:
       - v2.0.2
     path: .
   path: vendored/vikunja/base
+- contents:
+  - helmChart:
+      appVersion: ""
+      version: 1.5.1
+    path: .
+  path: vendored/bjw-s-common/base
 kind: LockConfig

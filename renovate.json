@@ -78,6 +78,12 @@
       "groupName": "external-secrets-crds"
     },
     {
+      "description": "vikunja's bjw-s common subchart — vendored via vendir's helmChart fetch into vendored/bjw-s-common/base (symlinked into vendored/vikunja/base/charts/common by .ci/vendir-sync.sh). NOTE: the version must satisfy what go-vikunja/helm-chart's Chart.lock expects; this bumps independently of the vikunja git ref (also vendir-managed) and can drift — review together.",
+      "matchManagers": ["vendir"],
+      "matchPackageNames": ["common"],
+      "groupName": "vikunja-common-chart"
+    },
+    {
       "description": "Contour — vendored whole-release via vendir; envoy image is tracked separately via kubernetes manager on the overlay patch",
       "matchManagers": ["vendir"],
       "matchPackageNames": ["projectcontour/contour"],

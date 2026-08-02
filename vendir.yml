@@ -95,12 +95,10 @@ directories:
 
   # go-vikunja/helm-chart is a thin bjw-s `common` wrapper. OCI publishing
   # (ghcr.io) stalled at chart 2.0.0, so vendor the chart from git tags to keep
-  # it Renovate-updatable, and vendor the `common` dependency into charts/
-  # alongside it (the chart repo commits only Chart.lock, not charts/) so ArgoCD
-  # renders base/ offline without `helm dependency build`. The Vikunja app
-  # version is pinned via vikunja.image.tag in application.vikunja.yaml, NOT the
-  # chart's appVersion — bump the chart tag and common version together
-  # (Chart.lock pins the common version the chart expects).
+  # it Renovate-updatable. The Vikunja app version is pinned via
+  # vikunja.image.tag in application.vikunja.yaml, NOT the chart's appVersion —
+  # bump the chart tag and the common helmChart entry below together
+  # (Chart.lock pins the common version this chart expects).
   - path: vendored/vikunja/base
     contents:
       - path: .
@@ -117,3 +115,22 @@ directories:
           # strips /templates/tests when packaging; git vendoring bypasses that,
           # so exclude them here or helm renders a kind-less doc.
           - templates/tests/**
+
+  # The chart repo commits only Chart.lock, not its charts/ dependency. vendir
+  # refuses to manage vendored/vikunja/base/charts/common directly: it treats
+  # that as an overlapping path with vendored/vikunja/base above (each managed
+  # directory is fully wiped and replaced on every sync, so nesting one inside
+  # the other would let either sync silently delete the other's output).
+  # Instead, vendor `common` here as its own sibling directory, and
+  # .ci/vendir-sync.sh re-links vendored/vikunja/base/charts/common -> this
+  # directory after every sync (that symlink itself doesn't survive the
+  # vikunja entry's own sync, since charts/ isn't in its includePaths). Helm
+  # resolves symlinked subcharts under charts/ the same as a real directory.
+  - path: vendored/bjw-s-common/base
+    contents:
+      - path: .
+        helmChart:
+          name: common
+          version: 1.5.1
+          repository:
+            url: https://bjw-s-labs.github.io/helm-charts

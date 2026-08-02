@@ -26,30 +26,18 @@ fi
 echo "Running vendir sync..."
 vendir sync
 
-# Vendored Helm charts (git source) ship only Chart.lock, not their dependency
-# charts/ — vendir can't manage the nested charts/ path, and ArgoCD's
-# repo-server can't `helm dependency build` a git source whose dep repo isn't
-# registered. Build the locked deps into charts/ here so ArgoCD renders the
-# vendored chart offline. `dependency build` honors Chart.lock exactly and does
-# not rewrite it, so the tarballs are byte-stable and this stays idempotent.
-for chart_yaml in vendored/*/base/Chart.yaml; do
-  [ -f "$chart_yaml" ] || continue
-  chart_dir=$(dirname "$chart_yaml")
-  [ -f "$chart_dir/Chart.lock" ] || continue
-  yq -r '.dependencies[]?.repository | select(test("^https?://"))' "$chart_yaml" \
-    | sort -u | while read -r url; do
-        helm repo add "dep-$(printf '%s' "$url" | cksum | cut -d' ' -f1)" "$url" >/dev/null 2>&1 || true
-      done
-  echo "Building Helm dependencies for $chart_dir..."
-  helm dependency build "$chart_dir"
-done
+# vikunja's charts/common isn't vendir-managed directly (see vendir.yml):
+# it's a symlink to the sibling vendored/bjw-s-common/base directory, which
+# the vikunja entry's own git sync just wiped (charts/ isn't in its
+# includePaths, so the whole-directory replace drops it every run). Relink it.
+mkdir -p vendored/vikunja/base/charts
+ln -sfn ../../../bjw-s-common/base vendored/vikunja/base/charts/common
 
-# Stage before the emptiness check: `helm dependency build` rebuilds charts/
-# deps (e.g. vendored/vikunja/base/charts/common-*.tgz) that Renovate's own
-# vendir sync deleted, and those land as *untracked* files. `git diff`/`git
-# diff --cached` ignore untracked paths, so checking before staging silently
-# skipped the restore commit and the deletion reached main. Stage first, then
-# test the staged diff.
+# Stage before the emptiness check: freshly vendored directories (e.g. a
+# helmChart entry's first fetch, or the symlink recreated above) land as
+# *untracked*/modified files, and `git diff`/`git diff --cached` ignore
+# untracked paths. Checking before staging would silently skip the commit.
+# Stage first, then test the staged diff.
 git config user.email "woodpecker@ci"
 git config user.name "Woodpecker CI"
 git add -A vendored/ vendir.lock.yml

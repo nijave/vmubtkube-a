@@ -26,10 +26,11 @@ spec:
       limit: 2
   source:
     # go-vikunja/helm-chart vendored from git (v2.0.2) into vendored/vikunja/base
-    # with its bjw-s `common` dependency built into charts/ (see vendir.yml), so
-    # ArgoCD renders it offline. OCI publishing stalled at chart 2.0.0; git tags
-    # stay current. The Vikunja app version is set by vikunja.image.tag below,
-    # not the chart's appVersion.
+    # with its bjw-s `common` dependency vendored via vendir and symlinked into
+    # charts/ (see vendir.yml, .ci/vendir-sync.sh), so ArgoCD renders it
+    # offline. OCI publishing stalled at chart 2.0.0; git tags stay current.
+    # The Vikunja app version is set by vikunja.image.tag below, not the
+    # chart's appVersion.
     repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
     path: vendored/vikunja/base
     targetRevision: HEAD
