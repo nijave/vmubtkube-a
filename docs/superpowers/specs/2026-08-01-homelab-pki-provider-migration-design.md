@@ -279,7 +279,7 @@ human has reviewed a real plan from the real Job:
    import {
      for_each = local.legacy_device_secrets
      to       = pki_private_key.device[each.key]
-     id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.key"]))}"
+     id       = "file:///legacy/${each.key}/tls.key"
    }
    import {
      for_each = local.legacy_device_secrets
@@ -287,20 +287,31 @@ human has reviewed a real plan from the real Job:
      id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"]))}"
    }
    ```
-   The `nonsensitive(...)` wrapper is required, not stylistic: the
-   `kubernetes_secret` data source's `data`/`binary_data` attributes are
-   schema-marked sensitive, and OpenTofu's `import` block rejects a
-   sensitive `id` outright ("The import id cannot be sensitive") — hit for
-   real against the live Job's first plan run and reproduced against a
-   throwaway in-cluster Secret before landing the fix (the earlier
-   local-file-backed dry run that validated this mechanism didn't exercise
-   real `kubernetes_secret` data sources, so it didn't surface this).
-   This mechanism (`base64://` IDs built from a data source read, fed into
-   `pki_certificate_authority`/`pki_private_key`/`pki_certificate` import
-   targets) was verified end-to-end against the real provider and a real
-   in-cluster Secret before being written into this config: a
+   Certificate imports use `nonsensitive(...)` around a data-source read,
+   required because the `kubernetes_secret` data source's `data`/
+   `binary_data` attributes are schema-marked sensitive and OpenTofu's
+   `import` block rejects a sensitive `id` outright ("The import id cannot
+   be sensitive") — hit for real against the live Job's first plan run.
+   `nonsensitive(...)` is safe there because a certificate is public by
+   design. It is **not** safe for the private-key import: `tofu plan`'s
+   `Preparing import... [id=...]` progress line prints the literal `id`
+   string unmasked (Core prints it before any provider ever sees it, so a
+   resource's normal sensitive-attribute redaction doesn't apply) —
+   reproduced against a throwaway key in a real in-cluster Secret,
+   confirming `nonsensitive(base64encode(...))` on a private key put the
+   entire key, verbatim and fully decodable, into the Job's pod logs. The
+   private-key import instead uses a `file://` path built only from
+   `each.key` (a known device name, never secret data), with the actual key
+   bytes reaching the container via a `secret` volume mount in
+   `homelab-pki.yaml` (`legacy-<device>`, kubelet-fetched — no additional
+   RBAC needed, unlike the data-source reads). Both the base mechanism and
+   this fix were verified end-to-end against the real provider and real
+   in-cluster Secrets before being written into this config: a
    deliberately-mismatched config surfaced as a real plan diff (not silently
-   swallowed), and a corrected config produced a clean import.
+   swallowed), a corrected config produced a clean import, and the
+   `file://`-based private-key import was confirmed to leave zero trace of
+   the key in `tofu plan`'s output where the `base64://` form had leaked it
+   in full.
 2. **Ship `imports.tf` with the Job/CronJob running `tofu plan` only**
    (not `apply`) — safe to merge and let Argo sync immediately, since plan
    never mutates the cluster, regardless of whether anything has been
@@ -325,11 +336,13 @@ human has reviewed a real plan from the real Job:
    device cert; `openssl verify -crl_check` a device cert against the new
    CRL (confirms the issuer-order fix actually applies in this cluster, not
    just in the validation harness).
-5. **Immediately after that apply succeeds, delete `tofu/imports.tf` and
-   `locals.tf`'s `legacy_device_secrets` map** in a follow-up change. Their
-   data sources read Secrets this same apply destroyed — left in place,
-   every later plan/apply (including the CronJob's next 6-hourly run) would
-   fail trying to read Secrets that no longer exist.
+5. **Immediately after that apply succeeds, delete `tofu/imports.tf`,
+   `locals.tf`'s `legacy_device_secrets` map, and the `legacy-*` volumes/
+   volumeMounts in `homelab-pki.yaml`** in a follow-up change. The data
+   sources and volume-mounted Secrets all reference the old Secrets this
+   same apply destroyed — left in place, every later plan/apply (including
+   the CronJob's next 6-hourly run) would fail trying to read/mount Secrets
+   that no longer exist.
 
 This keeps "old secrets go away" a deliberate, verified step — reviewed as a
 real plan from the real Job, not a side channel — rather than folding a

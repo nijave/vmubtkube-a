@@ -147,7 +147,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
-          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.1
+          image: registry.apps.nickv.me/nijave/homelab-pki:0.2.2
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
@@ -159,6 +159,21 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            # TEMPORARY: only for tofu/imports.tf's device private-key
+            # imports (file:// paths, never secret data through a value
+            # OpenTofu could print) -- remove alongside imports.tf.
+            - { name: legacy-kara-iphone, mountPath: /legacy/kara-iphone, readOnly: true }
+            - { name: legacy-nick-desktop, mountPath: /legacy/nick-desktop, readOnly: true }
+            - { name: legacy-nick-ipad, mountPath: /legacy/nick-ipad, readOnly: true }
+            - { name: legacy-nick-xps, mountPath: /legacy/nick-xps, readOnly: true }
+            - { name: legacy-pixel7, mountPath: /legacy/pixel7, readOnly: true }
+      volumes:
+        - { name: legacy-kara-iphone, secret: { secretName: pki-kara-iphone-2000 } }
+        - { name: legacy-nick-desktop, secret: { secretName: pki-nick-desktop-2001 } }
+        - { name: legacy-nick-ipad, secret: { secretName: pki-nick-ipad-2002 } }
+        - { name: legacy-nick-xps, secret: { secretName: pki-nick-xps-2003 } }
+        - { name: legacy-pixel7, secret: { secretName: pki-pixel7-2004 } }
 ---
 # Periodic re-run to keep the CRL fresh (regenerate before nextUpdate) and
 # correct any drift. concurrencyPolicy Forbid; the OpenTofu state lock also
@@ -183,7 +198,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
-              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.1
+              image: registry.apps.nickv.me/nijave/homelab-pki:0.2.2
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]
               args:
@@ -195,3 +210,16 @@ spec:
               resources:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: "1", memory: 512Mi }
+              volumeMounts:
+                # TEMPORARY: see the matching comment on the Job above.
+                - { name: legacy-kara-iphone, mountPath: /legacy/kara-iphone, readOnly: true }
+                - { name: legacy-nick-desktop, mountPath: /legacy/nick-desktop, readOnly: true }
+                - { name: legacy-nick-ipad, mountPath: /legacy/nick-ipad, readOnly: true }
+                - { name: legacy-nick-xps, mountPath: /legacy/nick-xps, readOnly: true }
+                - { name: legacy-pixel7, mountPath: /legacy/pixel7, readOnly: true }
+          volumes:
+            - { name: legacy-kara-iphone, secret: { secretName: pki-kara-iphone-2000 } }
+            - { name: legacy-nick-desktop, secret: { secretName: pki-nick-desktop-2001 } }
+            - { name: legacy-nick-ipad, secret: { secretName: pki-nick-ipad-2002 } }
+            - { name: legacy-nick-xps, secret: { secretName: pki-nick-xps-2003 } }
+            - { name: legacy-pixel7, secret: { secretName: pki-pixel7-2004 } }
