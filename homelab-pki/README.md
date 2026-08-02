@@ -24,7 +24,7 @@ tofu fmt -check -recursive
 ```
 
 This checks syntax/types without touching the cluster (`-backend=false`
-skips the kubernetes backend; data sources like `data.kubernetes_secret.ca`
+skips the kubernetes backend; data sources like `data.kubernetes_secret_v1.ca`
 aren't evaluated by `validate`, only by `plan`/`apply`).
 
 ## Adding or removing a device
@@ -33,7 +33,7 @@ Edit `local.users`/`local.devices` in `locals.tf`, rebuild and push the
 image (`docker build`/`push`, bump the tag), update the tag in
 `homelab-pki.yaml`. Argo picks it up on next sync; the Sync-hook Job's
 `tofu` run creates/destroys the corresponding `pki_private_key`/
-`pki_certificate`/`pki_bundle`/`kubernetes_secret` resources (once the
+`pki_certificate`/`pki_bundle`/`kubernetes_secret_v1` resources (once the
 staged cutover below has flipped the Job to `apply` -- while it's still in
 `plan` mode, this only shows up in the plan output, not the cluster).
 

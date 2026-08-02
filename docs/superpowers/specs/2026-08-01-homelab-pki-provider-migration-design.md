@@ -124,7 +124,7 @@ Both providers already download at Job runtime today (the current setup
 already does this for `hashicorp/kubernetes`), so no filesystem mirror is
 needed.
 
-The CA is read via `data "kubernetes_secret" "ca"` (in-cluster,
+The CA is read via `data "kubernetes_secret_v1" "ca"` (in-cluster,
 `hashicorp/kubernetes` provider) instead of a mounted volume — this drops the
 `/ca` volume mount and `CA_CERT`/`CA_KEY` env vars from the Job/CronJob spec
 entirely.
@@ -214,7 +214,7 @@ Devices produce, per name: `pki_private_key`, `pki_certificate` (signed by
 `pki_certificate_authority.ca`), `pki_bundle` (`format = "pkcs12"`, write-only
 password fixed to the literal string `"password"` via `password_wo` —
 preserves current behavior exactly, since that password isn't a real secret
-today either), and `kubernetes_secret` (`tls.crt`, `tls.key`, `<name>.p12`).
+today either), and `kubernetes_secret_v1` (`tls.crt`, `tls.key`, `<name>.p12`).
 
 An output exposes current serials for operators doing revocation:
 
@@ -242,7 +242,7 @@ output "device_serials" {
   No `python -m reconcile.main`, no `secrets.auto.tfvars.json` copy step.
 - **Volumes**: drop the `config` (ConfigMap) and `ca` (Secret) volume mounts
   and the `PKI_CONFIG`/`CA_CERT`/`CA_KEY` env vars — config is baked into the
-  image as `.tf`, and the CA is read via `data "kubernetes_secret"` instead
+  image as `.tf`, and the CA is read via `data "kubernetes_secret_v1"` instead
   of a mounted file. `work` emptyDir can also go (no more
   `secrets.auto.tfvars.json` intermediate file).
 - **RBAC**: unchanged — the existing `pki-reconciler` Role's secrets
@@ -268,13 +268,13 @@ human has reviewed a real plan from the real Job:
 
 1. **`tofu/imports.tf`** declares the import mechanism directly in config
    (OpenTofu 1.7+ `import` blocks), rather than running `terraform import`
-   by hand from a one-off pod. It adds `data "kubernetes_secret"
+   by hand from a one-off pod. It adds `data "kubernetes_secret_v1"
    "legacy_device"` (`for_each` over the 5 old, serial-suffixed Secret
-   names) alongside the CA's existing `data.kubernetes_secret.ca`, then:
+   names) alongside the CA's existing `data.kubernetes_secret_v1.ca`, then:
    ```hcl
    import {
      to = pki_certificate_authority.ca
-     id = "base64://${base64encode(nonsensitive(data.kubernetes_secret.ca.data["tls.crt"]))}"
+     id = "base64://${base64encode(nonsensitive(data.kubernetes_secret_v1.ca.data["tls.crt"]))}"
    }
    import {
      for_each = local.legacy_device_secrets
@@ -284,11 +284,11 @@ human has reviewed a real plan from the real Job:
    import {
      for_each = local.legacy_device_secrets
      to       = pki_certificate.device[each.key]
-     id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"]))}"
+     id       = "base64://${base64encode(nonsensitive(data.kubernetes_secret_v1.legacy_device[each.key].data["tls.crt"]))}"
    }
    ```
    Certificate imports use `nonsensitive(...)` around a data-source read,
-   required because the `kubernetes_secret` data source's `data`/
+   required because the `kubernetes_secret_v1` data source's `data`/
    `binary_data` attributes are schema-marked sensitive and OpenTofu's
    `import` block rejects a sensitive `id` outright ("The import id cannot
    be sensitive") — hit for real against the live Job's first plan run.
@@ -312,13 +312,22 @@ human has reviewed a real plan from the real Job:
    `file://`-based private-key import was confirmed to leave zero trace of
    the key in `tofu plan`'s output where the `base64://` form had leaked it
    in full.
+
+   Every `kubernetes_secret`/`kubernetes_secret_v1` reference in this repo's
+   `tofu/*.tf` uses `_v1`: `hashicorp/kubernetes ~> 3.0` deprecates the bare
+   name (confirmed via `tofu providers schema -json` — `_v1` is a byte-for-byte
+   identical schema, only the `deprecated` flag differs), and the bare form
+   showed up as real deprecation warnings in the live Job's plan output, 16
+   of them across every resource/data source in the config. `_v1` is the
+   only change; nothing about behavior, state, or the resources it produces
+   differs.
 2. **Ship `imports.tf` with the Job/CronJob running `tofu plan` only**
    (not `apply`) — safe to merge and let Argo sync immediately, since plan
    never mutates the cluster, regardless of whether anything has been
    imported yet. Review the plan in the Job's pod logs
    (`kubectl logs job/pki-reconcile -n homelab-pki`): expect "N to import",
    the documented one-time `private_key_pem` pending-set (gotcha #2 below),
-   and creates for the brand-new `kubernetes_secret`/`pki_bundle`/`pki_crl`
+   and creates for the brand-new `kubernetes_secret_v1`/`pki_bundle`/`pki_crl`
    resources — no unexpected reissues. If `basic_constraints`/`key_usage`
    show diffs on the imported CA/devices, fix the config to match reality
    (gotcha #1 below) and re-check the plan before proceeding.
