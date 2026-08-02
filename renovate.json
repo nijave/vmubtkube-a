@@ -78,10 +78,11 @@
       "groupName": "external-secrets-crds"
     },
     {
-      "description": "vikunja's bjw-s common subchart — vendored via vendir's helmChart fetch into vendored/bjw-s-common/base (a plain symlink at vendored/vikunja/base/charts/common points there; see vendir.yml). NOTE: the version must satisfy what go-vikunja/helm-chart's Chart.lock expects; this bumps independently of the vikunja git ref (also vendir-managed) and can drift — review together.",
+      "description": "vikunja's bjw-s common subchart — vendored via vendir's helmChart fetch into vendored/bjw-s-common/base (a plain symlink at vendored/vikunja/base/charts/common points there; see vendir.yml). Pinned at 1.5.1: go-vikunja/helm-chart (latest tag v2.0.2) still assumes bjw-s-common's pre-2.0 single `controller:` schema, while common >=2.0 replaced it with a `controllers:` map — `helm template` against 5.0.1 fails outright with \"No enabled controller found with identifier 'main'\". Re-enable once go-vikunja/helm-chart ships a release compatible with the newer common schema.",
       "matchManagers": ["vendir"],
       "matchPackageNames": ["common"],
-      "groupName": "vikunja-common-chart"
+      "groupName": "vikunja-common-chart",
+      "enabled": false
     },
     {
       "description": "Contour — vendored whole-release via vendir; envoy image is tracked separately via kubernetes manager on the overlay patch",
