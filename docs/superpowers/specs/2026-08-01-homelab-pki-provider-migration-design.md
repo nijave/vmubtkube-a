@@ -262,46 +262,70 @@ contains `kubernetes_secret.cert[*]` (keyed `pki-<name>-<serial>`) and
 `kubernetes_secret.crl[0]` — entirely different resource types/addresses than
 the new config. A naive `tofu apply` against unmodified state would destroy
 all 5+1 old secrets and create ~20 new resources with no guarantee the new
-certs match the real CA/keys byte-for-byte. Instead, cutover is a **one-time
-manual bootstrap**, run once, before the Job/CronJob are ever switched to the
-new image:
+certs match the real CA/keys byte-for-byte. Cutover is staged across three
+changes instead of one big-bang apply, so nothing destructive runs until a
+human has reviewed a real plan from the real Job:
 
-1. Build and push the new `homelab-pki` image. Do **not** yet update the
-   Job/CronJob manifests to reference it.
-2. Run a one-off pod from that image (`kubectl run`/`exec`, same
-   `pki-reconciler` ServiceAccount) against the same in-cluster kubernetes
-   backend. Manually `terraform import` the CA and all 5 devices'
-   `pki_certificate_authority`/`pki_private_key`/`pki_certificate`, following
-   the exact procedure already proven in
-   `terraform-provider-pki/migration/homelab-pki-import/fetch-secrets.sh`:
-   extract each secret's `tls.crt`/`tls.key` via `kubectl get secret ... -o
-   jsonpath=... | base64 -d`, then `terraform import <addr>
-   file:///tmp/....crt` / `file:///tmp/....key`.
-3. `tofu plan` should show only the expected one-time `private_key_pem`
-   pending-set (gotcha #2 above) — no other diffs. If `basic_constraints`/
-   `key_usage` show diffs, fix the config to match reality (gotcha #1) before
-   applying. Apply once to settle.
-4. Add the new (not imported) resources to config — `kubernetes_secret` per
-   device, `pki_bundle` per device, `pki_crl`, `kubernetes_secret` for the
-   CRL — and apply. This creates `pki-<device>` and `pki-crl` Secrets
-   alongside the still-present old `pki-<device>-<serial>` ones.
-5. Verify: `openssl verify -CAfile` the new CA output against each new
+1. **`tofu/imports.tf`** declares the import mechanism directly in config
+   (OpenTofu 1.7+ `import` blocks), rather than running `terraform import`
+   by hand from a one-off pod. It adds `data "kubernetes_secret"
+   "legacy_device"` (`for_each` over the 5 old, serial-suffixed Secret
+   names) alongside the CA's existing `data.kubernetes_secret.ca`, then:
+   ```hcl
+   import {
+     to = pki_certificate_authority.ca
+     id = "base64://${base64encode(data.kubernetes_secret.ca.data["tls.crt"])}"
+   }
+   import {
+     for_each = local.legacy_device_secrets
+     to       = pki_private_key.device[each.key]
+     id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.key"])}"
+   }
+   import {
+     for_each = local.legacy_device_secrets
+     to       = pki_certificate.device[each.key]
+     id       = "base64://${base64encode(data.kubernetes_secret.legacy_device[each.key].data["tls.crt"])}"
+   }
+   ```
+   This mechanism (`base64://` IDs built from a data source read, fed into
+   `pki_certificate_authority`/`pki_private_key`/`pki_certificate` import
+   targets) was verified end-to-end against the real provider with
+   throwaway test material before being written into this config: a
+   deliberately-mismatched config surfaced as a real plan diff (not silently
+   swallowed), and a corrected config produced a clean import.
+2. **Ship `imports.tf` with the Job/CronJob running `tofu plan` only**
+   (not `apply`) — safe to merge and let Argo sync immediately, since plan
+   never mutates the cluster, regardless of whether anything has been
+   imported yet. Review the plan in the Job's pod logs
+   (`kubectl logs job/pki-reconcile -n homelab-pki`): expect "N to import",
+   the documented one-time `private_key_pem` pending-set (gotcha #2 below),
+   and creates for the brand-new `kubernetes_secret`/`pki_bundle`/`pki_crl`
+   resources — no unexpected reissues. If `basic_constraints`/`key_usage`
+   show diffs on the imported CA/devices, fix the config to match reality
+   (gotcha #1 below) and re-check the plan before proceeding.
+3. **Flip the Job/CronJob command to `tofu apply -auto-approve`** once that
+   plan looks right. `tofu apply` (run without a saved plan) computes its
+   whole plan — including every data source and import-target read — before
+   executing any create/update/destroy, so this one apply safely does all
+   of the following atomically: imports the CA/devices byte-identically,
+   destroys the now-orphaned old `kubernetes_secret.cert[*]`/`crl[0]`
+   resources (same backend, old resource addresses no longer in this
+   config), and creates the new `pki-<device>`/`pki-crl` Secrets. Reading
+   the old Secrets' data for import always happens-before their destroy in
+   the same apply, never racing it.
+4. Verify: `openssl verify -CAfile` the new CA output against each new
    device cert; `openssl verify -crl_check` a device cert against the new
    CRL (confirms the issuer-order fix actually applies in this cluster, not
    just in the validation harness).
-6. The rewritten config (from step 1's image) never declares
-   `kubernetes_secret.cert[*]`/`kubernetes_secret.crl[0]` (the old
-   `variables.tf`-driven resources) in the first place, so they're already
-   orphaned in state relative to config by this point. Apply once more (or
-   `tofu state rm` first if a dry no-op plan is preferred before the
-   destroy) to remove them — this is the step that actually deletes the old
-   `pki-<name>-<serial>` Secrets, so do it only after step 5's verification
-   passes.
-7. Only then update the Job/CronJob manifests to the new image and
-   collapsed command, and let Argo Sync take over ongoing `tofu apply`.
+5. **Immediately after that apply succeeds, delete `tofu/imports.tf` and
+   `locals.tf`'s `legacy_device_secrets` map** in a follow-up change. Their
+   data sources read Secrets this same apply destroyed — left in place,
+   every later plan/apply (including the CronJob's next 6-hourly run) would
+   fail trying to read Secrets that no longer exist.
 
-This keeps "old secrets go away" a deliberate, verified step rather than
-folding a first-time import into an automated Sync-hook Job run.
+This keeps "old secrets go away" a deliberate, verified step — reviewed as a
+real plan from the real Job, not a side channel — rather than folding a
+first-time import into an automated Sync-hook Job run with no prior review.
 
 ## Rotation & revocation runbook
 

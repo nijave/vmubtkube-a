@@ -3,12 +3,26 @@
 # A single image (registry.apps.nickv.me/nijave/homelab-pki) bundles OpenTofu
 # + the tofu/ config: pki_certificate_authority/pki_certificate/pki_crl/etc.
 # (nijave/pki provider) express the CA import, per-device issuance, and CRL
-# generation declaratively -- `tofu apply` alone reconciles everything
+# generation declaratively -- one `tofu` invocation reconciles everything
 # (adding/removing a device is a for_each over the device map in
 # homelab-pki/tofu/locals.tf, no separate reconciler needed). State lives in
 # the kubernetes backend (a Secret).
 #
-# The reconcile Job is an Argo Sync hook (runs `tofu apply` on each sync); the
+# STAGED CUTOVER: both containers below run `tofu plan` only, not `apply`.
+# tofu/imports.tf declaratively imports the real CA and 5 real devices'
+# existing keys/certs into these resource addresses; running `plan` first
+# lets that import + the resulting diff be reviewed in the Job's pod logs
+# (kubectl logs job/pki-reconcile -n homelab-pki) without mutating anything.
+# Once that plan looks right (expect only the documented one-time
+# `private_key_pem` pending-set and creates for the brand-new
+# kubernetes_secret/pki_bundle/pki_crl resources -- no unexpected reissues),
+# a follow-up change flips both `tofu plan` lines below to
+# `tofu apply -auto-approve`, and a further change after that apply succeeds
+# once deletes tofu/imports.tf (see its header comment for why). See
+# docs/superpowers/specs/2026-08-01-homelab-pki-provider-migration-design.md's
+# "Migration / cutover procedure" for the full rollout.
+#
+# The reconcile Job is an Argo Sync hook (runs `tofu` on each sync); the
 # CronJob re-runs periodically to keep the CRL fresh. Reconciliation is
 # idempotent. The CA private key is delivered from Bitwarden via ExternalSecret
 # and read directly by homelab-pki/tofu/ca.tf via a kubernetes_secret data
@@ -114,7 +128,8 @@ spec:
         decodingStrategy: None
         metadataPolicy: None
 ---
-# Immediate reconcile: Argo Sync hook runs `tofu apply` on each sync (idempotent).
+# Immediate reconcile: Argo Sync hook runs `tofu plan` on each sync
+# (idempotent, non-mutating -- see the staged-cutover note above).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -140,7 +155,7 @@ spec:
               set -eux
               cd /app/tofu
               tofu init -input=false -no-color
-              tofu apply -input=false -auto-approve -no-color
+              tofu plan -input=false -no-color
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: "1", memory: 512Mi }
@@ -176,7 +191,7 @@ spec:
                   set -eux
                   cd /app/tofu
                   tofu init -input=false -no-color
-                  tofu apply -input=false -auto-approve -no-color
+                  tofu plan -input=false -no-color
               resources:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: "1", memory: 512Mi }
