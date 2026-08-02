@@ -19,15 +19,15 @@
 #
 # Build + push (manual, until CI step lands):
 #   cd homelab-pki
-#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.0 .
-#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.0
+#   docker build -t registry.apps.nickv.me/nijave/homelab-pki:0.2.2 .
+#   docker push registry.apps.nickv.me/nijave/homelab-pki:0.2.2
 
 FROM ghcr.io/opentofu/opentofu:1.12-minimal AS tofu
 
 FROM alpine:3.24.1
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
 
-RUN apk add --no-cache ca-certificates=20260413-r0
+RUN apk add --no-cache ca-certificates=20260611-r0
 
 COPY tofu/ /app/tofu/
 
