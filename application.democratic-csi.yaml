@@ -198,10 +198,10 @@ spec:
             image:
               # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
               # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
-              # 60bb969: fixes targetCliCommand/pcsCommand/nvmetCliCommand/spdkCliCommand
-              # double-quoting regression from b39038e (broke all CreateVolume/DeleteVolume)
+              # 79ea557: removes redundant targetCliMutex client-side serialization
+              # (targetcli already serializes itself via its own NAS-side flock)
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 60bb969
+              tag: 79ea557
         node:
           cleanup:
             image:
@@ -212,10 +212,10 @@ spec:
             image:
               # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
               # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
-              # 60bb969: fixes targetCliCommand/pcsCommand/nvmetCliCommand/spdkCliCommand
-              # double-quoting regression from b39038e (broke all CreateVolume/DeleteVolume)
+              # 79ea557: removes redundant targetCliMutex client-side serialization
+              # (targetcli already serializes itself via its own NAS-side flock)
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 60bb969
+              tag: 79ea557
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
