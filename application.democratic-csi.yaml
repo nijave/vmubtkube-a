@@ -199,7 +199,7 @@ spec:
               # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
               # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: foreign-snapshots
+              tag: 4c4d999
         node:
           cleanup:
             image:
@@ -211,7 +211,7 @@ spec:
               # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
               # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: foreign-snapshots
+              tag: 4c4d999
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
