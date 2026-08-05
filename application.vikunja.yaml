@@ -49,7 +49,7 @@ spec:
             repository: registry.apps.nickv.me/vikunja/vikunja
             # renovate: datasource=docker depName=vikunja/vikunja
             registry: registry.apps.nickv.me/vikunja/vikunja
-            tag: "2.4.0"
+            tag: "2.5.0"
           # Exposed via an external-dns annotation on the chart's ClusterIP
           # Service (service.main below) rather than the chart's
           # nginx-oriented Ingress or a Contour HTTPProxy; the cluster Service
