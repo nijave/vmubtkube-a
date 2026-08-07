@@ -16,7 +16,7 @@ spec:
         - operator: Exists
       containers:
         - name: fluent-bit
-          image: cr.fluentbit.io/fluent/fluent-bit:5.0
+          image: cr.fluentbit.io/fluent/fluent-bit:5.1
           args: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
           ports:
             - name: http
