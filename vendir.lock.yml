@@ -28,11 +28,11 @@ directories:
   path: vendored/contour/base
 - contents:
   - git:
-      commitTitle: 'fix(oracle): cache default WorkloadIdentity provider to prevent
-        tcp port exhaustion (#6421)...'
-      sha: 2e0f135f739eff1543b0a86cbedf9331756432d5
+      commitTitle: 'chore(deps): bump step-security/harden-runner from 2.19.4 to 2.20.1
+        (#6803)...'
+      sha: 378bdb622ed9712ef4a58370f6a17af033b7d343
       tags:
-      - v2.8.0
+      - v2.9.0
     path: .
   path: vendored/external-secrets-crds/base
 - contents:
