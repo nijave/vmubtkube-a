@@ -1,0 +1,61 @@
+# Public, mTLS-fronted entrypoint for Vikunja, federated by python-envoy-authz.
+#
+# This is the host the native app (and mTLS-capable browsers) hit. Envoy
+# terminates the client certificate, the ext_authz federator derives a stable
+# subject from it and injects a Vikunja bearer upstream (see
+# python-envoy-authz docs/federation.md). The existing plain-HTTP LAN endpoint
+# (vikunja.k8s.somemissing.info, via the chart Service) is unaffected.
+#
+# Mirrors the frigate.apps.somemissing.info proxy: DNSimple server cert +
+# clientValidation against the homelab CA + authorization.extensionRef.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vikunja-apps-somemissing-info-cert
+  namespace: default
+spec:
+  secretName: vikunja-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn vikunja.apps.somemissing.info
+  dnsNames:
+    - *cn
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: vikunja-apps-somemissing-info
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: vikunja.apps.somemissing.info
+    tls:
+      secretName: vikunja-apps-somemissing-info-tls
+      clientValidation:
+        caSecret: ca-ha-homelab-somemissing-info-tls
+        # Let a certless request reach ext_authz (which denies it with a clean
+        # 401) rather than failing the TLS handshake — matches the frigate proxy.
+        optionalClientCertificate: true
+    authorization:
+      extensionRef:
+        name: python-envoy-authz
+        namespace: projectcontour
+      # The native-app OAuth token/refresh legs arrive in the POST body, which
+      # an ext_authz filter forwards to the federator's Check only when
+      # with_request_body is set. Without it the POST /oauth/token leg is never
+      # matched and the request falls through to Vikunja (404). See
+      # python-envoy-authz docs/federation.md "Deployment requirement".
+      withRequestBody:
+        maxRequestBytes: 8192
+        allowPartialMessage: true
+        packAsBytes: false
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: vikunja
+          port: 80
+      timeoutPolicy:
+        response: 1h
+      enableWebsockets: true
