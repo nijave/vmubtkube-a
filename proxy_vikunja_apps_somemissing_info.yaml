@@ -1,13 +1,7 @@
-# Public, mTLS-fronted entrypoint for Vikunja, federated by python-envoy-authz.
-#
-# This is the host the native app (and mTLS-capable browsers) hit. Envoy
-# terminates the client certificate, the ext_authz federator derives a stable
-# subject from it and injects a Vikunja bearer upstream (see
-# python-envoy-authz docs/federation.md). The existing plain-HTTP LAN endpoint
-# (vikunja.k8s.somemissing.info, via the chart Service) is unaffected.
-#
-# Mirrors the frigate.apps.somemissing.info proxy: DNSimple server cert +
-# clientValidation against the homelab CA + authorization.extensionRef.
+# Public, mTLS-fronted entrypoint for Vikunja: Envoy terminates the client
+# cert and the ext_authz federator exchanges it for a Vikunja bearer (see
+# python-envoy-authz docs/federation.md). Mirrors the frigate proxy. The
+# plain-HTTP LAN endpoint (vikunja.k8s.somemissing.info) is unaffected.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -34,18 +28,15 @@ spec:
       secretName: vikunja-apps-somemissing-info-tls
       clientValidation:
         caSecret: ca-ha-homelab-somemissing-info-tls
-        # Let a certless request reach ext_authz (which denies it with a clean
-        # 401) rather than failing the TLS handshake — matches the frigate proxy.
+        # Certless requests get a clean 401 from ext_authz instead of a failed
+        # TLS handshake.
         optionalClientCertificate: true
     authorization:
       extensionRef:
         name: python-envoy-authz
         namespace: projectcontour
-      # The native-app OAuth token/refresh legs arrive in the POST body, which
-      # an ext_authz filter forwards to the federator's Check only when
-      # with_request_body is set. Without it the POST /oauth/token leg is never
-      # matched and the request falls through to Vikunja (404). See
-      # python-envoy-authz docs/federation.md "Deployment requirement".
+      # Required: the OAuth token/refresh legs are matched on the POST body,
+      # which only reaches Check when with_request_body is set (federation.md).
       withRequestBody:
         maxRequestBytes: 8192
         allowPartialMessage: true
