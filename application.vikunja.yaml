@@ -90,6 +90,18 @@ spec:
               items:
                 - key: ca.crt
                   path: ca.crt
+            # k8s ClusterIssuer CA (synced into this namespace by vikunja.yaml)
+            # so Vikunja trusts the federator OP's TLS. SSL_CERT_DIR (env
+            # below) points Go at this dir.
+            opca:
+              enabled: true
+              type: secret
+              name: k8s-ca
+              mountPath: /etc/vikunja/op-ca
+              readOnly: true
+              items:
+                - key: ca.crt
+                  path: ca.crt
           resources:
             requests:
               cpu: 50m
@@ -119,6 +131,25 @@ spec:
                 secretKeyRef:
                   name: postgres-vikunja-user
                   key: password
+            # --- OIDC federation (mTLS → OAuth2 via python-envoy-authz) ---
+            SSL_CERT_DIR: /etc/vikunja/op-ca
+            VIKUNJA_AUTH_OPENID_ENABLED: "true"
+            # Provider key MUST be "broker": the federator builds the callback
+            # as {api_base}/api/v1/auth/openid/broker/callback.
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_NAME: broker
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_AUTHURL: https://python-envoy-authz.projectcontour:5001
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_CLIENTID: vikunja
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_CLIENTSECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-federation
+                  key: oauth-client-secret
+            # Pinned so it matches the federator's VIKUNJA_SESSION_SECRET.
+            VIKUNJA_SERVICE_SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-federation
+                  key: service-secret
         # One-time (idempotent) bootstrap of the initial user, rendered through
         # the chart's additionalObjects hook so it stays inside this Application.
         # The official vikunja image is FROM scratch (no shell), so an
