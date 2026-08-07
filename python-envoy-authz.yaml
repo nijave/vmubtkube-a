@@ -139,6 +139,46 @@ spec:
           # FastAPI instrumentor; matched as a substring of the request path.
           - name: OTEL_PYTHON_FASTAPI_EXCLUDED_URLS
             value: "healthz"
+          # --- Federation (mTLS → OAuth2/OIDC), see docs/federation.md ---
+          # Federation turns on only when IDP_ISSUER + SECRET_KEY +
+          # PROVIDERS_FILE are all set; otherwise this stays mTLS/Frigate-only.
+          # The OP is served on the HTTPS port (5001). Vikunja redeems
+          # federation codes here server-to-server and trusts it via the k8s
+          # ClusterIssuer CA (mounted into Vikunja); the TLS cert SANs cover
+          # this name.
+          - name: IDP_ISSUER
+            value: "https://python-envoy-authz.projectcontour:5001"
+          - name: SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: vikunja-federation
+                key: op-code-secret
+          # The providers.yaml baked into the image is already a ${VAR} template
+          # consuming exactly the VIKUNJA_* vars below — no ConfigMap needed.
+          - name: PROVIDERS_FILE
+            value: "/app/envoy_authz/providers.yaml"
+          # Stable RSA signing key (JWKS/kid survive restarts and match across
+          # both replicas). Provisioned once by cert-manager (rotationPolicy:
+          # Never) and mounted read-only below; the loader skips its chmod
+          # because the projected file is already 0600.
+          - name: OP_KEY_PATH
+            value: "/var/lib/op/op_key.pem"
+          # In-cluster, plain-HTTP base the federator uses to federate/refresh
+          # against Vikunja (NOT the public mTLS host).
+          - name: VIKUNJA_API_BASE
+            value: "http://vikunja.default.svc.cluster.local"
+          - name: VIKUNJA_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: vikunja-federation
+                key: oauth-client-secret
+          # Vikunja's service.secret (HS256): lets the federator verify an
+          # incoming Vikunja bearer's signature locally before trusting it.
+          - name: VIKUNJA_SESSION_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: vikunja-federation
+                key: service-secret
         ports:
           - name: grpc
             protocol: TCP
@@ -167,10 +207,23 @@ spec:
         volumeMounts:
           - name: certificate
             mountPath: /var/lib/tls
+          - name: op-signing-key
+            mountPath: /var/lib/op
+            readOnly: true
       volumes:
         - name: certificate
           secret:
             secretName: python-envoy-authz-tls-cert
+        - name: op-signing-key
+          secret:
+            secretName: python-envoy-authz-op-signing-key
+            # 0600 so the OP key loader treats it as already-restricted and
+            # never attempts a chmod (which would fail on this read-only mount).
+            # Readable because the container runs as root.
+            defaultMode: 0600
+            items:
+              - key: tls.key
+                path: op_key.pem
 ---
 apiVersion: v1
 kind: Service
@@ -232,3 +285,72 @@ spec:
   selector:
     matchLabels:
       app: python-envoy-authz
+---
+# Federation shared secrets (see docs/federation.md). Pulled from the same
+# external vault as the other app secrets. The SAME service-secret and
+# oauth-client-secret are also materialised in the `default` namespace for
+# Vikunja (vikunja.yaml), so both sides agree on the values.
+#   Required vault keys (populate before merge, or the pods stay Pending):
+#     vikunja-federation-service-secret       (== Vikunja service.secret)
+#     vikunja-federation-oauth-client-secret  (== Vikunja openid broker clientsecret)
+#     vikunja-federation-op-code-secret       (federator OP auth-code signer)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: vikunja-federation
+  namespace: projectcontour
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  data:
+    - secretKey: service-secret
+      remoteRef:
+        key: vikunja-federation-service-secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: oauth-client-secret
+      remoteRef:
+        key: vikunja-federation-oauth-client-secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: op-code-secret
+      remoteRef:
+        key: vikunja-federation-op-code-secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+# Stable RSA private key for the federator's OP signing key. We only consume the
+# generated tls.key — cert-manager is just a convenient in-cluster RSA keygen
+# that persists the key in a Secret shared by both replicas. rotationPolicy:
+# Never keeps the key (and the JWKS kid Vikunja caches) stable across renewals.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: op-signing-key-selfsigned
+  namespace: projectcontour
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: python-envoy-authz-op-signing-key
+  namespace: projectcontour
+spec:
+  secretName: python-envoy-authz-op-signing-key
+  commonName: python-envoy-authz-op-signing-key
+  duration: 87600h  # 10y — the key is what matters, not the cert
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Never
+  issuerRef:
+    name: op-signing-key-selfsigned
+    kind: Issuer
+    group: cert-manager.io
