@@ -66,3 +66,55 @@ spec:
       monthly: 3
       yearly: 0
     copyMethod: Clone
+---
+# Vikunja's side of the mTLS → OAuth2 federation (the projectcontour side lives
+# in python-envoy-authz.yaml). Same external-vault keys, so Vikunja's
+# service.secret and openid `broker` clientsecret match the federator's
+# VIKUNJA_SESSION_SECRET / VIKUNJA_CLIENT_SECRET. Consumed as env in
+# application.vikunja.yaml.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: vikunja-federation
+  namespace: default
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  data:
+    - secretKey: service-secret
+      remoteRef:
+        key: vikunja-federation-service-secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: oauth-client-secret
+      remoteRef:
+        key: vikunja-federation-oauth-client-secret
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+---
+# Throwaway cert whose only purpose is to materialise the k8s ClusterIssuer CA
+# (ca.crt) in the default namespace, so Vikunja trusts the federator OP's TLS
+# (https://python-envoy-authz.projectcontour:5001) when redeeming federation
+# codes. Same ClusterIssuer that signed the OP cert. Mounted via
+# persistence.opca in application.vikunja.yaml.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vikunja-op-ca-trust
+  namespace: default
+spec:
+  secretName: vikunja-op-ca-trust
+  commonName: vikunja-op-ca-trust
+  duration: 87600h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: k8s
+    kind: ClusterIssuer
+    group: cert-manager.io

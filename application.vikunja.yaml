@@ -90,6 +90,20 @@ spec:
               items:
                 - key: ca.crt
                   path: ca.crt
+            # k8s ClusterIssuer CA so Vikunja's Go HTTP client trusts the
+            # federator OP's TLS when redeeming federation codes. ca.crt comes
+            # from a throwaway cert issued by the same ClusterIssuer that signed
+            # the OP cert (see vikunja.yaml). SSL_CERT_DIR (env below) points Go
+            # at this dir.
+            opca:
+              enabled: true
+              type: secret
+              name: vikunja-op-ca-trust
+              mountPath: /etc/vikunja/op-ca
+              readOnly: true
+              items:
+                - key: ca.crt
+                  path: ca.crt
           resources:
             requests:
               cpu: 50m
@@ -119,6 +133,31 @@ spec:
                 secretKeyRef:
                   name: postgres-vikunja-user
                   key: password
+            # --- OIDC federation (mTLS → OAuth2 via python-envoy-authz) ---
+            # Configured via env (mirrors the tested compose stack). The
+            # federator OP is reached in-cluster over HTTPS and trusted via the
+            # k8s ClusterIssuer CA mounted at persistence.opca above; SSL_CERT_DIR
+            # adds it to Go's trust pool (public CAs, if the image ships a
+            # bundle, still load from the default cert file).
+            SSL_CERT_DIR: /etc/vikunja/op-ca
+            VIKUNJA_AUTH_OPENID_ENABLED: "true"
+            # Provider key MUST be "broker": the federator builds the callback as
+            # {api_base}/api/v1/auth/openid/broker/callback.
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_NAME: broker
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_AUTHURL: https://python-envoy-authz.projectcontour:5001
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_CLIENTID: vikunja
+            VIKUNJA_AUTH_OPENID_PROVIDERS_BROKER_CLIENTSECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-federation
+                  key: oauth-client-secret
+            # Pinned (not chart/random) so it survives restarts and matches the
+            # federator's VIKUNJA_SESSION_SECRET for local bearer verification.
+            VIKUNJA_SERVICE_SECRET:
+              valueFrom:
+                secretKeyRef:
+                  name: vikunja-federation
+                  key: service-secret
         # One-time (idempotent) bootstrap of the initial user, rendered through
         # the chart's additionalObjects hook so it stays inside this Application.
         # The official vikunja image is FROM scratch (no shell), so an
