@@ -1,13 +1,26 @@
-# DaemonSet: lower the SCSI command timeout for iSCSI-backed disks on every node.
+# DaemonSet: per-node iSCSI storage timeout tuning. Two duties:
+# lower the SCSI command timeout for iSCSI-backed disks, and pin
+# node.conn[0].timeo.* defaults in each host's /etc/iscsi/iscsid.conf.
 #
-# Why: /sys/block/sd*/device/timeout is a SCSI-layer attribute (default 30s),
-# NOT an iSCSI node parameter, so democratic-csi neither manages nor can manage
-# it (0 references to device/timeout in the driver). On this <1ms local L2, a 30s
-# per-command timeout means I/O to a wedged/offline iSCSI LUN blocks up to ~30s
-# before erroring, which contributes to node jam-ups. This lowers the SCSI cmd
-# timeout to a tunable value (default 10s, via the TIMEOUT env var) for iSCSI
-# disks ONLY. Local/root/non-iSCSI disks are never touched. Complements the
-# companion PR that tunes the iSCSI-layer timeouts via node-db.*.
+# Why (SCSI cmd timeout): /sys/block/sd*/device/timeout is a SCSI-layer
+# attribute (default 30s), NOT an iSCSI node parameter, so democratic-csi
+# neither manages nor can manage it (0 references to device/timeout in the
+# driver). On this <1ms local L2, a 30s per-command timeout means I/O to a
+# wedged/offline iSCSI LUN blocks up to ~30s before erroring, which contributes
+# to node jam-ups. This lowers the SCSI cmd timeout to a tunable value (default
+# 10s, via the TIMEOUT env var) for iSCSI disks ONLY. Local/root/non-iSCSI
+# disks are never touched. Complements the iSCSI-layer timeouts via node-db.*.
+#
+# Why (iscsid.conf pinning): the node.conn[0].timeo.* settings cannot ride the
+# democratic-csi node-stage secret -- Kubernetes Secret data keys must match
+# [-._a-zA-Z0-9]+, so bracket keys are rejected by the API server. democratic-csi
+# creates each iSCSI node record fresh at NodeStageVolume time and
+# `iscsiadm -o new` copies defaults from iscsid.conf, so values pinned here
+# reach every volume staged after the change -- forward-only, the same
+# semantics the node-db.* secret keys would have had. node-db.* secret keys
+# (CHAP auth, replacement_timeout) override these defaults per record, so
+# there is no overlap: bracket keys live here, bracket-free keys live on the
+# node-stage secret.
 #
 # iSCSI discrimination: iSCSI disks are identified solely by a by-path id
 # containing "-iscsi-" (e.g. /dev/disk/by-path/ip-172.16.1.118:3260-iscsi-iqn...
@@ -55,12 +68,44 @@ spec:
               value: "10"
             - name: INTERVAL
               value: "60"
+            # iscsid.conf defaults pinned on each host (see header comment).
+            # Stock open-iscsi defaults are 15/5/5, tuned for lossy fabrics;
+            # tightened for this <1ms local L2.
+            - name: ISCSI_LOGIN_TIMEOUT
+              value: "5"
+            - name: ISCSI_NOOP_OUT_INTERVAL
+              value: "2"
+            - name: ISCSI_NOOP_OUT_TIMEOUT
+              value: "2"
           command: ["/bin/sh", "-c"]
           args:
             - |
               set -eu
-              echo "scsi-timeout: applying SCSI cmd timeout=${TIMEOUT}s to iSCSI disks every ${INTERVAL}s"
+              echo "scsi-timeout: applying SCSI cmd timeout=${TIMEOUT}s to iSCSI disks and pinning iscsid.conf conn[0] timeouts every ${INTERVAL}s"
+              CONF=/etc/iscsi/iscsid.conf
+              # Pin an iscsid.conf default: replace an active line whose value
+              # differs, append when the key is absent or only commented out.
+              set_conf() {
+                key=$1
+                val=$2
+                esc=$(printf '%s' "$key" | sed 's/[].[]/\\&/g')
+                cur=$(sed -n "s/^${esc}[[:space:]]*=[[:space:]]*//p" "$CONF" | tail -n 1 | sed 's/[[:space:]]*$//')
+                if [ -z "$cur" ]; then
+                  printf '%s = %s\n' "$key" "$val" >> "$CONF"
+                  echo "$(date -Iseconds) $CONF: appended $key = $val"
+                elif [ "$cur" != "$val" ]; then
+                  sed -i "s/^${esc}[[:space:]]*=.*/${key} = ${val}/" "$CONF"
+                  echo "$(date -Iseconds) $CONF: $key ${cur} -> ${val}"
+                fi
+              }
               while true; do
+                if [ -f "$CONF" ]; then
+                  set_conf 'node.conn[0].timeo.login_timeout' "$ISCSI_LOGIN_TIMEOUT"
+                  set_conf 'node.conn[0].timeo.noop_out_interval' "$ISCSI_NOOP_OUT_INTERVAL"
+                  set_conf 'node.conn[0].timeo.noop_out_timeout' "$ISCSI_NOOP_OUT_TIMEOUT"
+                else
+                  echo "$(date -Iseconds) $CONF missing; skipping iscsid.conf pinning" >&2
+                fi
                 for p in /dev/disk/by-path/*-iscsi-*; do
                   # No matches -> the literal glob string; skip it.
                   [ -e "$p" ] || continue
@@ -107,6 +152,9 @@ spec:
             - name: dev-disk-by-path
               mountPath: /dev/disk/by-path
               readOnly: true
+            # Directory mount (not the file) so sed -i's replace-by-rename works.
+            - name: etc-iscsi
+              mountPath: /etc/iscsi
       volumes:
         - name: sys
           hostPath:
@@ -115,4 +163,8 @@ spec:
         - name: dev-disk-by-path
           hostPath:
             path: /dev/disk/by-path
+            type: Directory
+        - name: etc-iscsi
+          hostPath:
+            path: /etc/iscsi
             type: Directory
