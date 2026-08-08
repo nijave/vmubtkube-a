@@ -96,6 +96,9 @@ spec:
                   enabled: true
                 xfs:
                   enabled: true
+            iscsi:
+              sessionReaper:
+                enabled: true
   data:
   - secretKey: privateKey
     remoteRef:
@@ -208,9 +211,6 @@ spec:
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
               tag: a8b7e9f
-          iscsi:
-            sessionReaper:
-              enabled: true
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
