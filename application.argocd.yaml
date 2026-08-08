@@ -177,6 +177,15 @@ spec:
           autoscaling:
             enabled: true
             minReplicas: 1
+          # requests are required for the HPA's memory/cpu utilization metric;
+          # without them the HPA reports "missing request for memory" and the
+          # argocd app shows Degraded. Sized from observed ~57Mi / <5m usage.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
           metrics:
             enabled: true
             serviceMonitor:
@@ -187,6 +196,15 @@ spec:
           autoscaling:
             enabled: true
             minReplicas: 1
+          # requests are required for the HPA's memory/cpu utilization metric;
+          # without them the HPA reports "missing request for memory" and the
+          # argocd app shows Degraded. Sized from observed ~69Mi / <5m usage.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
           certificate:
             additionalHosts:
             - argocd.k8s.somemissing.info
