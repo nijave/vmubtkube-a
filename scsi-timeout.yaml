@@ -1,0 +1,118 @@
+# DaemonSet: lower the SCSI command timeout for iSCSI-backed disks on every node.
+#
+# Why: /sys/block/sd*/device/timeout is a SCSI-layer attribute (default 30s),
+# NOT an iSCSI node parameter, so democratic-csi neither manages nor can manage
+# it (0 references to device/timeout in the driver). On this <1ms local L2, a 30s
+# per-command timeout means I/O to a wedged/offline iSCSI LUN blocks up to ~30s
+# before erroring, which contributes to node jam-ups. This lowers the SCSI cmd
+# timeout to a tunable value (default 10s, via the TIMEOUT env var) for iSCSI
+# disks ONLY. Local/root/non-iSCSI disks are never touched. Complements the
+# companion PR that tunes the iSCSI-layer timeouts via node-db.*.
+#
+# iSCSI discrimination: iSCSI disks are identified solely by a by-path id
+# containing "-iscsi-" (e.g. /dev/disk/by-path/ip-172.16.1.118:3260-iscsi-iqn...
+# -lun-0). Only sd devices reached through such a by-path link are modified.
+#
+# Approach (sysfs-writer loop, not udev): a periodic privileged sweep that writes
+# the timeout to each iSCSI disk's sysfs attribute. This is self-contained and
+# covers both existing disks and disks that attach later (re-applied every
+# INTERVAL seconds). The pure event-driven alternative -- dropping a udev rule in
+# /etc/udev/rules.d and `udevadm control --reload && udevadm trigger` -- is
+# cleaner in principle, but making a newly added rule take effect on future
+# devices requires reaching the host's udevd (hostPID + nsenter, or chroot /host)
+# to reload it, which cannot be verified in this GitOps-only workflow and fails
+# closed if udevd/systemd differ across nodes. The sysfs loop has no such
+# dependency. See PR discussion; switch to udev if maintainers prefer it.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: scsi-timeout
+  namespace: kube-system
+  labels:
+    app: scsi-timeout
+spec:
+  selector:
+    matchLabels:
+      app: scsi-timeout
+  template:
+    metadata:
+      labels:
+        app: scsi-timeout
+    spec:
+      # Run on every node, including control-plane / otherwise-tainted nodes.
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: scsi-timeout
+          image: registry.apps.nickv.me/library/busybox:1.38.0
+          # TIMEOUT: SCSI command timeout (seconds) to apply to iSCSI disks.
+          # INTERVAL: how often to re-sweep, so disks that attach later are
+          # covered too.
+          env:
+            - name: TIMEOUT
+              value: "10"
+            - name: INTERVAL
+              value: "60"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              echo "scsi-timeout: applying SCSI cmd timeout=${TIMEOUT}s to iSCSI disks every ${INTERVAL}s"
+              while true; do
+                for p in /dev/disk/by-path/*-iscsi-*; do
+                  # No matches -> the literal glob string; skip it.
+                  [ -e "$p" ] || continue
+                  # by-path symlink target looks like ../../sda ; take the name.
+                  name=$(readlink "$p")
+                  name=${name##*/}
+                  case "$name" in
+                    sd*) ;;
+                    *) continue ;;
+                  esac
+                  # Strip any partition suffix (sda1 -> sda).
+                  base=$(echo "$name" | sed 's/[0-9]*$//')
+                  tf="/sys/block/${base}/device/timeout"
+                  [ -w "$tf" ] || continue
+                  cur=$(cat "$tf" 2>/dev/null || echo "")
+                  if [ "$cur" != "$TIMEOUT" ]; then
+                    if echo "$TIMEOUT" > "$tf"; then
+                      echo "$(date -Iseconds) set $tf: ${cur:-?} -> $TIMEOUT"
+                    else
+                      echo "$(date -Iseconds) FAILED to write $tf" >&2
+                    fi
+                  fi
+                done
+                sleep "$INTERVAL"
+              done
+          securityContext:
+            # Root + a rw hostPath /sys is what actually permits the sysfs write;
+            # privileged guards against runtime/AppArmor/seccomp restrictions on
+            # writing device attributes.
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            privileged: true
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: sys
+              mountPath: /sys
+            - name: dev-disk-by-path
+              mountPath: /dev/disk/by-path
+              readOnly: true
+      volumes:
+        - name: sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: dev-disk-by-path
+          hostPath:
+            path: /dev/disk/by-path
+            type: Directory
