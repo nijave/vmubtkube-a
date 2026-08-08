@@ -196,12 +196,8 @@ spec:
             # Revert via stacked PR once analysis is captured.
             logLevel: verbose
             image:
-              # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
-              # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
-              # 79ea557: removes redundant targetCliMutex client-side serialization
-              # (targetcli already serializes itself via its own NAS-side flock)
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 79ea557
+              tag: a8b7e9f
         node:
           cleanup:
             image:
@@ -210,12 +206,11 @@ spec:
               tag: 1.38.0
           driver:
             image:
-              # custom build with zfs.deleteVolumeIgnoreForeignSnapshots
-              # (feat/delete-volume-ignore-foreign-snapshots), not managed by renovate
-              # 79ea557: removes redundant targetCliMutex client-side serialization
-              # (targetcli already serializes itself via its own NAS-side flock)
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 79ea557
+              tag: a8b7e9f
+          iscsi:
+            sessionReaper:
+              enabled: true
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
