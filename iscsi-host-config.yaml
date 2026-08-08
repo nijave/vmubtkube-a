@@ -1,4 +1,4 @@
-# DaemonSet: per-node iSCSI storage timeout tuning. Two duties:
+# DaemonSet iscsi-host-config: per-node iSCSI storage tuning. Two duties:
 # lower the SCSI command timeout for iSCSI-backed disks, and pin
 # node.conn[0].timeo.* defaults in each host's /etc/iscsi/iscsid.conf.
 #
@@ -13,14 +13,14 @@
 #
 # Why (iscsid.conf pinning): the node.conn[0].timeo.* settings cannot ride the
 # democratic-csi node-stage secret -- Kubernetes Secret data keys must match
-# [-._a-zA-Z0-9]+, so bracket keys are rejected by the API server. democratic-csi
-# creates each iSCSI node record fresh at NodeStageVolume time and
-# `iscsiadm -o new` copies defaults from iscsid.conf, so values pinned here
-# reach every volume staged after the change -- forward-only, the same
-# semantics the node-db.* secret keys would have had. node-db.* secret keys
-# (CHAP auth, replacement_timeout) override these defaults per record, so
-# there is no overlap: bracket keys live here, bracket-free keys live on the
-# node-stage secret.
+# [-._a-zA-Z0-9]+, so bracket keys are rejected by the API server. Pinned once
+# at container startup (re-applied on pod restart), not in the periodic sweep:
+# the values only matter when node records are created, and the working
+# assumption is that a node reboot after the first apply is what brings the
+# node fully onto the new settings. node-db.* secret keys (CHAP auth,
+# replacement_timeout) override these defaults per record, so there is no
+# overlap: bracket keys live here, bracket-free keys live on the node-stage
+# secret.
 #
 # iSCSI discrimination: iSCSI disks are identified solely by a by-path id
 # containing "-iscsi-" (e.g. /dev/disk/by-path/ip-172.16.1.118:3260-iscsi-iqn...
@@ -39,18 +39,18 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: scsi-timeout
+  name: iscsi-host-config
   namespace: kube-system
   labels:
-    app: scsi-timeout
+    app: iscsi-host-config
 spec:
   selector:
     matchLabels:
-      app: scsi-timeout
+      app: iscsi-host-config
   template:
     metadata:
       labels:
-        app: scsi-timeout
+        app: iscsi-host-config
     spec:
       # Run on every node, including control-plane / otherwise-tainted nodes.
       tolerations:
@@ -58,7 +58,7 @@ spec:
       nodeSelector:
         kubernetes.io/os: linux
       containers:
-        - name: scsi-timeout
+        - name: iscsi-host-config
           image: registry.apps.nickv.me/library/busybox:1.38.0
           # TIMEOUT: SCSI command timeout (seconds) to apply to iSCSI disks.
           # INTERVAL: how often to re-sweep, so disks that attach later are
@@ -68,7 +68,7 @@ spec:
               value: "10"
             - name: INTERVAL
               value: "60"
-            # iscsid.conf defaults pinned on each host (see header comment).
+            # iscsid.conf defaults pinned once at startup (see header comment).
             # Stock open-iscsi defaults are 15/5/5, tuned for lossy fabrics;
             # tightened for this <1ms local L2.
             - name: ISCSI_LOGIN_TIMEOUT
@@ -81,7 +81,6 @@ spec:
           args:
             - |
               set -eu
-              echo "scsi-timeout: applying SCSI cmd timeout=${TIMEOUT}s to iSCSI disks and pinning iscsid.conf conn[0] timeouts every ${INTERVAL}s"
               CONF=/etc/iscsi/iscsid.conf
               # Pin an iscsid.conf default: replace an active line whose value
               # differs, append when the key is absent or only commented out.
@@ -98,14 +97,18 @@ spec:
                   echo "$(date -Iseconds) $CONF: $key ${cur} -> ${val}"
                 fi
               }
+              # One-shot at startup; assumed to fully take effect after the
+              # node's next reboot (see header comment).
+              echo "iscsi-host-config: pinning iscsid.conf conn[0] timeouts"
+              if [ -f "$CONF" ]; then
+                set_conf 'node.conn[0].timeo.login_timeout' "$ISCSI_LOGIN_TIMEOUT"
+                set_conf 'node.conn[0].timeo.noop_out_interval' "$ISCSI_NOOP_OUT_INTERVAL"
+                set_conf 'node.conn[0].timeo.noop_out_timeout' "$ISCSI_NOOP_OUT_TIMEOUT"
+              else
+                echo "$(date -Iseconds) $CONF missing; skipping iscsid.conf pinning" >&2
+              fi
+              echo "iscsi-host-config: applying SCSI cmd timeout=${TIMEOUT}s to iSCSI disks every ${INTERVAL}s"
               while true; do
-                if [ -f "$CONF" ]; then
-                  set_conf 'node.conn[0].timeo.login_timeout' "$ISCSI_LOGIN_TIMEOUT"
-                  set_conf 'node.conn[0].timeo.noop_out_interval' "$ISCSI_NOOP_OUT_INTERVAL"
-                  set_conf 'node.conn[0].timeo.noop_out_timeout' "$ISCSI_NOOP_OUT_TIMEOUT"
-                else
-                  echo "$(date -Iseconds) $CONF missing; skipping iscsid.conf pinning" >&2
-                fi
                 for p in /dev/disk/by-path/*-iscsi-*; do
                   # No matches -> the literal glob string; skip it.
                   [ -e "$p" ] || continue
