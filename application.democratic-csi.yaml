@@ -15,10 +15,10 @@ spec:
         node-db.node.session.auth.authmethod: CHAP
         node-db.node.session.auth.username: k8s
         node-db.node.session.auth.password: "{{ .password }}"
+        # node.conn[0].timeo.* (login/noop tightening) cannot go here: Secret
+        # data keys must match [-._a-zA-Z0-9]+ so brackets are rejected by the
+        # API server; set those via host iscsid.conf if needed
         node-db.node.session.timeo.replacement_timeout: "30"
-        "node-db.node.conn[0].timeo.login_timeout": "5"
-        "node-db.node.conn[0].timeo.noop_out_interval": "2"
-        "node-db.node.conn[0].timeo.noop_out_timeout": "2"
   data:
   - secretKey: password
     remoteRef:
