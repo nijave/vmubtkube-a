@@ -193,14 +193,10 @@ spec:
             extraArgs:
               - --http-endpoint=:8083
           driver:
-            # TEMP (perf investigation): verbose surfaces per-command zfs/targetcli
-            # timing (ZfsProcessManager/TargetCLI command lines) to split CreateVolume
-            # Phase A; node DaemonSet intentionally left at info to limit log volume.
-            # Revert via stacked PR once analysis is captured.
             logLevel: verbose
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: a8b7e9f
+              tag: 457304c
         node:
           cleanup:
             image:
@@ -210,7 +206,7 @@ spec:
           driver:
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: a8b7e9f
+              tag: 457304c
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy
