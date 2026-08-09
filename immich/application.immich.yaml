@@ -87,22 +87,23 @@ spec:
                     # Preload names must match the active Smart Search model set in the UI.
                     MACHINE_LEARNING_PRELOAD__CLIP__TEXTUAL: ViT-SO400M-16-SigLIP2-384__webli
                     MACHINE_LEARNING_PRELOAD__CLIP__VISUAL: ViT-SO400M-16-SigLIP2-384__webli
+                    MACHINE_LEARNING_OPENVINO_PRECISION: FP16
                     # 0 = never unload models on inactivity (default 300s)
-                    MACHINE_LEARNING_MODEL_TTL: "0"
+                    # MACHINE_LEARNING_MODEL_TTL: "0"
                   resources:
                     requests:
-                      cpu: 200m
-                      memory: 3Gi
+                      cpu: 50m
+                      memory: 6Gi
                       gpu.intel.com/i915: "1"
                     limits:
-                      memory: 8Gi
+                      memory: 12Gi
                       gpu.intel.com/i915: "1"
           persistence:
             cache:
               # PVC so the multi-GB model isn't re-downloaded on every pod restart
               enabled: true
               type: persistentVolumeClaim
-              size: 12Gi
+              size: 20Gi
               accessMode: ReadWriteOnce
         valkey:
           enabled: true
