@@ -262,6 +262,14 @@ spec:
   validation:
     caSecret: cert-manager/k8s-ca
     subjectName: python-envoy-authz
+  # Envoy's default ext_authz response timeout (~200ms) is too tight for an
+  # authz path that does upstream I/O: a session cache miss makes Check() do a
+  # full httpx federation round-trip to Vikunja. Under that default, a slow
+  # Check() is abandoned and Envoy fails closed (ext_authz_error -> 403 UAEX).
+  # 5s gives a cold federation headroom; the gRPC handler pool (grpc_max_workers)
+  # is what keeps the common cache-hit path off this ceiling under burst.
+  timeoutPolicy:
+    response: 5s
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
