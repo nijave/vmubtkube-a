@@ -70,6 +70,40 @@ spec:
           persistence:
             library:
               existingClaim: immich
+        machine-learning:
+          enabled: true
+          controllers:
+            main:
+              # single-attach RWO cache PVC -> avoid two pods attaching during rollout
+              strategy: Recreate
+              containers:
+                main:
+                  image:
+                    repository: ghcr.io/immich-app/immich-machine-learning
+                    # OpenVINO variant -> Intel iGPU acceleration (matches server tag)
+                    tag: v3.1.0-openvino
+                  env:
+                    # Keep the CLIP model resident for fast first-search after startup.
+                    # Preload names must match the active Smart Search model set in the UI.
+                    MACHINE_LEARNING_PRELOAD__CLIP__TEXTUAL: ViT-SO400M-16-SigLIP2-384__webli
+                    MACHINE_LEARNING_PRELOAD__CLIP__VISUAL: ViT-SO400M-16-SigLIP2-384__webli
+                    # 0 = never unload models on inactivity (default 300s)
+                    MACHINE_LEARNING_MODEL_TTL: "0"
+                  resources:
+                    requests:
+                      cpu: 200m
+                      memory: 3Gi
+                      gpu.intel.com/i915: "1"
+                    limits:
+                      memory: 8Gi
+                      gpu.intel.com/i915: "1"
+          persistence:
+            cache:
+              # PVC so the multi-GB model isn't re-downloaded on every pod restart
+              enabled: true
+              type: persistentVolumeClaim
+              size: 12Gi
+              accessMode: ReadWriteOnce
         valkey:
           enabled: true
           controllers:
