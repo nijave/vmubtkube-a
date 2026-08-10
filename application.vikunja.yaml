@@ -118,7 +118,7 @@ spec:
                     # Must match the external-dns hostname on service.main above.
                     # Plain HTTP: traffic reaches the ClusterIP directly with no
                     # TLS-terminating proxy in front.
-                    publicurl: http://vikunja.k8s.somemissing.info
+                    publicurl: https://vikunja.apps.somemissing.info
           env:
             VIKUNJA_DATABASE_TYPE: postgres
             VIKUNJA_DATABASE_HOST: default-rw.default.svc.cluster.local
