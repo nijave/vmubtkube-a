@@ -157,6 +157,17 @@ spec:
           # In-cluster base for federate/refresh calls (not the public mTLS host).
           - name: VIKUNJA_API_BASE
             value: "http://vikunja.default.svc.cluster.local"
+          # Must equal the redirect_uri Vikunja sends at token exchange, which
+          # it derives from its own service.publicurl as
+          # <publicurl>/auth/openid/<provider>. The browser-bootstrap flow mints
+          # the OP auth code bound to this value, but the SPA POSTs only {code}
+          # to Vikunja's callback, so Vikunja redeems it with its own computed
+          # redirect_uri; if the two differ the OP rejects the exchange
+          # (invalid_grant, "Invalid 'redirect_uri' in request"). The default
+          # (localhost:3456) only matches the federator's own server-side
+          # federate() leg, which passes redirect_url in the body.
+          - name: VIKUNJA_REDIRECT_URL
+            value: "https://vikunja.apps.somemissing.info/auth/openid/broker"
           - name: VIKUNJA_CLIENT_SECRET
             valueFrom:
               secretKeyRef:
