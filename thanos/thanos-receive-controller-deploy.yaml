@@ -26,7 +26,7 @@ spec:
         - --allow-dynamic-scaling
         - --scale-timeout=15s
         # renovate: datasource=docker depName=quay.io/observatorium/thanos-receive-controller
-        image: quay.io/observatorium/thanos-receive-controller:main-2025-12-29-91fc7c6
+        image: quay.io/observatorium/thanos-receive-controller:main-2026-08-11-d9455c0
         ports:
           - containerPort: 8080
             name: internal
