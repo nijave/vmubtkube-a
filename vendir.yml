@@ -37,7 +37,7 @@ directories:
       - path: .
         git:
           url: https://github.com/projectcontour/contour
-          ref: v1.33.5
+          ref: v1.33.6
         newRootPath: examples/render
         includePaths:
           - examples/render/contour.yaml   # full pre-re-root path; vendir applies includePaths before newRootPath
