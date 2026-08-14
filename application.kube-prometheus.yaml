@@ -148,6 +148,64 @@ spec:
                 for: 1h
                 annotations:
                   summary: Frigate camera event rate is unusually low.
+          # HyperDX's backing MongoDB (3-member RS, percona/mongodb_exporter with
+          # --collect-all --compatible-mode --discovering-mode, scraped via the
+          # mongodb-hyperdx ServiceMonitor). Curated from
+          # samber/awesome-prometheus-alerts dist/rules/mongodb/percona-mongodb-exporter.yml.
+          # ALERTS meta-series remote-write to Thanos and surface on a Grafana dashboard
+          # via the Thanos datasource, so firing here works without Alertmanager routing.
+          mongodb-alerts:
+            groups:
+            - name: mongodb
+              rules:
+              - alert: MongodbDown
+                annotations:
+                  summary: MongoDB {{ $labels.instance }} is down.
+                  description: "MongoDB instance {{ $labels.instance }} is not exporting metrics (mongodb_up == 0). HyperDX's backing store is unreachable."
+                expr: mongodb_up == 0
+                for: 1m
+                labels:
+                  severity: critical
+              - alert: MongodbReplicaMemberUnhealthy
+                annotations:
+                  summary: MongoDB replica member {{ $labels.instance }} is unhealthy.
+                  description: "Replica set member {{ $labels.instance }} reports health 0 from replSetGetStatus. A member may be down, stuck, or unreachable."
+                expr: mongodb_rs_members_health == 0
+                for: 1m
+                labels:
+                  severity: critical
+              - alert: MongoDBReplicaSetHasNoPrimary
+                annotations:
+                  summary: MongoDB replica set has no writable primary.
+                  description: "No member of the {{ $labels.job }} replica set is PRIMARY. HyperDX writes to MongoDB will fail until a new primary is elected."
+                expr: sum(mongodb_ss_repl_isWritablePrimary) by (job) == 0
+                for: 1m
+                labels:
+                  severity: critical
+              - alert: MongodbReplicationLag
+                annotations:
+                  summary: MongoDB replica member {{ $labels.instance }} is lagging.
+                  description: "Secondary {{ $labels.instance }} is more than 10s behind the primary. Sustained lag risks data loss on failover."
+                expr: (mongodb_rs_members_optimeDate{member_state="PRIMARY"} - on (set) group_right mongodb_rs_members_optimeDate{member_state="SECONDARY"}) / 1000 > 10
+                for: 2m
+                labels:
+                  severity: warning
+              - alert: MongodbReplicationHeadroom
+                annotations:
+                  summary: MongoDB replication headroom exhausted on {{ $labels.instance }}.
+                  description: "Replication headroom (oplog window minus secondary lag) is <= 0, so secondaries can no longer catch up to the primary's oplog tail."
+                expr: sum(avg(mongodb_mongod_replset_oplog_head_timestamp - mongodb_mongod_replset_oplog_tail_timestamp)) - sum(avg(mongodb_rs_members_optimeDate{member_state="PRIMARY"} - on (set) group_right mongodb_rs_members_optimeDate{member_state="SECONDARY"})) <= 0
+                for: 5m
+                labels:
+                  severity: critical
+              - alert: MongodbTooManyConnections
+                annotations:
+                  summary: MongoDB connection saturation > 80% on {{ $labels.instance }}.
+                  description: "MongoDB {{ $labels.instance }} is using more than 80% of its connection capacity. Clients may start failing to connect."
+                expr: mongodb_ss_connections{conn_type="current"} / (mongodb_ss_connections{conn_type="current"} + mongodb_ss_connections{conn_type="available"}) * 100 > 80 and (mongodb_ss_connections{conn_type="current"} + mongodb_ss_connections{conn_type="available"}) > 0
+                for: 2m
+                labels:
+                  severity: warning
         prometheus:
           service:
             annotations:
