@@ -106,7 +106,7 @@ spec:
                 limits:
                   memory: 512Mi
             - name: mongodb-exporter
-              image: percona/mongodb_exporter:2.37.0
+              image: percona/mongodb_exporter:0.52.0
               args:
                 - --collect-all
                 - --compatible-mode

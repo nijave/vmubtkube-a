@@ -112,6 +112,11 @@
       "matchPackageNames": ["cloudflare/cloudflared"]
     },
     {
+      "description": "mongodb_exporter publishes 0.x releases; require review before a major-line change",
+      "matchPackageNames": ["percona/mongodb_exporter"],
+      "allowedVersions": "/^0\\./"
+    },
+    {
       "description": "Bump altinity-clickhouse-operator chart and CRD git ref together",
       "matchPackageNames": [
         "altinity-clickhouse-operator",
