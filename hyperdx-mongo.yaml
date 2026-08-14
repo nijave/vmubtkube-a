@@ -149,6 +149,17 @@ spec:
               requests:
                 storage: 2Gi
 ---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hyperdx-mongo
+  namespace: hyperdx
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: hyperdx-svc
+---
 apiVersion: v1
 kind: Service
 metadata:
