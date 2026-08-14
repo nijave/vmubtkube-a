@@ -41,7 +41,8 @@
       "managerFilePatterns": ["/\\.yaml$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?",
-        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?",
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
     }
@@ -145,6 +146,18 @@
         "registry.k8s.io/autoscaling/vpa-admission-controller"
       ],
       "groupName": "vpa"
+    },
+    {
+      "description": "democratic-csi sidecars and snapshot-controller — csi-snapshotter and snapshot-controller must stay on the same version, and the sidecar set is validated together upstream (k8s e2e bumps them in lockstep)",
+      "matchPackageNames": [
+        "registry.k8s.io/sig-storage/csi-provisioner",
+        "registry.k8s.io/sig-storage/csi-attacher",
+        "registry.k8s.io/sig-storage/csi-resizer",
+        "registry.k8s.io/sig-storage/csi-snapshotter",
+        "registry.k8s.io/sig-storage/snapshot-controller",
+        "registry.k8s.io/sig-storage/csi-node-driver-registrar"
+      ],
+      "groupName": "csi-sidecars"
     },
     {
       "description": "Only update kube-prometheus-stack on Fridays",
