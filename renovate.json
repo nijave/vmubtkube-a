@@ -175,6 +175,11 @@
       "description": "thanos-receive-controller uses date-based tags (main-YYYY-MM-DD-hash)",
       "matchPackageNames": ["quay.io/observatorium/thanos-receive-controller"],
       "versioning": "regex:^main-(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})-[a-f0-9]+$"
+    },
+    {
+      "description": "selfoss uses monotonic date-based tags (YYYYMMDD-githash); docker versioning treats the hash as a compatibility suffix and filters out every other tag, so parse the date as a single integer instead",
+      "matchPackageNames": ["ghcr.io/nijave/selfoss"],
+      "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
     }
   ]
 }
