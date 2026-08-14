@@ -177,10 +177,19 @@ spec:
           config:
             driver: ""
         controller:
+          # sidecars pinned at current releases; chart 0.15.1 defaults are
+          # 2023-era. The fork driver image (upstream v1.9.5 code,
+          # @grpc/grpc-js server, CSI 1.0-1.11 protos) is compatible with all
+          # of these, and 1.36 clears every sidecar minimum (v6 csi-provisioner
+          # needs >= 1.34).
           # expose csi_sidecar_operations_seconds so controller-side CSI op
           # latency (CreateVolume, DeleteVolume, snapshots) lands in Thanos;
           # kubelet only covers node-side ops
           externalProvisioner:
+            image:
+              # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-provisioner
+              registry: registry.k8s.io/sig-storage/csi-provisioner
+              tag: v6.3.0
             extraArgs:
               - --http-endpoint=:8080
               # default 10; modest headroom for burst PVC churn (Woodpecker CI).
@@ -188,12 +197,24 @@ spec:
               # kept conservative so concurrent zfs/targetcli ops don't contend.
               - --worker-threads=16
           externalAttacher:
+            image:
+              # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-attacher
+              registry: registry.k8s.io/sig-storage/csi-attacher
+              tag: v4.12.0
             extraArgs:
               - --http-endpoint=:8081
           externalResizer:
+            image:
+              # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-resizer
+              registry: registry.k8s.io/sig-storage/csi-resizer
+              tag: v2.2.0
             extraArgs:
               - --http-endpoint=:8082
           externalSnapshotter:
+            image:
+              # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-snapshotter
+              registry: registry.k8s.io/sig-storage/csi-snapshotter
+              tag: v8.6.0
             extraArgs:
               - --http-endpoint=:8083
           driver:
@@ -211,6 +232,11 @@ spec:
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
               tag: 390742a
+          driverRegistrar:
+            image:
+              # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
+              registry: registry.k8s.io/sig-storage/csi-node-driver-registrar
+              tag: v2.17.0
         csiProxy:
           image:
             # renovate: datasource=docker depName=democraticcsi/csi-grpc-proxy

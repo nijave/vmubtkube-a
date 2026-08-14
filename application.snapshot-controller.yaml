@@ -30,4 +30,11 @@ spec:
     targetRevision: 0.3.0
     helm:
       releaseName: snapshot-controller
-      valuesObject: {}
+      valuesObject:
+        controller:
+          image:
+            # renovate: datasource=docker depName=registry.k8s.io/sig-storage/snapshot-controller
+            repository: registry.k8s.io/sig-storage/snapshot-controller
+            # chart 0.3.0 appVersion is 8.2.1; keep this matched with the
+            # csi-snapshotter sidecar in application.democratic-csi.yaml
+            tag: v8.6.0
