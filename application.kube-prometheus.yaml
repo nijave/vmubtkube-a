@@ -152,6 +152,10 @@ spec:
           # --collect-all --compatible-mode --discovering-mode, scraped via the
           # mongodb-hyperdx ServiceMonitor). Curated from
           # samber/awesome-prometheus-alerts dist/rules/mongodb/percona-mongodb-exporter.yml.
+          # The replication lag/headroom exprs deviate from upstream: this exporter
+          # labels the replica set `rs_nm` (upstream assumes `set`), and every
+          # sidecar exporter reports the full RS topology, so both sides are
+          # deduped with max-by before the on(rs_nm) join.
           # ALERTS meta-series remote-write to Thanos and surface on a Grafana dashboard
           # via the Thanos datasource, so firing here works without Alertmanager routing.
           mongodb-alerts:
@@ -186,7 +190,10 @@ spec:
                 annotations:
                   summary: MongoDB replica member {{ $labels.instance }} is lagging.
                   description: "Secondary {{ $labels.instance }} is more than 10s behind the primary. Sustained lag risks data loss on failover."
-                expr: (mongodb_rs_members_optimeDate{member_state="PRIMARY"} - on (set) group_right mongodb_rs_members_optimeDate{member_state="SECONDARY"}) / 1000 > 10
+                expr: |
+                  (max by (rs_nm) (mongodb_rs_members_optimeDate{member_state="PRIMARY"})
+                    - on (rs_nm) group_right
+                    max by (rs_nm, member_idx) (mongodb_rs_members_optimeDate{member_state="SECONDARY"})) / 1000 > 10
                 for: 2m
                 labels:
                   severity: warning
@@ -194,7 +201,13 @@ spec:
                 annotations:
                   summary: MongoDB replication headroom exhausted on {{ $labels.instance }}.
                   description: "Replication headroom (oplog window minus secondary lag) is <= 0, so secondaries can no longer catch up to the primary's oplog tail."
-                expr: sum(avg(mongodb_mongod_replset_oplog_head_timestamp - mongodb_mongod_replset_oplog_tail_timestamp)) - sum(avg(mongodb_rs_members_optimeDate{member_state="PRIMARY"} - on (set) group_right mongodb_rs_members_optimeDate{member_state="SECONDARY"})) <= 0
+                expr: |
+                  sum(avg(mongodb_mongod_replset_oplog_head_timestamp - mongodb_mongod_replset_oplog_tail_timestamp))
+                  - sum(avg(
+                    max by (rs_nm) (mongodb_rs_members_optimeDate{member_state="PRIMARY"})
+                    - on (rs_nm) group_right
+                    max by (rs_nm, member_idx) (mongodb_rs_members_optimeDate{member_state="SECONDARY"})
+                  )) <= 0
                 for: 5m
                 labels:
                   severity: critical
