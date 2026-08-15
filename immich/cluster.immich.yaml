@@ -167,14 +167,13 @@ metadata:
   name: immich
   namespace: immich
 spec:
-  # imageName: ghcr.io/cloudnative-pg/postgresql:18.0-system-trixie
   instances: 2
   startDelay: 300
   stopDelay: 300
   primaryUpdateStrategy: unsupervised
 
   # renovate: datasource=docker depName=ghcr.io/tensorchord/cloudnative-vectorchord
-  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:17-1.1.1
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:18-1.1.1
   postgresql:
     parameters:
       shared_buffers: 256MB
@@ -191,6 +190,10 @@ spec:
     isWALArchiver: true
     parameters:
       barmanObjectName: immich-s3
+      # separate archive dir per PG major: pg_upgrade resets the timeline to 1
+      # under a new system id and the plugin never splits archives across
+      # majors, so post-upgrade timeline-1 WAL would clobber the pg17 archive
+      serverName: immich-pg18
 
   enableSuperuserAccess: true
   superuserSecret:
