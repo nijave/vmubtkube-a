@@ -25,10 +25,14 @@ Perf investigation (2026-07-05, PR #214 adds sidecar metrics):
   `csi_sidecar_operations_seconds` (enabled in PR #214) or kubelet
   `csi_operations_seconds` (node ops only, already in Thanos).
 - Blocking snapshots are sanoid `autosnap_*` (syncoid replication) inheriting
-  `democratic-csi:managed_resource=true`. Fix branch (opt-in
-  `zfs.deleteVolumeIgnoreForeignSnapshots`, uses `zfs get -s local,received`):
-  nijave/democratic-csi branch feat/delete-volume-ignore-foreign-snapshots
-  (no PR opened yet; image build + manifest bump still pending).
+  `democratic-csi:managed_resource=true`. RESOLVED: opt-in
+  `zfs.deleteVolumeIgnoreForeignSnapshots` (uses `zfs get -s local,received`)
+  merged in the fork and shipped in driver image 390742a; the config lives in
+  the driver-config ExternalSecret and the Released-PV delete storm cleared.
 - HyperDX ClickHouse: query BOTH replicas (chi-hyperdx-replicated-0-0-0 and
-  -0-1-0) in parallel for throughput; always bound queries with TimestampTime
-  and max_execution_time — unbounded map-key predicates run for minutes.
+  -0-1-0) in parallel for throughput (as of 2026-08-15 only 0-0-0 runs);
+  always bound queries with TimestampTime and max_execution_time —
+  unbounded map-key predicates run for minutes.
+- Follow-up (2026-08-15): the node-side iscsiadm idbm-lock convoy wedge and
+  node-DB record lifecycle live in project_democratic_csi_iscsi_convoy.md;
+  both perf fixes and the convoy fixes ship in image f161853.
