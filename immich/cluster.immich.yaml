@@ -174,7 +174,7 @@ spec:
   primaryUpdateStrategy: unsupervised
 
   # renovate: datasource=docker depName=ghcr.io/tensorchord/cloudnative-vectorchord
-  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:17-0.4.3
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:17-1.1.1
   postgresql:
     parameters:
       shared_buffers: 256MB
