@@ -31,7 +31,10 @@ spec:
           -u admin:$PW http://127.0.0.1:5000/RPC2 --d '<methodCall><methodName>system.client_version</methodName></methodCall>'.
           A 504 means rtorrent itself is wedged; restart with
           'cd /mnt/docker && docker compose restart rtorrent'.
-      expr: up{job="rtorrent-exporter"} != 1 or absent(up{job="rtorrent-exporter"})
+      # The operator renders ScrapeConfig jobs as
+      # "scrapeConfig/<namespace>/<name>", so match on a regex rather than
+      # the bare CR name.
+      expr: up{job=~"scrapeConfig/.*/rtorrent-exporter"} != 1 or absent(up{job=~"scrapeConfig/.*/rtorrent-exporter"})
       for: 10m
       labels:
         severity: critical
