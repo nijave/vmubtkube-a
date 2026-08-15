@@ -6,18 +6,22 @@ LLMs/agents, so automated validation is high-value even with a single human
 maintainer — it's the safety net and the fast feedback loop for agent-authored
 changes.
 
-## 1. Add pluto deprecated-API detection to manifest validation
+## 1. Add pluto deprecated-API detection to manifest validation — RESOLVED 2026-08-14
 
-Pipe the same rendered manifest streams from `.ci/validate.sh` and
-`.ci/validate-helm.sh` through `pluto detect --target-versions
-k8s=v<next-cluster-version> -` so pluto flags deprecated-but-still-served
-APIs a release before removal. kubeconform (now version-pinned) only catches
-APIs already removed from the pinned release.
-
-- Install the pluto binary in the Woodpecker validation steps; track its
-  version with a `renovate: datasource=github-releases depName=FairwindsOps/pluto`
-  comment like the existing `KUBECONFORM_VERSION` one.
-- Note the extra binary in the pre-commit section of README.md.
+Shipped the same evening the review filed it (PR #211, `e307cbd`).
+`.ci/validate-pluto.sh` pipes the same streams as `.ci/validate.sh`
+(hand-written manifests, kustomize overlays, plain vendored bases) through
+`pluto detect`, and `.ci/validate-helm.sh` tees each rendered chart through
+the same check. The target is the next minor above the live cluster version
+(`kubectl version`; nothing hardcoded, so cukk auto-upgrades shift it).
+Removals in the target fail the build; deprecations print but pass
+(`--ignore-deprecations`). The Woodpecker `validate-pluto` and `validate-helm`
+steps install the binary with `PLUTO_VERSION` pinned under the
+`FairwindsOps/pluto` annotation (the `KUBECONFORM_VERSION` pattern), the
+`pluto-validate` pre-commit hook mirrors the CI step, and the README
+pre-commit section lists the binary. Caveat: renovate's regex manager doesn't
+parse those env-var lines yet — see item 11. Re-verified 2026-08-14: `sh
+.ci/validate-pluto.sh` exits clean against Kubernetes v1.37.0.
 
 ## 2. Explore policy/best-practice linting layer (conftest vs kube-linter)
 
@@ -191,6 +195,17 @@ recurring-events-exported-once bug). Not archived; no forced move today.
 - To keep the exporter's sink model with its bugs fixed now, the only active
   fork is `ownkube/kubernetes-events-exporter` — young (9 stars, no tagged
   releases); digest-pin and treat as a stopgap.
+
+## 11. Teach the renovate regex manager version env vars (found closing item 1)
+
+The `customManagers` regex in `renovate.json` matches image-style lines only
+(`key: registry/repo:tag`), so the `# renovate:` annotations above
+`PLUTO_VERSION`, `KUBECONFORM_VERSION`, and `VENDIR_VERSION` in
+`.woodpecker.yaml` never yield updates and the pins rot quietly — pluto cuts
+a release per Kubernetes minor, so a stale pin loses deprecation coverage
+release by release. Add a matchString for `NAME: v1.2.3` env lines; a local
+replay of the current patterns against `.woodpecker.yaml` finds only the
+seven image references.
 
 ## Skipped (deliberately, 2026-07-05)
 
