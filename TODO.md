@@ -156,26 +156,32 @@ Unscheduled but agreed-relevant; roughly by value:
   version) could co-host with the item-3 service and replace DB-stored CI
   secrets (`vendir_push_ssh_key`) with Bitwarden-backed ones.
 
-## 9. Migrate hyperdx MongoDB off the EOL community operator (from the 2026-08-14 image-age review)
+## 9. hyperdx MongoDB: operator now on MCK; mongod version pinned by the kernel check (from the 2026-08-14 image-age review)
 
-`operators/mongodb-community-operator.yaml` pins chart 0.13.0 — the final
-release of `mongodb/mongodb-kubernetes-operator`, which MongoDB deprecated in
-favor of **MCK** (`mongodb/mongodb-kubernetes`, unified community+enterprise
-operator); best-effort support ended November 2025. That strand explains why
-the operator/agent/readinessprobe/version-upgrade-hook images are all ~1y
-stale, and `mongodb/mongodb-community-server` images stop at the 8.x lines
-(8.0/8.2/8.3).
+The operator migration landed 2026-08-15: PR #422 repointed the app to MCK
+(`mongodb/mongodb-kubernetes` 1.10.0), which reconciles the same
+`MongoDBCommunity` CR on mongod 8.0.4. All verification gates passed;
+`docs/mongodb-mck-migration-runbook.md` records the executed procedure,
+including two corrections to the original plan (the operator Deployment
+needed a delete-and-recreate for its immutable selector, and the child app
+needed a manual sync after its automated retries ran out).
 
-- MCK is active (1.10.0, 2026-07-30) and still reconciles `MongoDBCommunity`
-  CRs; follow
-  `docs/migration/community-operator-migration.md` in the new repo (Helm
-  `keep` annotations on CRDs — already satisfied by chart >= 0.13.0 —
-  uninstall old chart, install MCK; expect a rolling restart from
-  service-account renames).
-- After migrating, revisit the `mongodb/mongodb-community-server` packageRule
-  `allowedVersions: /^8\.0\./` — 8.2/8.3 image lines exist but predate
-  operator 0.13.0, so they were deliberately out of scope until the operator
-  migration lands.
+What stays open is the version decision, now under a hard constraint: mongod
+releases past 8.0.4 refuse to start on Linux kernel >=6.19 (the
+SERVER-121912 fatal check). Renovate PR #420 demonstrated this with 8.0.29 on
+the kernel-7.0.0 workers (`hyperdx-1` crash-looped until PR #425 reverted the
+bump), and `renovate.json` now pins `mongodb/mongodb-community-server` to
+exactly 8.0.4.
+
+- Confirm whether the 8.2/8.3 image lines start on kernel 7.0 before any
+  bump; where in the 8.0.x stream the check first appears is unverified
+  (only 8.0.29-fails and 8.0.4-works are observed). The same answer decides
+  whether the `docker.io/mongodb` ubi8 repo pin should move to quay.io's
+  ubi9 line.
+- Give the workload a standing backup: no volsync `ReplicationSource` and no
+  VolumeSnapshotClass cover it, so the only restore point is a manual dump.
+  The runbook's gate-1 command (`--db=hyperdx`, with the count check) is the
+  tested procedure; either schedule it or add a `ReplicationSource`.
 
 ## 10. kubernetes-event-exporter endgame (from the 2026-08-14 image-age review)
 

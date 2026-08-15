@@ -1,7 +1,7 @@
 # MongoDB community-operator to MCK migration runbook
 
-Planned 2026-08-15 for the `hyperdx` MongoDB replica set. Companion PR:
-"feat(mongodb): migrate community-operator app to MCK" (swaps
+Planned and executed 2026-08-15 for the `hyperdx` MongoDB replica set.
+Companion PR: "feat(mongodb): migrate community-operator app to MCK" (swaps
 `operators/mongodb-kubernetes.yaml` to chart `mongodb-kubernetes` 1.10.0 and
 pins `serviceAccountName` in `hyperdx-mongo.yaml`). This runbook covers the
 preflight, the merge, verification, and rollback.
@@ -17,6 +17,30 @@ active and reconciles the same `MongoDBCommunity` CRs. Upstream migration
 guide:
 <https://github.com/mongodb/mongodb-kubernetes/blob/master/docs/migration/community-operator-migration.md>
 
+## Outcome (executed 2026-08-15)
+
+PR #422 landed and the migration passed all six verification gates the same
+day: CRD Established, CR `Running` at 8.0.4, clean operator logs, one PRIMARY
+plus two SECONDARY members with `health: 1`, no Mongo errors in the HyperDX
+logs, `mongodb_up 1`, and all three ArgoCD applications Synced/Healthy. The
+StatefulSet roll finished in roughly three minutes with quorum held
+throughout. Two steps deviated from the plan below and the plan now records
+the corrected procedure: the operator Deployment needed a delete and recreate
+(immutable selector change; see "Transition design" and "Merge and watch"),
+and the child app's automated sync exhausted its retries on that failure and
+required a manual `argocd app sync` to re-fire.
+
+Hours before the merge, Renovate PR #420 — the first mongod bump the restored
+`renovate.json` tracking proposed — crashed `hyperdx-1`: mongod releases past
+8.0.4 refuse to start on Linux kernel >=6.19 (the SERVER-121912 fatal check),
+and the worker nodes run kernel 7.0.0. PR #425 reverted the bump and pinned
+`allowedVersions` to exactly `8.0.4`. Recovery also required terminating the
+wedged root-app sync operation (it was "waiting for healthy state" of the very
+resource the failed bump broke) and patching the StatefulSet image plus
+deleting `hyperdx-1` so the old operator could finish its rollback. The
+preflight below ran after that recovery, so the backup captures the
+post-incident state.
+
 ## Transition design (read this first)
 
 The PR repoints the existing `mongodb-community-operator` ArgoCD Application to
@@ -25,11 +49,18 @@ the new chart in place. It does not rename or delete the Application, so:
 - No finalizer cascade runs, so nothing the old chart owns disappears
   unexpectedly. Rendered diff of the two charts (same values, namespace
   `operators`):
-  - **Updated in place**: Deployment `mongodb-kubernetes-operator` (operator
-    image 0.13.0 to 1.10.0, rolling update, no availability gap),
-    ServiceAccount `mongodb-kubernetes-operator`, ClusterRole and
-    ClusterRoleBinding `mongodb-kubernetes-operator`, CRD
+  - **Updated in place**: ServiceAccount `mongodb-kubernetes-operator`,
+    ClusterRole and ClusterRoleBinding `mongodb-kubernetes-operator`, CRD
     `mongodbcommunity.mongodbcommunity.mongodb.com`.
+  - **Recreated, not updated**: Deployment `mongodb-kubernetes-operator`
+    (operator image 0.13.0 to 1.10.0). The MCK chart also changes the
+    Deployment selector from the bare `name: mongodb-kubernetes-operator`
+    label to an `app.kubernetes.io/name|instance|component` triple, and
+    Deployment selectors are immutable, so the swap requires deleting the old
+    Deployment and letting the sync recreate it (see "Merge and watch"). This
+    replaces the original plan's "rolling update, no availability gap"
+    expectation, which the rendered diff missed because it compared images
+    only.
   - **Created**: seven new CRDs (`mongodb.mongodb.com`,
     `opsmanagers.mongodb.com`, `mongodbusers.mongodb.com`,
     `mongodbsearch.mongodb.com`, `mongodbmulticluster.mongodb.com`,
@@ -81,20 +112,44 @@ couple the operator swap with a MongoDB upgrade.
 
 This workload has no volsync `ReplicationSource` and no VolumeSnapshotClass
 exists on the cluster, so a mongodump taken now is the only restore point.
-Take it from member 0 with a direct connection and save it off-cluster:
+Take it from member 0 with a direct connection and save it off-cluster.
+Scope the dump with `--db=hyperdx`: the app user's roles (`readWrite` on
+`hyperdx`, `clusterMonitor` on `admin`) do not cover `listCollections` on
+`admin`, so the default all-database sweep aborts with `not authorized on
+admin`. The system databases hold nothing restorable from a dump anyway;
+HyperDX keeps logs and traces in ClickHouse, and Mongo holds only metadata
+(ten documents across six collections as of 2026-08-15).
 
 ```sh
 MONGO_PW=$(kubectl -n hyperdx get secret hyperdx-mongo-app-credentials \
   -o jsonpath='{.data.password}' | base64 -d)
 kubectl -n hyperdx exec hyperdx-0 -c mongod -- \
   mongodump --uri="mongodb://hyperdx:${MONGO_PW}@127.0.0.1:27017/?authSource=admin&directConnection=true" \
-  --archive --gzip \
-  > "hyperdx-mongo-$(date +%Y%m%d-%H%M).archive.gz"
+  --db=hyperdx --archive --gzip \
+  > "hyperdx-mongo-$(date +%Y%m%d-%H%M).archive.gz" \
+  2> mongodump.stderr
 unset MONGO_PW
 ```
 
-Gate: the archive exists, is non-trivially sized (`ls -lh`), and `gzip -t`
-passes. If the container lacks `mongodump`, fall back to the same image as a
+Gate: the archive exists, is non-trivially sized (`ls -lh`), `gzip -t` passes,
+and the dump is not hollow — every collection the live database reports as
+non-empty appears with a matching count in `mongodump.stderr`:
+
+```sh
+grep 'done dumping' mongodump.stderr | grep -v '(0 documents)'
+MONGO_PW=$(kubectl -n hyperdx get secret hyperdx-mongo-app-credentials \
+  -o jsonpath='{.data.password}' | base64 -d)
+kubectl -n hyperdx exec hyperdx-0 -c mongod -- mongosh --quiet \
+  "mongodb://hyperdx:${MONGO_PW}@127.0.0.1:27017/?authSource=admin&directConnection=true" \
+  --eval 'const d=db.getSiblingDB("hyperdx"); d.getCollectionNames().forEach(c=>print(c, d.getCollection(c).estimatedDocumentCount()))'
+unset MONGO_PW
+```
+
+(The count check exists because the 2026-08-15 run initially looked
+all-empty: the stderr lines separate the timestamp and message with a tab, so
+a space-delimited grep for non-zero counts matched nothing.)
+
+If the container lacks `mongodump`, fall back to the same image as a
 pod with the secret mounted:
 
 ```sh
@@ -106,7 +161,7 @@ kubectl -n hyperdx run mongo-backup --rm -it --restart=Never \
       "containers": [{
         "name": "mongo-backup", "stdin": true, "tty": true,
         "volumeMounts": [{"name": "pw", "mountPath": "/pw"}],
-        "command": ["/bin/bash", "-c", "mongodump --uri=\"mongodb://hyperdx:$(cat /pw/password)@hyperdx-0.hyperdx-svc.hyperdx.svc.cluster.local:27017/?authSource=admin&directConnection=true\" --archive --gzip > /tmp/dump.gz && sleep 600"]
+        "command": ["/bin/bash", "-c", "mongodump --uri=\"mongodb://hyperdx:$(cat /pw/password)@hyperdx-0.hyperdx-svc.hyperdx.svc.cluster.local:27017/?authSource=admin&directConnection=true\" --db=hyperdx --archive --gzip > /tmp/dump.gz && sleep 600"]
     }}'
 kubectl -n hyperdx cp mongo-backup:/tmp/dump.gz "./hyperdx-mongo-$(date +%Y%m%d-%H%M).archive.gz"
 kubectl -n hyperdx delete pod mongo-backup
@@ -145,8 +200,30 @@ Gate: `1.10.0`, `108.0.25.9029-1`, `1.0.24`, and `8.0.4-ubi8` all appear.
 ## Merge and watch
 
 1. Merge the PR. ArgoCD picks up the commit and syncs the `operators` parent
-   app, then the child app re-renders from the new chart.
-2. Watch the operator roll (expect a normal rolling update, no gap):
+   app, then the child app re-renders from the new chart. The child app's
+   first automated sync fails on the immutable Deployment selector (see
+   "Transition design"), burns its two retries, and stops in `Failed`.
+2. Delete the old operator Deployment so a sync can recreate it with the new
+   selector instead of patching it:
+
+```sh
+kubectl -n operators delete deploy mongodb-kubernetes-operator
+```
+
+The gap while the Deployment is absent is harmless — the replica set keeps
+serving, and nothing else reconciles the CR in that window. Deleting alone
+does not re-arm the exhausted automated sync, so continue to step 3.
+3. Trigger the sync manually. With the Deployment gone, the create succeeds.
+   Core mode reads the ArgoCD install namespace from the current context
+   namespace, so scope the context first:
+
+```sh
+kubectl config set-context --current --namespace=argocd
+argocd app sync mongodb-community-operator --core --prune
+kubectl config set-context --current --namespace=<previous-namespace>
+```
+
+4. Watch the operator come up on the new chart:
 
 ```sh
 kubectl -n argocd get application mongodb-community-operator -w
@@ -154,12 +231,12 @@ kubectl -n operators rollout status deploy/mongodb-kubernetes-operator --watch
 kubectl -n operators logs deploy/mongodb-kubernetes-operator -f
 ```
 
-3. Expect the sync to prune `mongodb-database` SA/Role/RoleBinding in
+5. Expect the sync to prune `mongodb-database` SA/Role/RoleBinding in
    `operators` (only there, not in `hyperdx`) and to create the seven new
    CRDs. A brief OutOfSync flap during the chart swap resolves on the next
    refresh.
 
-4. Watch the StatefulSet roll one member at a time:
+6. Watch the StatefulSet roll one member at a time:
 
 ```sh
 kubectl -n hyperdx rollout status sts/hyperdx --watch
