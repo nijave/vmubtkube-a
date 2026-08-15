@@ -1,27 +1,31 @@
-# TODO
+# Follow-ups
 
 Follow-ups from the 2026-07-05 validation-tooling review and the 2026-07-04
-IaC best-practices review. Context: this repo is largely updated by
+IaC best-practices review. Context: this repo is chiefly updated by
 LLMs/agents, so automated validation is high-value even with a single human
 maintainer — it's the safety net and the fast feedback loop for agent-authored
 changes.
 
-## 1. Add pluto deprecated-API detection to manifest validation
+## 1. Add pluto deprecated-API detection to manifest validation — RESOLVED 2026-08-14
 
-Pipe the same rendered manifest streams from `.ci/validate.sh` and
-`.ci/validate-helm.sh` through `pluto detect --target-versions
-k8s=v<next-cluster-version> -` so deprecated-but-still-served APIs are flagged
-a release before removal. kubeconform (now version-pinned) only catches APIs
-already removed from the pinned release.
-
-- Install the pluto binary in the Woodpecker validate steps; track its version
-  with a `renovate: datasource=github-releases depName=FairwindsOps/pluto`
-  comment like the existing `KUBECONFORM_VERSION` one.
-- Note the extra binary requirement in the pre-commit section of README.md.
+Shipped the same evening the review filed it (PR #211, `e307cbd`).
+`.ci/validate-pluto.sh` pipes the same streams as `.ci/validate.sh`
+(hand-written manifests, kustomize overlays, plain vendored bases) through
+`pluto detect`, and `.ci/validate-helm.sh` tees each rendered chart through
+the same check. The target is the next minor above the live cluster version
+(`kubectl version`; nothing hardcoded, so cukk auto-upgrades shift it).
+Removals in the target fail the build; deprecations print but pass
+(`--ignore-deprecations`). The Woodpecker `validate-pluto` and `validate-helm`
+steps install the binary with `PLUTO_VERSION` pinned under the
+`FairwindsOps/pluto` annotation (the `KUBECONFORM_VERSION` pattern), the
+`pluto-validate` pre-commit hook mirrors the CI step, and the README
+pre-commit section lists the binary. Caveat: renovate's regex manager doesn't
+parse those env-var lines yet — see item 11. Re-verified 2026-08-14: `sh
+.ci/validate-pluto.sh` exits clean against Kubernetes v1.37.0.
 
 ## 2. Explore policy/best-practice linting layer (conftest vs kube-linter)
 
-Evaluate a policy/lint layer as guardrails for agent-authored changes — rules
+Assess a policy/lint layer as guardrails for agent-authored changes — rules
 that encode repo conventions an agent might not infer, enforced before merge.
 
 - Highest signal: a small conftest/OPA policy pack over `application.*.yaml`
@@ -34,8 +38,8 @@ that encode repo conventions an agent might not infer, enforced before merge.
   the rendered streams from `.ci/validate.sh` before committing.
 - Kyverno CLI is the alternative if reusing policies at admission time ever
   matters.
-- Outcome: adopt/skip decision; if adopt, wire into the CI validate steps and
-  pre-commit like the kubeconform checks.
+- Outcome: adopt/skip decision; if adopt, wire into the CI validation steps
+  and pre-commit like the kubeconform checks.
 
 ## 3. Custom Renovate version API for private-registry images
 
@@ -60,7 +64,7 @@ docker-datasource hostRules.
 ## 4. Custom Renovate version API for the VectorChord CNPG image
 
 The immich CNPG `imageName` (`immich/cluster.immich.yaml`) uses compound tags
-encoding multiple software versions (Postgres major + VectorChord +
+encoding three software versions (Postgres major + VectorChord +
 pgvectors), which Renovate's docker datasource can't order.
 
 - Second endpoint on the same service as item 3: parse the upstream tag list,
@@ -74,7 +78,7 @@ pgvectors), which Renovate's docker datasource can't order.
 ## 5. Kubernetes recommended labels on all workloads
 
 Apply `app.kubernetes.io/name|instance|component|part-of|managed-by`
-consistently. Current state is mixed: arr apps/jellyfin/mumble use
+consistently. Current state varies: arr apps/jellyfin/mumble use
 `app.kubernetes.io/*`, others use bare `app:`/`pod:` labels (event-exporter,
 cloudflared, external-dns, vpa-recommender Service).
 
@@ -144,7 +148,7 @@ Unscheduled but agreed-relevant; roughly by value:
   sizing source when touching requests.
 - Exercise a volsync restore once (`ReplicationDestination` into a scratch
   PVC) — backups exist for radarr/sonarr/prowlarr/sabnzbd/jellyfin/mumble/
-  immich but a restore has never been tested.
+  immich but we have never tested a restore.
 - Standardize `proxy_<service>.yaml` naming (three files carry a
   `_somemissing_info` suffix).
 - Consider a GitHub ruleset requiring PRs for `main` — mechanical guarantee
@@ -154,8 +158,19 @@ Unscheduled but agreed-relevant; roughly by value:
   version) could co-host with the item-3 service and replace DB-stored CI
   secrets (`vendir_push_ssh_key`) with Bitwarden-backed ones.
 
+## 11. Teach the renovate regex manager version env vars (found closing item 1)
+
+The `customManagers` regex in `renovate.json` matches image-style lines only
+(`key: registry/repo:tag`), so the `# renovate:` annotations above
+`PLUTO_VERSION`, `KUBECONFORM_VERSION`, and `VENDIR_VERSION` in
+`.woodpecker.yaml` never yield updates and the pins rot quietly — pluto cuts
+a release per Kubernetes minor, so a stale pin loses deprecation coverage
+release by release. Add a matchString for `NAME: v1.2.3` env lines; a local
+replay of the current patterns against `.woodpecker.yaml` finds only the
+seven image references.
+
 ## Skipped (deliberately, 2026-07-05)
 
 - **Rendered-manifests pattern** (commit flat rendered YAML to a separate
   branch/repo): machinery outweighs benefit at this scale; the
-  validate-the-render-in-CI approach covers most of the value.
+  render-in-CI approach covers most of the value.
