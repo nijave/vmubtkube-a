@@ -42,7 +42,8 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?",
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?",
-        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?",
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*version:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
     }
@@ -193,6 +194,22 @@
       "description": "selfoss uses monotonic date-based tags (YYYYMMDD-githash); docker versioning treats the hash as a compatibility suffix and filters out every other tag, so parse the date as a single integer instead",
       "matchPackageNames": ["ghcr.io/nijave/selfoss"],
       "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
+    },
+    {
+      "description": "searxng uses date-based tags (YYYY.M.D-githash); same compatibility-suffix trap as selfoss — parse the date components and ignore the hash. Wildcard because the mirror-registry depName keeps its registry.apps.nickv.me prefix (registryAliases only rewrites packageName).",
+      "matchPackageNames": ["**/searxng/searxng"],
+      "versioning": "regex:^(?<major>\\d{4})\\.(?<minor>\\d+)\\.(?<patch>\\d+)-[a-f0-9]+$"
+    },
+    {
+      "description": "cloudnative-vectorchord tags are PGMAJOR-VCMAJOR.VCMINOR.VCPATCH (e.g. 17-0.4.3); docker versioning treats the VectorChord semver as a compatibility suffix and filters out every other tag, so map all four numeric components (regex versioning parses the build group as a 4th release component). Immich accepts VectorChord >=0.3,<2.0. A PG-major bump (18-x) or VectorChord-major bump (17-1.x) needs manual follow-up after merge — CNPG rolling-restarts postgres with the new image, then run ALTER EXTENSION vchord UPDATE; REINDEX INDEX face_index; REINDEX INDEX clip_index; (per Immich docs) — so those PRs must not be automerged.",
+      "matchPackageNames": ["ghcr.io/tensorchord/cloudnative-vectorchord"],
+      "versioning": "regex:^(?<major>\\d+)-(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
+    },
+    {
+      "description": "hyperdx MongoDBCommunity spec.version — the community-operator combines spec.version with its own '-ubi8' suffix to build the mongod image tag, so the file must carry the bare semver; extractVersion rewrites releases like 8.0.29-ubi8 to 8.0.29 before comparison/replacement (non-ubi8 tags are dropped). Pinned to the 8.0.x patch stream: the operator (0.13.0, MongoDB's final community-operator release before the MCK migration) predates the 8.2/8.3 image lines, and patch bumps roll the replica set member-by-member without an FCV change.",
+      "matchPackageNames": ["mongodb/mongodb-community-server"],
+      "extractVersion": "^(?<version>\\d+\\.\\d+\\.\\d+)-ubi8$",
+      "allowedVersions": "/^8\\.0\\./"
     }
   ]
 }

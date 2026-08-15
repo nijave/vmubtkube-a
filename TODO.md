@@ -61,19 +61,17 @@ docker-datasource hostRules.
   `python-envoy-authz.yaml` (Contour ext-authz path), `cpu-benchmark.yaml`,
   `qds.yaml` (untracked).
 
-## 4. Custom Renovate version API for the VectorChord CNPG image
+## 4. Custom Renovate version API for the VectorChord CNPG image — RESOLVED 2026-08-14
 
-The immich CNPG `imageName` (`immich/cluster.immich.yaml`) uses compound tags
-encoding three software versions (Postgres major + VectorChord +
-pgvectors), which Renovate's docker datasource can't order.
-
-- Second endpoint on the same service as item 3: parse the upstream tag list,
-  hold the Postgres major constant, return newest compatible
-  VectorChord/pgvectors versions as an ordered `releases` list — never
-  auto-propose a Postgres major bump (CNPG major upgrades are a manual
-  procedure).
-- Wire via customDatasources + a customManagers regex with a `# renovate:`
-  annotation on the `imageName` line.
+Superseded by a pure `renovate.json` fix: a `regex:` versioning packageRule
+maps the `PGMAJOR-VCMAJOR.VCMINOR.VCPATCH` tag onto four ordered numeric
+components, so the stock docker datasource can rank them. No custom-datasource
+service needed. Verified with a local `--platform=local` dry run: Renovate
+proposes `17-1.1.1` (minor bucket) and `18-1.1.1` (major bucket) from
+`17-0.4.3`; PG-major and VectorChord-major PRs require the manual
+`ALTER EXTENSION vchord UPDATE` + reindex follow-up noted in the rule
+description, so don't automerge them. This fix leaves the item-3 service
+(private-registry images) untouched.
 
 ## 5. Kubernetes recommended labels on all workloads
 
@@ -157,6 +155,46 @@ Unscheduled but agreed-relevant; roughly by value:
 - Woodpecker secret-extension (signed HTTP endpoint, supported by the running
   version) could co-host with the item-3 service and replace DB-stored CI
   secrets (`vendir_push_ssh_key`) with Bitwarden-backed ones.
+
+## 9. Migrate hyperdx MongoDB off the EOL community operator (from the 2026-08-14 image-age review)
+
+`operators/mongodb-community-operator.yaml` pins chart 0.13.0 — the final
+release of `mongodb/mongodb-kubernetes-operator`, which MongoDB deprecated in
+favor of **MCK** (`mongodb/mongodb-kubernetes`, unified community+enterprise
+operator); best-effort support ended November 2025. That strand explains why
+the operator/agent/readinessprobe/version-upgrade-hook images are all ~1y
+stale, and `mongodb/mongodb-community-server` images stop at the 8.x lines
+(8.0/8.2/8.3).
+
+- MCK is active (1.10.0, 2026-07-30) and still reconciles `MongoDBCommunity`
+  CRs; follow
+  `docs/migration/community-operator-migration.md` in the new repo (Helm
+  `keep` annotations on CRDs — already satisfied by chart >= 0.13.0 —
+  uninstall old chart, install MCK; expect a rolling restart from
+  service-account renames).
+- After migrating, revisit the `mongodb/mongodb-community-server` packageRule
+  `allowedVersions: /^8\.0\./` — 8.2/8.3 image lines exist but predate
+  operator 0.13.0, so they were deliberately out of scope until the operator
+  migration lands.
+
+## 10. kubernetes-event-exporter endgame (from the 2026-08-14 image-age review)
+
+`ghcr.io/resmoio/kubernetes-event-exporter:v1.7` (2024-02-23) is the newest
+image of that lineage: the repo now redirects to
+`mustafaakin/kubernetes-event-exporter`, dormant ~2y but with a revival in
+flight (PRs #251/#252, June 2026: Go/k8s bumps, CVE sweep, fixes the
+recurring-events-exported-once bug). Not archived; no forced move today.
+
+- Watch for a v1.8/2.x release (may publish under a new ghcr namespace given
+  the module rename) — natural upgrade point.
+- Preferred consolidation when touched next: drop the standalone exporter and
+  ship events via a one-replica Fluent Bit `kubernetes_events` input (watch-
+  based since 3.1) or Grafana Alloy `loki.source.kubernetes_events` — one
+  fewer component. Vector's `kubernetes_events` source is still an open PR
+  (vectordotdev/vector#24448), not an option yet.
+- To keep the exporter's sink model with its bugs fixed now, the only active
+  fork is `ownkube/kubernetes-events-exporter` — young (9 stars, no tagged
+  releases); digest-pin and treat as a stopgap.
 
 ## 11. Teach the renovate regex manager version env vars (found closing item 1)
 
