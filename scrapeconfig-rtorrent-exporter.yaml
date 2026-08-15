@@ -1,0 +1,21 @@
+# Scrape config for the rtorrent-exporter on vmubttorrent01
+# (mdshack/rtorrent-exporter, host networking, port 9135).
+#
+# No basicAuth: the exporter's /metrics endpoint is unauthenticated. The
+# container only passes --rtorrent.username/--rtorrent.password (credentials
+# for rTorrent's XML-RPC via nginx, internal to the box), not
+# --telemetry.username/--telemetry.password, so scraping needs no credential
+# and none has to live in Kubernetes or git. The port is LAN-reachable only.
+# If that ever changes, add --telemetry.username/--telemetry.password in the
+# container's start.sh and a basicAuth block here.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: rtorrent-exporter
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  staticConfigs:
+  - targets:
+    - vmubttorrent01.homelab.somemissing.info:9135
