@@ -1,0 +1,50 @@
+# Alert rules for the rtorrent stack on vmubttorrent01, evaluated by the
+# `ext` Prometheus (ruleSelector matchLabels prometheus: ext). Metrics come
+# from the rtorrent-exporter scrape added in the companion ScrapeConfig PR;
+# without it these rules fire as absent/unknown until that job exists.
+#
+# 2026-08-15 incident context: rtorrent's event loop wedged between 02:02
+# (last successful RPC2 response) and 02:04 UTC (first 504). The process
+# kept listening on its SCGI socket but never accept()ed, so the exporter's
+# /metrics hung too — surfacing as up == 0 rather than any rtorrent_* gauge
+# going stale. A container restart recovered it.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rtorrent-alerts
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: rtorrent
+    rules:
+    - alert: RtorrentExporterScrapeFailing
+      annotations:
+        summary: rtorrent-exporter on vmubttorrent01 is not scrapeable.
+        description: >-
+          The rtorrent-exporter scrape has failed for 10m. When rtorrent's
+          SCGI event loop wedges (2026-08-15: frozen 02:02-14:40 UTC) the
+          exporter's /metrics hangs with it and reads as down; the same alert
+          covers exporter crashes and credential expiry. Check RPC2 health
+          from the box: docker exec rtorrent curl -s -o /dev/null -w '%{http_code}'
+          -u admin:$PW http://127.0.0.1:5000/RPC2 --d '<methodCall><methodName>system.client_version</methodName></methodCall>'.
+          A 504 means rtorrent itself is wedged; restart with
+          'cd /mnt/docker && docker compose restart rtorrent'.
+      expr: up{job="rtorrent-exporter"} != 1 or absent(up{job="rtorrent-exporter"})
+      for: 10m
+      labels:
+        severity: critical
+    - alert: RtorrentNoProgressWithIncomplete
+      annotations:
+        summary: rtorrent has incomplete downloads but no download progress for 6h.
+        description: >-
+          rtorrent_downloads_incomplete > 0 while cumulative downloaded bytes
+          have not moved in 6h. Either everything genuinely has no available
+          peers, or rtorrent is partially wedged while still serving RPC.
+          Cross-check node_vpn_probe_success (VPN path) and tracker state
+          in Flood before restarting.
+      expr: rtorrent_downloads_incomplete > 0 and increase(rtorrent_downloads_download_total_bytes[6h]) == 0
+      for: 30m
+      labels:
+        severity: warning
