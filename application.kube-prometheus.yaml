@@ -219,6 +219,27 @@ spec:
                 for: 2m
                 labels:
                   severity: warning
+          # vmubttorrent01 torrent/VPN box. Metrics come from the vpn-probe
+          # textfile collector on the host (cron writes
+          # /var/lib/prometheus/node-exporter/vpn.prom every 5m; source of
+          # truth lives in the infra workspace under hosts/vmubttorrent01/).
+          # probe_success ANDs three checks: WireGuard interface present,
+          # kernel route resolution lands on air-ca, handshake < 5m old. The
+          # route check is the one that matters: on 2026-08-12 a systemd
+          # upgrade restarted networkd and wiped wg-quick's policy rules
+          # while the interface and handshake stayed healthy.
+          vmubttorrent01:
+            groups:
+            - name: ./vmubttorrent01.rules
+              rules:
+              - alert: VpnTunnelUnusable
+                annotations:
+                  summary: vmubttorrent01 VPN tunnel is not passing traffic.
+                  description: "vpn-probe has failed for 10m. Check node_vpn_interface_up, node_vpn_default_route_via_tunnel, and node_vpn_handshake_age_seconds to see which check broke: a missing route with a healthy handshake means policy routing was wiped (systemd-networkd restart; 2026-08-12 incident), a stale handshake means the AirVPN peer or upstream path is down. 'systemctl restart wg-quick@air-ca' restores routing."
+                expr: node_vpn_probe_success != 1 or absent(node_vpn_probe_success)
+                for: 10m
+                labels:
+                  severity: critical
         prometheus:
           service:
             annotations:
