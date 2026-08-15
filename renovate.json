@@ -206,10 +206,10 @@
       "versioning": "regex:^(?<major>\\d+)-(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$"
     },
     {
-      "description": "hyperdx MongoDBCommunity spec.version — the community-operator combines spec.version with its own '-ubi8' suffix to build the mongod image tag, so the file must carry the bare semver; extractVersion rewrites releases like 8.0.29-ubi8 to 8.0.29 before comparison/replacement (non-ubi8 tags are dropped). Pinned to the 8.0.x patch stream: the operator (0.13.0, MongoDB's final community-operator release before the MCK migration) predates the 8.2/8.3 image lines, and patch bumps roll the replica set member-by-member without an FCV change.",
+      "description": "hyperdx MongoDBCommunity spec.version — the community-operator combines spec.version with its own '-ubi8' suffix to build the mongod image tag, so the file must carry the bare semver; extractVersion rewrites releases like 8.0.29-ubi8 to 8.0.29 before comparison/replacement (non-ubi8 tags are dropped). Pinned to exactly 8.0.4, not the 8.0.x stream: mongod 8.0.29 refuses to start on Linux kernel >=6.19 (SERVER-121912 fatal version gate; the cluster workers run 7.0.0 — observed crashing hyperdx-1 after PR #420), while 8.0.4 starts fine with the MONGODB_CONFIG_OVERRIDE_NOTCMALLOC bypass in hyperdx-mongo.yaml. Where the gate first appears in the 8.0.x stream is unverified. Re-pin to a newer stream only after a release confirmed to start on this kernel.",
       "matchPackageNames": ["mongodb/mongodb-community-server"],
       "extractVersion": "^(?<version>\\d+\\.\\d+\\.\\d+)-ubi8$",
-      "allowedVersions": "/^8\\.0\\./"
+      "allowedVersions": "8.0.4"
     }
   ]
 }
