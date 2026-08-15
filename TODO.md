@@ -146,7 +146,20 @@ Unscheduled but agreed-relevant; roughly by value:
   sizing source when touching requests.
 - Exercise a volsync restore once (`ReplicationDestination` into a scratch
   PVC) — backups exist for radarr/sonarr/prowlarr/sabnzbd/jellyfin/mumble/
-  immich but we have never tested a restore.
+  immich but we have never tested a restore. (2026-08-15: exercised a
+  barman restore for the immich cluster instead — see
+  `docs/immich-pg18-major-upgrade-2026-08-15.md`; the volsync path itself
+  remains untested.)
+- Delete the inert pg17 barman archive for immich (`s3://cnpg-immich/immich/`)
+  once the pg18 cluster has proven itself (one 90 d retention window is a
+  reasonable bar): the plugin now manages only the `immich-pg18` server, so
+  nothing prunes the old directory. From the 2026-08-15 pg18 upgrade
+  (`docs/immich-pg18-major-upgrade-2026-08-15.md`).
+- Re-run `immich-admin schema-check` after the next immich upgrade: v3.1.0
+  flags `user_delete_audit` as missing even though the function and trigger
+  are present and correct (benign checker false positive; details in
+  `docs/immich-pg18-major-upgrade-2026-08-15.md`). Report upstream if it
+  persists.
 - Standardize `proxy_<service>.yaml` naming (three files carry a
   `_somemissing_info` suffix).
 - Consider a GitHub ruleset requiring PRs for `main` — mechanical guarantee
@@ -174,10 +187,10 @@ bump), and `renovate.json` now pins `mongodb/mongodb-community-server` to
 exactly 8.0.4.
 
 - Confirm whether the 8.2/8.3 image lines start on kernel 7.0 before any
-  bump; where in the 8.0.x stream the check first appears is unverified
-  (only 8.0.29-fails and 8.0.4-works are observed). The same answer decides
-  whether the `docker.io/mongodb` ubi8 repo pin should move to quay.io's
-  ubi9 line.
+  bump; we have not verified where in the 8.0.x stream the check first
+  appears (we have only observed 8.0.29 failing and 8.0.4 working). The
+  same answer decides whether the `docker.io/mongodb` ubi8 repo pin should
+  move to quay.io's ubi9 line.
 - Give the workload a standing backup: no volsync `ReplicationSource` and no
   VolumeSnapshotClass cover it, so the only restore point is a manual dump.
   The runbook's gate-1 command (`--db=hyperdx`, with the count check) is the
