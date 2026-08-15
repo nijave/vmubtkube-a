@@ -103,6 +103,13 @@ spec:
             iscsi:
               sessionReaper:
                 enabled: true
+              # node-DB records orphaned by driver restarts/reboots/unstage
+              # failures are never cleaned otherwise and lengthen every
+              # iscsiadm critical section; one-shot startup sweep deletes
+              # records whose target has no active session
+              nodeDbSweeper:
+                enabled: true
+                targetBasename: "iqn.2025-04.info.somemissing.homelab:ubthv01:"
   data:
   - secretKey: privateKey
     remoteRef:
@@ -221,7 +228,7 @@ spec:
             logLevel: verbose
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 390742a
+              tag: f161853
         node:
           cleanup:
             image:
@@ -231,7 +238,7 @@ spec:
           driver:
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 390742a
+              tag: f161853
           driverRegistrar:
             image:
               # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
