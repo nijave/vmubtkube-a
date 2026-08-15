@@ -74,6 +74,13 @@ spec:
     spec:
       template:
         spec:
+          # MCK renames the operator-generated database service account to
+          # `mongodb-kubernetes-appdb` (its chart only creates it in the
+          # operator namespace). Pin the existing `mongodb-database` SA/Role/
+          # RoleBinding above so the operator swap needs no new RBAC in this
+          # namespace. This field overrides the generated name:
+          # https://github.com/mongodb/mongodb-kubernetes/blob/master/pkg/util/merge/merge_podtemplate_spec.go
+          serviceAccountName: mongodb-database
           affinity:
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:

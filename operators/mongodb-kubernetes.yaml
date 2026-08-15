@@ -1,0 +1,73 @@
+# MongoDB Controllers for Kubernetes (MCK) — the successor of the community
+# operator (mongodb/mongodb-kubernetes-operator, chart community-operator,
+# final release 0.13.0 on 2025-04-11, best-effort support ended 2025-11). MCK
+# reconciles the same MongoDBCommunity CRs; migration guide:
+# https://github.com/mongodb/mongodb-kubernetes/blob/master/docs/migration/community-operator-migration.md
+#
+# The Application keeps its original `mongodb-community-operator` name on
+# purpose. The operators parent app (application.operators.yaml) prunes by
+# resource name, so renaming here would delete the Application and its
+# resources-finalizer would cascade a delete+recreate of the operator
+# mid-swap. Repointing the source in place turns every same-named resource
+# (Deployment, ServiceAccount, ClusterRole(+Binding), the
+# mongodbcommunity CRD) into an in-place update — the same approach
+# application.crds.yaml documents for the external-secrets CRDs. ArgoCD never
+# prunes or cascade-deletes CRDs (it does not put tracking markers on them),
+# so CRD ownership simply continues across the chart swap.
+#
+# The live mongodbcommunity CRD carries helm.sh/resource-policy: keep (set by
+# community-operator 0.13.0; the MCK chart's CRD omits it). ServerSideApply
+# never removes a field it does not own, and the ignoreDifferences below keeps
+# that leftover annotation from holding the app OutOfSync forever.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mongodb-community-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: operators
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - PruneLast=true
+    - ServerSideApply=true
+    - RespectIgnoreDifferences=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
+  ignoreDifferences:
+  - group: apiextensions.k8s.io
+    kind: CustomResourceDefinition
+    name: mongodbcommunity.mongodbcommunity.mongodb.com
+    jsonPointers:
+    - /metadata/annotations/helm.sh~1resource-policy
+  source:
+    chart: mongodb-kubernetes
+    repoURL: https://mongodb.github.io/helm-charts
+    targetRevision: 1.10.0
+    helm:
+      releaseName: mongodb-community-operator
+      valuesObject:
+        operator:
+          watchNamespace: "*"
+        community:
+          mongodb:
+            # MCK defaults this to quay.io/mongodb, which publishes no
+            # *-ubi8 tags for the 8.0.x line (only ubi9/ubuntu2204); the
+            # default would turn the post-swap rolling restart into
+            # ImagePullBackOff on 8.0.4-ubi8. docker.io/mongodb carries the
+            # ubi8 tags the replica set already runs, so the mongod image
+            # string stays byte-identical through the operator swap. Revisit
+            # together with spec.version in hyperdx-mongo.yaml when the
+            # 8.2/8.3 bump (TODO.md item 9) lands.
+            repo: docker.io/mongodb
