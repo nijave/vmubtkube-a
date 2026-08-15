@@ -320,7 +320,9 @@ spec:
               cpu: 250m
               memory: 128Mi
         - name: searxng
-          # renovate: datasource=docker depName=searxng/searxng versioning=regex:^(?<major>\d{4})\.(?<minor>\d+)\.(?<patch>\d+)-(?<build>[a-f0-9]+)$
+          # tracking is via the kubernetes manager + the searxng/searxng
+          # packageRule (date-hash tags); an inline versioning= annotation
+          # here never matched the custom regex manager
           image: registry.apps.nickv.me/searxng/searxng:2026.7.3-c5cd510d8
           env:
             - name: SEARXNG_PORT

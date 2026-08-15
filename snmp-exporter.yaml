@@ -108,7 +108,10 @@ spec:
               topologyKey: "kubernetes.io/hostname"
       initContainers:
       - name: snmp-exporter-copy-config
-        image: &snmpExporterImage prom/snmp-exporter:v0.29.0
+        # keep this tag in sync with the main container below; the literal
+        # (non-anchored) form is required so renovate's kubernetes manager
+        # can see and update both image lines
+        image: prom/snmp-exporter:v0.29.0
         command: ["cp", "/etc/snmp_exporter/snmp.yml", "/config/snmp.yml"]
         volumeMounts:
           - name: generated-config
@@ -128,7 +131,7 @@ spec:
             mountPath: /new
       containers:
       - name: snmp-exporter
-        image: *snmpExporterImage
+        image: prom/snmp-exporter:v0.29.0
         ports:
         - containerPort: 9116
         resources:
