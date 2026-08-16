@@ -84,7 +84,9 @@ in sync with the imageName PG major on any future major bump.
   barman manages only `immich-pg18`, so retention will never prune the
   old dir. Delete it manually once the pg18 cluster has proven itself
   (e.g. after one 90 d retention window). Tracked as item 8 in the
-  repo's follow-ups list.
+  repo's follow-ups list. Deleted 2026-08-16 at the owner's request, one
+  day post-upgrade, after a second restore drill proved the
+  `immich-pg18` chain restorable.
 - **volsync**: the `ReplicationSource` snapshots PVC `immich-1` (a
   replica), which the upgrade destroyed and re-cloned — its restic
   history has a discontinuity, and standby-PVC snapshots are only
