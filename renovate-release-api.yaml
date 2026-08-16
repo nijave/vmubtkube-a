@@ -88,7 +88,7 @@ spec:
       containers:
       - name: renovate-release-api
         # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/renovate-release-api
-        image: registry.apps.nickv.me/nijave/renovate-release-api:latest@sha256:b8b7cf8a2e60a28c58219dafceb86d9e80d1a923c747c2fd8774c5722c02ae97
+        image: registry.apps.nickv.me/nijave/renovate-release-api:latest@sha256:3e64fb454e207ae87d2c50d959e2cdf3beb657b73e9aaa7ab28638240aa9a4e4
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
