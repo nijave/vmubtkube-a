@@ -7,9 +7,10 @@
 #
 # Its own image ships fully wired in this PR: customDatasources +
 # packageRule in renovate.json, annotation on the image line below.
-# Bootstrap is a brief unpinned :latest; once the service is live, the
-# hosted app's first run opens the latest@sha256:… pin PR, and Renovate
-# queries the running service for its own updates from then on.
+# The bootstrap digest is pinned in-tree to the first published build
+# (68581811); from the first hosted-app run after this deploys, Renovate
+# queries the running service and re-pins latest@sha256:… on every later
+# CI build.
 ---
 apiVersion: v1
 kind: ConfigMap
