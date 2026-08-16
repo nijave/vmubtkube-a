@@ -228,7 +228,7 @@ spec:
             logLevel: verbose
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 3c97535
+              tag: 8650e83
         node:
           cleanup:
             image:
@@ -238,7 +238,7 @@ spec:
           driver:
             image:
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: 3c97535
+              tag: 8650e83
           driverRegistrar:
             image:
               # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
