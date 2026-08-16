@@ -35,20 +35,14 @@
       "format": "json"
     }
   },
-  "ignoreDeps": [
-    "registry.apps.nickv.me/jellyfin",
-    "registry.apps.nickv.me/nijave/cukk",
-    "registry.apps.nickv.me/nijave/python-envoy-authz",
-    "registry.apps.nickv.me/nijave/homelab-pki"
-  ],
   "customManagers": [
     {
       "customType": "regex",
       "managerFilePatterns": ["/\\.yaml$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s+\\S+?:\\s*\\S+?:(?<currentValue>[^@\\s\"']+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?",
-        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?",
-        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?",
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*registry:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?",
+        "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?",
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*version:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
@@ -222,6 +216,46 @@
       "matchPackageNames": ["registry.apps.nickv.me/nijave/renovate-release-api"],
       "pinDigests": true,
       "versioning": "regex:^(?<major>latest)$"
+    },
+    {
+      "description": "cukk: self-built; latest = newest CI build of the default branch, tracked by digest (docs/renovate-private-registry-datasource-design.md)",
+      "matchPackageNames": ["registry.apps.nickv.me/nijave/cukk"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
+    },
+    {
+      "description": "python-envoy-authz: self-built; latest = newest CI build of the default branch, tracked by digest",
+      "matchPackageNames": ["registry.apps.nickv.me/nijave/python-envoy-authz"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
+    },
+    {
+      "description": "cpu-benchmark: self-built, rebuilt by hand rarely; latest is the only tag, tracked by digest",
+      "matchPackageNames": ["registry.apps.nickv.me/cpu-benchmark"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
+    },
+    {
+      "description": "democratic-csi driver: self-built fork; latest = newest CI build, tracked by digest — hex commit tags ride along as releases but never order. The latest tag was bootstrapped by copying 146445b; the CI push list must keep publishing latest.",
+      "matchPackageNames": ["registry.apps.nickv.me/democratic-csi/democratic-csi"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
+    },
+    {
+      "description": "jellyfin: self-built fork tags vMAJOR.MINOR.PATCH-suffix. The ^v anchor filters the unprefixed junk tags; the suffix must NOT be a (?<compatibility>) capture — that splits tag lines and suppresses updates (the selfoss trap; docs/renovate-private-registry-datasource-design.md)",
+      "matchPackageNames": ["registry.apps.nickv.me/jellyfin"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-\\S+$"
+    },
+    {
+      "description": "homelab-pki: self-built semver tags; tftest never passes the service's tag filter",
+      "matchPackageNames": ["registry.apps.nickv.me/nijave/homelab-pki"],
+      "versioning": "semver"
+    },
+    {
+      "description": "jellyfin.yaml and python-envoy-authz.yaml are also scanned by the kubernetes manager, where registryAliases maps the mirror host to Docker Hub — these self-built repos don't exist there. The regex-manager annotation (custom datasource) owns them; disable the broken duplicate dep (thanos pattern).",
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["**/jellyfin", "**/nijave/python-envoy-authz"],
+      "enabled": false
     }
   ]
 }
