@@ -130,9 +130,14 @@ spec:
                 # SD-ELEMENT is optional: TP-Link Omada Controller-level events
                 # (e.g. "log storage limit reached") omit it entirely and put
                 # bare message text where the SD field would be.
+                # The SD capture only matches a bare "-" or a real SD-ELEMENT
+                # (a bracket containing key=value params). Omada application
+                # events begin the message with a bracket like [client:MAC] /
+                # [ap:MAC] that contains no "=", so it is left in the message
+                # instead of being swallowed as STRUCTURED-DATA.
                 - type: regex_parser
                   if: 'body matches "^<\\d+>\\d\\s"'
-                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)(?:\s+(?P<sd>\[[^\]]*\]|-))?\s*(?P<message>.*)$'
+                  regex: '^<(?P<pri>\d+)>(?P<version>\d)\s+(?P<time>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\s+(?P<host>\S+)\s+(?P<app>\S+)\s+(?P<proc>\S+)\s+(?P<msgid>\S+)(?:\s+(?P<sd>-|\[[^\]]*=[^\]]*\]))?\s*(?P<message>.*)$'
                   parse_from: body
                   parse_to: attributes
                   on_error: send
@@ -147,6 +152,18 @@ spec:
                 - type: regex_parser
                   if: 'body matches "^\\["'
                   regex: '^\[(?P<time>\d+(?:\.\d+)?)\]\s*(?P<message>.*)$'
+                  parse_from: body
+                  parse_to: attributes
+                  on_error: send
+                # Omada Controllers embed [client:MAC] in the message body, not
+                # in RFC 5424 STRUCTURED-DATA. Pull the client MAC straight from
+                # the raw line into its own attribute so MAC lookups never depend
+                # on the header field split (which drifts when the controller or
+                # site name contains a space). Queryable as
+                # LogAttributes['client_mac'].
+                - type: regex_parser
+                  if: 'body matches "client:"'
+                  regex: 'client:(?P<client_mac>[^\]]+)'
                   parse_from: body
                   parse_to: attributes
                   on_error: send
