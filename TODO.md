@@ -150,11 +150,13 @@ Unscheduled but agreed-relevant; roughly by value:
   barman restore for the immich cluster instead — see
   `docs/immich-pg18-major-upgrade-2026-08-15.md`; the volsync path itself
   remains untested.)
-- Delete the inert pg17 barman archive for immich (`s3://cnpg-immich/immich/`)
-  once the pg18 cluster has proven itself (one 90 d retention window is a
-  reasonable bar): the plugin now manages only the `immich-pg18` server, so
-  nothing prunes the old directory. From the 2026-08-15 pg18 upgrade
-  (`docs/immich-pg18-major-upgrade-2026-08-15.md`).
+- Deleted the pg17 barman archive for immich on 2026-08-16, ahead of the
+  suggested 90 d window and at the owner's request: a second restore drill
+  first proved the pg18 chain restorable (`immich-pg18` server dir — 18.4,
+  9,818 assets, vchord 1.1.1), then removed the `s3://cnpg-immich/immich/`
+  prefix (6,712 objects, 10.6 GiB) along with the ad-hoc upgrade Backup
+  CRs. PITR now reaches back only into the pg18 chain. From the 2026-08-15
+  pg18 upgrade (`docs/immich-pg18-major-upgrade-2026-08-15.md`).
 - Re-run `immich-admin schema-check` after the next immich upgrade: v3.1.0
   flags `user_delete_audit` as missing even though the function and trigger
   are present and correct (benign checker false positive; details in

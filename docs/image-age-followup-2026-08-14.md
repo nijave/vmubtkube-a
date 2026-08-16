@@ -1,7 +1,7 @@
 # Image age follow-up — 2026-08-14
 
 Outcome of investigating every image older than one year in
-[`image-age-report-2026-08-14.md`](image-age-report-2026-08-14.md): which
+[`image-age-report-2026-08-16.md`](image-age-report-2026-08-16.md): which
 have newer upstream releases, which Renovate could not see or order, and what
 changed in this repo so the updatable ones start receiving PRs.
 
