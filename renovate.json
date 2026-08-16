@@ -29,6 +29,12 @@
   "registryAliases": {
     "registry.apps.nickv.me": "index.docker.io"
   },
+  "customDatasources": {
+    "private-registry": {
+      "defaultRegistryUrlTemplate": "https://renovate-releases.apps.somemissing.info/v1/releases/{{packageName}}",
+      "format": "json"
+    }
+  },
   "ignoreDeps": [
     "registry.apps.nickv.me/jellyfin",
     "registry.apps.nickv.me/nijave/cukk",
@@ -210,6 +216,12 @@
       "matchPackageNames": ["mongodb/mongodb-community-server"],
       "extractVersion": "^(?<version>\\d+\\.\\d+\\.\\d+)-ubi8$",
       "allowedVersions": "8.0.4"
+    },
+    {
+      "description": "renovate-release-api: self-built; latest = newest CI build of the default branch, tracked by digest (docs/renovate-private-registry-datasource-design.md)",
+      "matchPackageNames": ["registry.apps.nickv.me/nijave/renovate-release-api"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
     }
   ]
 }

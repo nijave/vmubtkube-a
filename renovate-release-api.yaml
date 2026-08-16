@@ -1,0 +1,239 @@
+# renovate-release-api: Renovate customDatasources endpoint over the
+# private registry, so the Mend-hosted Renovate app can track self-built
+# images it cannot reach directly. Design + rollout:
+# docs/renovate-private-registry-datasource-design.md; source at
+# github.com/nijave/renovate-release-api (Woodpecker builds and pushes the
+# image there).
+#
+# Its own image ships fully wired in this PR: customDatasources +
+# packageRule in renovate.json, annotation on the image line below.
+# Bootstrap is a brief unpinned :latest; once the service is live, the
+# hosted app's first run opens the latest@sha256:… pin PR, and Renovate
+# queries the running service for its own updates from then on.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-release-api-registry-ca
+  namespace: default
+data:
+  # Cert source of truth: infra/k8s/registry/registry.crt (10-year
+  # self-signed leaf, expires 2030-11-19). Same content as the buildkitd
+  # ConfigMap in woodpecker/buildkit.woodpecker.yaml — ConfigMaps cannot
+  # be shared across namespaces, so this is a copy; keep both in sync if
+  # the registry cert is ever rotated.
+  registry.apps.nickv.me.crt: |
+    -----BEGIN CERTIFICATE-----
+    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
+    lSIZNbtADG+sLDVVpQXbhOmRpsp6
+    -----END CERTIFICATE-----
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: renovate-release-api
+  namespace: default
+  labels:
+    app.kubernetes.io/component: renovate-release-api
+    app.kubernetes.io/name: renovate-release-api
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: renovate-release-api
+      app.kubernetes.io/name: renovate-release-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: renovate-release-api
+        app.kubernetes.io/name: renovate-release-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: renovate-release-api
+        # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/renovate-release-api
+        image: registry.apps.nickv.me/nijave/renovate-release-api:latest@sha256:b8b7cf8a2e60a28c58219dafceb86d9e80d1a923c747c2fd8774c5722c02ae97
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: REGISTRY_URL
+          value: https://registry.apps.nickv.me
+        - name: REGISTRY_CA_FILE
+          value: /certs/registry.apps.nickv.me.crt
+        - name: HEALTHZ_REPO
+          value: nijave/cukk
+        volumeMounts:
+        - name: registry-ca
+          mountPath: /certs
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          periodSeconds: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+      volumes:
+      - name: registry-ca
+        configMap:
+          name: renovate-release-api-registry-ca
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: renovate-release-api
+  namespace: default
+  labels:
+    app.kubernetes.io/component: renovate-release-api
+    app.kubernetes.io/name: renovate-release-api
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  selector:
+    app.kubernetes.io/component: renovate-release-api
+    app.kubernetes.io/name: renovate-release-api
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: renovate-releases-apps-somemissing-info-cert
+  namespace: default
+spec:
+  secretName: renovate-releases-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn renovate-releases.apps.somemissing.info
+  dnsNames:
+    - *cn
+---
+# Public read-only entrypoint for the Mend-hosted Renovate app (it cannot
+# reach the LAN-only registry). Deliberately unauthenticated: the endpoint
+# reveals nothing beyond tag names and digests of images whose existence
+# this private repo already records. No internal name on purpose.
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: renovate-releases-apps-somemissing-info
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: renovate-releases.apps.somemissing.info
+    tls:
+      secretName: renovate-releases-apps-somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: renovate-release-api
+          port: 80
+---
+# /healthz is the whole signal: a live tags/list against the registry, so
+# the scrape reads up=1 only when the service AND the registry path both
+# answer. The companion PrometheusRule alerts on it going away; per-image
+# blackbox probes of /v1/releases/<repo> land with each image's wiring PR
+# per the design's rollout.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: renovate-release-api
+  namespace: default
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: renovate-release-api
+  endpoints:
+    - port: http
+      path: /healthz
+      scheme: http
+      interval: 60s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: renovate-release-api
+  namespace: default
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: renovate-release-api
+    rules:
+    - alert: RenovateReleaseApiDown
+      annotations:
+        summary: renovate-release-api is down or cannot reach the registry.
+        description: >-
+          The /healthz scrape (a live tags/list against
+          registry.apps.nickv.me) has failed for 30m. Renovate's custom
+          datasource swallows fetch errors and reads as "no releases", so
+          a dead endpoint silently freezes updates for every self-built
+          image instead of failing loudly — this alert exists to break
+          that silence. Check the deployment, then verify the public
+          endpoint externally: GET
+          https://renovate-releases.apps.somemissing.info/v1/releases/nijave/cukk
+          should answer 200 with a non-empty releases array.
+      # The operator renders ServiceMonitor jobs as
+      # "serviceMonitor/<namespace>/<name>/<endpoint>", so match on a
+      # regex rather than the bare CR name.
+      expr: up{job=~"serviceMonitor/default/renovate-release-api/.*"} != 1 or absent(up{job=~"serviceMonitor/default/renovate-release-api/.*"})
+      for: 30m
+      labels:
+        severity: warning
