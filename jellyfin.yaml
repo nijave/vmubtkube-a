@@ -164,6 +164,7 @@ spec:
         runAsGroup: 1001
       containers:
       - name: jellyfin
+        # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/jellyfin
         image: registry.apps.nickv.me/jellyfin:v10.11.5-nv-hdr-patch
         # command: [sleep, infinity]
         env:

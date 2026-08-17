@@ -128,6 +128,7 @@ spec:
       serviceAccountName: pki-reconciler
       containers:
         - name: reconcile
+          # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/homelab-pki
           image: registry.apps.nickv.me/nijave/homelab-pki:0.2.5
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
@@ -163,6 +164,7 @@ spec:
           serviceAccountName: pki-reconciler
           containers:
             - name: reconcile
+              # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/homelab-pki
               image: registry.apps.nickv.me/nijave/homelab-pki:0.2.5
               imagePullPolicy: Always
               command: ["/bin/sh", "-c"]

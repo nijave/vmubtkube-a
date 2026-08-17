@@ -333,3 +333,46 @@ order hex tags.
   repo vs. in the cukk-style source repo), decided at implementation.
 - Open: whether `qdirstat-cache-writer`'s manifest (`qds.yaml`, still
   untracked) ever lands; the wiring is ready if it does.
+
+## Implementation status (2026-08-16)
+
+Deployed and wired; see `TODO.md` item 3 for the summary and PR trail.
+How it landed, including deviations from the sketch above:
+
+- **Service**: Go (standard library only) in
+  github.com/nijave/renovate-release-api, Woodpecker-built via the shared
+  buildkitd with a Dockerfile, pushed as
+  `registry.apps.nickv.me/nijave/renovate-release-api` (not the sketch's
+  `nijave/renovate-datasource` — the source repo's name won). Manifest:
+  `renovate-release-api.yaml`. It fetches manifests by GET rather than
+  HEAD — one round trip carries both `Docker-Content-Digest` and the
+  config reference — and resolves `tags.latest` exactly as specified.
+  Verified live against the real registry before rollout (the cukk
+  payload reproduced the digests above byte-for-byte).
+- **No bootstrap paradox**: the service's own image carries the
+  `datasource=custom.private-registry` annotation and packageRule from
+  day one — one hand-pinned digest at bootstrap, then Renovate queries
+  the running service for its own updates. No `ignoreDeps` entry at all;
+  the "permanently untracked" risk above did not survive contact.
+- **Wiring granularity**: one PR for all images, not one-per-PR (the
+  maintainer accepted the coarser revert granularity). Beyond the six images here,
+  `democratic-csi/democratic-csi` joined the set: hex-only tags, so the
+  bootstrap copied `146445b` to a `latest` tag and its CI must keep
+  publishing `latest` for updates to flow.
+- **customManagers**: the multiline `registry:`/`repository:`+`tag:`
+  matchStrings gained an optional `@(?<currentDigest>sha256:…)` group so
+  `pinDigests` round-trips in the valuesObject form (democratic-csi's
+  shape); without it a pinned `tag: latest@sha256:…` would poison the
+  dep on the next run.
+- **Response shape**: the response omits `homepage` — the registry
+  exposes no source for it and Renovate's schema does not require it.
+- **Mirror script**: `.ci/mirror-images.sh` now skips refs whose dep is
+  annotated `datasource=custom.`, replacing the emptied `ignoreDeps`
+  skip list ("if it gets tiresome" — it never got tiresome, it just
+  became necessary).
+- **Blackbox probes**: `renovate_releases_2xx` module asserts a 200 with
+  a non-empty `releases` array; one probe per tracked image at 60s
+  (each probe walks the repo's full tag list, so not the 10s default),
+  alert `RenovateReleasesEndpointFailing` at two consecutive failures.
+- **Still open**: `qds.yaml` (qdirstat-cache-writer) and the forked
+  `qdm12/gluetun` manifest; the wiring is ready when they land.

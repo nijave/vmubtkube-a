@@ -21,6 +21,7 @@ spec:
       - operator: Exists
       containers:
       - name: benchmark
+        # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/cpu-benchmark
         image: registry.apps.nickv.me/cpu-benchmark:latest
         command: ["/bin/bash", "-c"]
         args:

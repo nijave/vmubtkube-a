@@ -41,7 +41,7 @@ that encode repo conventions an agent might not infer, enforced before merge.
 - Outcome: adopt/skip decision; if adopt, wire into the CI validation steps
   and pre-commit like the kubeconform checks.
 
-## 3. Custom Renovate version API for private-registry images
+## 3. Custom Renovate version API for private-registry images — RESOLVED 2026-08-16
 
 Self-built images (`cukk`, `python-envoy-authz`, `cpu-benchmark`,
 `qdirstat-cache-writer`, forked `gluetun`) sit in `renovate.json`
@@ -60,6 +60,26 @@ docker-datasource hostRules.
   `cukk.yaml` (node-upgrade operator, cluster-wide node/eviction RBAC),
   `python-envoy-authz.yaml` (Contour ext-authz path), `cpu-benchmark.yaml`,
   `qds.yaml` (untracked).
+
+Resolved by the `renovate-release-api` deployment (PR #441, design doc
+`docs/renovate-private-registry-datasource-design.md`): a Go service in
+github.com/nijave/renovate-release-api exposed publicly at
+`renovate-releases.apps.somemissing.info`, serving `/v1/releases/{repo}`
+with per-tag digests and build timestamps. The wiring PR removed every
+populated `ignoreDeps` entry, added per-image packageRules (latest-tracked
+with `pinDigests` for cukk, python-envoy-authz, cpu-benchmark,
+democratic-csi, and renovate-release-api itself; `^v` semver for the
+jellyfin fork; plain semver for homelab-pki) plus annotations on each
+image line. democratic-csi joined the set beyond the original six: hex
+SHAs never order, so latest-tracking is the only flow that yields updates;
+the bootstrap copied `146445b` to `latest`, and its CI must keep publishing
+`latest`. Digest pinning — the formerly blocked tail — now
+arrives as Renovate `pinDigest` PRs, which also flip each workload's
+`imagePullPolicy` to `IfNotPresent`. Remaining when their manifests land
+in git: `qds.yaml` (qdirstat-cache-writer) and the forked
+`qdm12/gluetun`. The mirror script now skips lines annotated
+`datasource=custom.` (replacing the ignoreDeps skip list), and blackbox
+probes assert a 200 with a non-empty releases array per tracked image.
 
 ## 4. Custom Renovate version API for the VectorChord CNPG image — RESOLVED 2026-08-14
 

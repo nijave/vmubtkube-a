@@ -85,6 +85,36 @@ spec:
             - name: web.apps.somemissing.info
               url: https://web.apps.somemissing.info
               module: http_2xx
+            # renovate-releases: one probe per Renovate-tracked self-built
+            # image (see docs/renovate-private-registry-datasource-design.md
+            # "Silent freeze"). Catches TLS/routing failures at the public
+            # edge that the service's own /healthz ServiceMonitor can't see.
+            # 60s, not the 10s default: each probe makes the service walk the
+            # repo's full tag list.
+            - name: renovate-releases-cukk
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/nijave/cukk
+              module: renovate_releases_2xx
+              interval: 60s
+            - name: renovate-releases-python-envoy-authz
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/nijave/python-envoy-authz
+              module: renovate_releases_2xx
+              interval: 60s
+            - name: renovate-releases-cpu-benchmark
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/cpu-benchmark
+              module: renovate_releases_2xx
+              interval: 60s
+            - name: renovate-releases-homelab-pki
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/nijave/homelab-pki
+              module: renovate_releases_2xx
+              interval: 60s
+            - name: renovate-releases-jellyfin
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/jellyfin
+              module: renovate_releases_2xx
+              interval: 60s
+            - name: renovate-releases-democratic-csi
+              url: https://renovate-releases.apps.somemissing.info/v1/releases/democratic-csi/democratic-csi
+              module: renovate_releases_2xx
+              interval: 60s
         verticalPodAutoscaler:
           enabled: true
         configReloader:
@@ -155,6 +185,15 @@ spec:
               prober: http
               http:
                 preferred_ip_protocol: "ip4"
+            # renovate-releases custom datasource: 200 alone is not enough —
+            # the probe asserts a non-empty releases array, so it also fires
+            # when the service answers 200 with no data (registry path wedged).
+            renovate_releases_2xx:
+              prober: http
+              http:
+                preferred_ip_protocol: "ip4"
+                fail_if_body_not_matches_regexp:
+                  - '"releases":\[[^\]]'
             http_post_2xx:
               prober: http
               http:

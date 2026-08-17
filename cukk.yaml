@@ -30,6 +30,7 @@ spec:
       serviceAccountName: cukk
       containers:
         - name: operator
+          # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/cukk
           image: registry.apps.nickv.me/nijave/cukk:latest
           imagePullPolicy: Always
           ports:

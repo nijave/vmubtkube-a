@@ -92,6 +92,19 @@ done > "$OVERRIDES"
 
 jq -r '.ignoreDeps[]? // empty' "$RENOVATE_FILE" > "$IGNORE"
 
+# Deps annotated datasource=custom.* (the internal renovate-release-api
+# datasource) are locally built: their mirror paths have no upstream to
+# mirror from, and the tags Renovate bumps never exist upstream. Same
+# annotation source as the registryUrl overrides above, feeding the same
+# ignore list ignoreDeps used to (docs/renovate-private-registry-datasource-
+# design.md "Mirror-script interaction").
+{ git grep -h -E '#[[:space:]]*renovate:.*datasource=custom\.' -- '*.yaml' '*.yml' || true; } \
+  | awk '{
+      name = ""
+      for (i = 1; i <= NF; i++) if ($i ~ /^depName=/) name = substr($i, 9)
+      if (name != "") print name
+    }' | sort -u >> "$IGNORE"
+
 # Pick a diff base appropriate for the trigger, then mirror refs found on
 # added lines only. Re-runs against the same base are idempotent (regctl copy
 # no-ops when digests match).

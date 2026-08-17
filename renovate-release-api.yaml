@@ -238,3 +238,36 @@ spec:
       for: 30m
       labels:
         severity: warning
+---
+# Blackbox probes of the real public endpoint (targets in
+# application.blackbox-exporter.yaml, module renovate_releases_2xx): 200
+# plus a non-empty releases array per tracked image. These catch
+# TLS/routing/edge failures the /healthz ServiceMonitor above cannot see;
+# the module label is unique to these probes, so no job-name guessing.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: renovate-releases-blackbox
+  namespace: default
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: renovate-releases
+    rules:
+    - alert: RenovateReleasesEndpointFailing
+      annotations:
+        summary: A renovate-releases blackbox probe is failing.
+        description: >-
+          probe_success == 0 for two consecutive 60s scrapes of
+          https://renovate-releases.apps.somemissing.info/v1/releases/<repo>.
+          The module asserts a 200 with a non-empty releases array, so this
+          fires both on edge/TLS/routing breakage and on the service
+          answering empty — either silently freezes Renovate updates for
+          self-built images (the "Silent freeze" risk in
+          docs/renovate-private-registry-datasource-design.md). Check the
+          endpoint by hand, then the deployment and RenovateReleaseApiDown.
+      expr: 'probe_success{module="renovate_releases_2xx"} == 0'
+      for: 2m
+      labels:
+        severity: warning
