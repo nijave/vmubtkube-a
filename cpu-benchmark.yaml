@@ -22,7 +22,7 @@ spec:
       containers:
       - name: benchmark
         # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/cpu-benchmark
-        image: registry.apps.nickv.me/cpu-benchmark:latest
+        image: registry.apps.nickv.me/cpu-benchmark:latest@sha256:234f363240610f46dd2c8d6fae967a906b72146ce297a39700008118997a4384
         command: ["/bin/bash", "-c"]
         args:
         - |
