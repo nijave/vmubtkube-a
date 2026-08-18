@@ -45,7 +45,8 @@
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*repository:\\s*\\S+\\s*\\n\\s*tag:\\s*[\"']?(?<currentValue>[^\\s\"'#@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?",
         "# renovate: datasource=(?<datasource>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)\\s*\\n\\s*version:\\s*[\"']?(?<currentValue>[^\\s\"'#]+)[\"']?"
       ],
-      "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}"
+      "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}",
+      "autoReplaceStringTemplate": "{{#if newDigest}}{{#if currentDigest}}{{{replace currentDigest newDigest replaceString}}}{{else}}{{{replaceString}}}@{{{newDigest}}}{{/if}}{{else}}{{{replaceString}}}{{/if}}"
     }
   ],
   "packageRules": [
