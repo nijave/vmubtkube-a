@@ -217,3 +217,4 @@ spec:
           service:
             annotations:
               external-dns.alpha.kubernetes.io/hostname: argocd.k8s.somemissing.info
+              external-dns.kubernetes.io/hostname: argocd.k8s.somemissing.info
