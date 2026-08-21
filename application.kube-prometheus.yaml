@@ -51,7 +51,6 @@ spec:
             portName: https-web
             appProtocol: https
             annotations:
-              external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
               external-dns.kubernetes.io/hostname: grafana.k8s.somemissing.info
           serviceMonitor:
             interval: 30s
@@ -244,7 +243,6 @@ spec:
         prometheus:
           service:
             annotations:
-              external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
               external-dns.kubernetes.io/hostname: prometheus.k8s.somemissing.info
           prometheusSpec:
             replicas: 2

@@ -267,7 +267,6 @@ spec:
 
         service:
           annotations:
-            external-dns.alpha.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
             external-dns.kubernetes.io/hostname: otel-collector.k8s.somemissing.info
 
         serviceMonitor:
@@ -306,7 +305,6 @@ metadata:
   name: otel-collector-syslog
   namespace: monitoring
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: syslog.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: syslog.k8s.somemissing.info
 spec:
   type: LoadBalancer

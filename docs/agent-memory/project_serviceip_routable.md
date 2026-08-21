@@ -8,11 +8,15 @@ In this cluster, the Kubernetes Service network is routable from outside the clu
 
 **Why:** The cluster's Service CIDR is routable on the surrounding network, so LoadBalancer/Ingress isn't needed for L4 exposure. Many existing services (e.g. `sonarr.yaml`, `prowlarr.yaml`, `application.otel-collector.yaml`) already use this pattern.
 
-**How to apply:** When the user asks to "expose" a Service externally, default to ClusterIP + `external-dns.alpha.kubernetes.io/hostname` annotation. Do not propose LoadBalancer, NodePort, or Ingress/HTTPProxy unless the user specifically wants L7 features (TLS termination, host/path routing, auth) — and even then, ask first.
+**How to apply:** When the user asks to "expose" a Service externally, default to ClusterIP + `external-dns.kubernetes.io/hostname` annotation. Do not propose LoadBalancer, NodePort, or Ingress/HTTPProxy unless the user specifically wants L7 features (TLS termination, host/path routing, auth) — and even then, ask first.
 
-**Caveat (2026-08-20):** external-dns v0.22 changed its default annotation
-prefix to the GA `external-dns.kubernetes.io/`, so the deployment must pin
-`--annotation-prefix=external-dns.alpha.kubernetes.io/` so external-dns reads
-these annotations. Without the flag the service source produces an empty desired set
-and `--policy=sync` deletes every service-sourced record it owns (incident:
-~35 records purged on the v0.22 upgrade, PR #460 restored the prefix).
+**Caveat (2026-08-20 incident, resolved 2026-08-21):** external-dns v0.22
+switched its default annotation prefix to the GA `external-dns.kubernetes.io/`;
+these services still used the alpha prefix, so the service source produced an
+empty desired set and sync deleted every service-sourced record it owned
+(~35 records; PRs #459/#460 recovered). All services now carry the GA
+`external-dns.kubernetes.io/hostname` key, and the deployment pins
+`--annotation-prefix=external-dns.kubernetes.io/` explicitly (migration: #461
+staged the GA keys, #464 flipped the flag, this PR removed the alpha keys).
+Annotate new Services with the GA key, and keep the flag explicit so a future
+default change cannot silently empty the desired set again.

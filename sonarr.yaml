@@ -112,7 +112,6 @@ metadata:
   name: sonarr
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: sonarr.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: sonarr.k8s.somemissing.info
   labels:
     app.kubernetes.io/component: sonarr

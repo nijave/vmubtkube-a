@@ -112,7 +112,6 @@ metadata:
   name: radarr
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: radarr.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: radarr.k8s.somemissing.info
   labels:
     app.kubernetes.io/component: radarr

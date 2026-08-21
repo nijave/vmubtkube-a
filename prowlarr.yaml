@@ -112,7 +112,6 @@ metadata:
   name: prowlarr
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: prowlarr.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: prowlarr.k8s.somemissing.info
   labels:
     app.kubernetes.io/component: prowlarr

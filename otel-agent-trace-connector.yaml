@@ -212,7 +212,6 @@ metadata:
     # ClusterIPs are routable on the LAN (Calico advertises the Service CIDR to
     # the gateway over BGP), so a plain ClusterIP plus this annotation is all an
     # agent outside the cluster needs -- see "DNS zones and TLS" in README.md.
-    external-dns.alpha.kubernetes.io/hostname: agents-otel.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: agents-otel.k8s.somemissing.info
 spec:
   type: ClusterIP

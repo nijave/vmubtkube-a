@@ -112,7 +112,6 @@ metadata:
   name: sabnzbd
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: sabnzbd.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: sabnzbd.k8s.somemissing.info
   labels:
     app.kubernetes.io/component: sabnzbd

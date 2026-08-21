@@ -79,7 +79,6 @@ metadata:
   name: hyperdx-app
   namespace: hyperdx
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: hyperdx.k8s.somemissing.info
     external-dns.kubernetes.io/hostname: hyperdx.k8s.somemissing.info
 spec:
   type: ClusterIP
