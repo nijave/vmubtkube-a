@@ -96,7 +96,7 @@ spec:
                 key: tsig-secret
         args:
         - --policy=sync
-        - --annotation-prefix=external-dns.alpha.kubernetes.io/
+        - --annotation-prefix=external-dns.kubernetes.io/
         - --registry=txt
         - --txt-prefix=external-dns-
         - --txt-owner-id=k8s
