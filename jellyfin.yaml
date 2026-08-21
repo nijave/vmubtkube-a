@@ -119,7 +119,6 @@ metadata:
   name: jellyfin
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: jellyfin.apps.somemissing.info
     external-dns.kubernetes.io/hostname: jellyfin.apps.somemissing.info
   labels:
     app.kubernetes.io/component: jellyfin-server
