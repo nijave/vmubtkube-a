@@ -9,3 +9,10 @@ In this cluster, the Kubernetes Service network is routable from outside the clu
 **Why:** The cluster's Service CIDR is routable on the surrounding network, so LoadBalancer/Ingress isn't needed for L4 exposure. Many existing services (e.g. `sonarr.yaml`, `prowlarr.yaml`, `application.otel-collector.yaml`) already use this pattern.
 
 **How to apply:** When the user asks to "expose" a Service externally, default to ClusterIP + `external-dns.alpha.kubernetes.io/hostname` annotation. Do not propose LoadBalancer, NodePort, or Ingress/HTTPProxy unless the user specifically wants L7 features (TLS termination, host/path routing, auth) — and even then, ask first.
+
+**Caveat (2026-08-20):** external-dns v0.22 changed its default annotation
+prefix to the GA `external-dns.kubernetes.io/`, so the deployment must pin
+`--annotation-prefix=external-dns.alpha.kubernetes.io/` so external-dns reads
+these annotations. Without the flag the service source produces an empty desired set
+and `--policy=sync` deletes every service-sourced record it owns (incident:
+~35 records purged on the v0.22 upgrade, PR #460 restored the prefix).

@@ -52,6 +52,7 @@ spec:
             appProtocol: https
             annotations:
               external-dns.alpha.kubernetes.io/hostname: grafana.k8s.somemissing.info
+              external-dns.kubernetes.io/hostname: grafana.k8s.somemissing.info
           serviceMonitor:
             interval: 30s
             scheme: https
@@ -244,6 +245,7 @@ spec:
           service:
             annotations:
               external-dns.alpha.kubernetes.io/hostname: prometheus.k8s.somemissing.info
+              external-dns.kubernetes.io/hostname: prometheus.k8s.somemissing.info
           prometheusSpec:
             replicas: 2
             # `hard` = requiredDuringScheduling on hostname; with 8 nodes and 2

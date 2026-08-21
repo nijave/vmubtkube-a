@@ -383,6 +383,7 @@ metadata:
     app.kubernetes.io/component: searxng
   annotations:
     external-dns.alpha.kubernetes.io/hostname: searxng.k8s.somemissing.info
+    external-dns.kubernetes.io/hostname: searxng.k8s.somemissing.info
 spec:
   type: ClusterIP
   ports:

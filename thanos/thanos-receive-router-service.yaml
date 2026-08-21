@@ -3,6 +3,7 @@ kind: Service
 metadata:
   annotations:
     external-dns.alpha.kubernetes.io/hostname: prom-remote-write.k8s.somemissing.info
+    external-dns.kubernetes.io/hostname: prom-remote-write.k8s.somemissing.info
   labels:
     app.kubernetes.io/component: thanos-receive-router
     app.kubernetes.io/instance: thanos-receive
