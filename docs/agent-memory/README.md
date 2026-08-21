@@ -13,6 +13,7 @@ against the current code and environment.
 - [feedback no blanket git add.md](feedback_no_blanket_git_add.md)
 - [feedback no workaround at data loss.md](feedback_no_workaround_at_data_loss.md)
 - [feedback thanos replica semantics.md](feedback_thanos_replica_semantics.md)
+- [project argocd field deletion not pruned.md](project_argocd_field_deletion_not_pruned.md)
 - [project argocd root app render deadlock.md](project_argocd_root_app_render_deadlock.md)
 - [project argocd secret recreated migration.md](project_argocd_secret_recreated_migration.md)
 - [project calico breaks ll ntp timesyncd.md](project_calico_breaks_ll_ntp_timesyncd.md)
