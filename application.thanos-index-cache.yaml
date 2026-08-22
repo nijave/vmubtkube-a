@@ -26,35 +26,16 @@ spec:
       limit: 2
   source:
     chart: memcached
-    # repoURL: https://charts.bitnami.com/bitnami
-    repoURL: registry-1.docker.io/bitnamicharts
-    targetRevision: 8.7.8
+    repoURL: registry-1.docker.io/cloudpirates
+    targetRevision: 0.14.7
     helm:
       releaseName: index-cache
       valuesObject:
-        global:
-          security:
-            allowInsecureImages: true
-        image:
-          registry: docker.io
-          repository: memcached
-          tag: "1.6-alpine"
-        architecture: standalone
-        # architecture: high-availability
-        # autoscaling:
-        #   enabled: true
-        #   minReplicas: 1
-        #   maxReplicas: 3
-        #   targetCPU: 400
-        #   targetMemory: 200
         service:
           type: ClusterIP
           clusterIP: None
-        command:
-        - memcached
-        args:
-        - -m
-        - "256"
+        config:
+          memoryLimit: 256
         resources:
           requests:
             cpu: 50m
@@ -64,7 +45,7 @@ spec:
             memory: 600Mi
         pdb:
           create: true
-          minAvailable: 0 # not HA
+          minAvailable: "0" # not HA
         metrics:
           enabled: true
           image:
