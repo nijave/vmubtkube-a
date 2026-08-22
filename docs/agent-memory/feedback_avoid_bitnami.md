@@ -12,4 +12,4 @@ Avoid Bitnami Helm charts and Bitnami container images whenever an upstream or a
 - When proposing or generating Helm Application manifests, default to the upstream project's chart (e.g. `kubereboot/charts` for kured, `kubernetes-sigs/descheduler` for descheduler, `prometheus-community/*` for the kube-prom stack, `bitnami-labs` forks only when nothing else exists).
 - For container images, reach for the upstream image (e.g. `docker.io/library/postgres`, `docker.io/redis`) or distroless equivalents over `bitnami/<x>`.
 - If only a Bitnami option exists, call it out explicitly so the user can weigh the trade-off rather than silently picking it.
-- Existing Bitnami usage in this repo is fair game for replacement when convenient — flag it during reviews.
+- No Bitnami usage remains in this repo: the last one (`bitnamicharts/memcached` for the Thanos caches) was migrated to `registry-1.docker.io/cloudpirates/memcached` on 2026-08-22 (PR #474). CloudPirates' helm-charts is a vetted drop-in source for chart families without an upstream-maintained chart; keep release names stable so rendered service DNS stays unchanged.
