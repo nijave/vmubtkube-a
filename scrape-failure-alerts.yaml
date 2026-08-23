@@ -1,0 +1,57 @@
+# Per-target scrape-failure alerts for both Prometheus instances. Each doc is
+# evaluated only by the instance whose ruleSelector matches its label:
+#   - release: prom     -> the kube-prometheus-stack Prometheus (all
+#                          ServiceMonitor/PodMonitor/ScrapeConfig jobs plus the
+#                          additionalScrapeConfigs static jobs)
+#   - prometheus: ext   -> the ext Prometheus (static scrape-config secret +
+#                          ScrapeConfig CRs)
+# Both replicas evaluate their rules; duplicate ALERTS series differ only by
+# prometheus_replica and dedupe through Thanos like every other alert here.
+# Known gap: up == 0 cannot fire for a vanished job whose series never exists;
+# covering that needs per-job absent() rules (see rtorrent-alerts.yaml), which
+# is impractical for dynamic ServiceMonitor-generated job names.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: scrape-failure-alerts-k8s
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: scrape-health
+    rules:
+    - alert: ScrapeFailed
+      annotations:
+        summary: "Scrape of {{ $labels.job }} / {{ $labels.instance }} failing."
+        description: >-
+          Prometheus has failed scraping {{ $labels.instance }} (job
+          {{ $labels.job }}) for over 10 minutes. Check the target's /metrics
+          endpoint and the network path from the cluster.
+      expr: up == 0
+      for: 10m
+      labels:
+        severity: warning
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: scrape-failure-alerts-ext
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: scrape-health
+    rules:
+    - alert: ScrapeFailed
+      annotations:
+        summary: "Scrape of {{ $labels.job }} / {{ $labels.instance }} failing."
+        description: >-
+          Prometheus-ext has failed scraping {{ $labels.instance }} (job
+          {{ $labels.job }}) for over 10 minutes. Check the target's /metrics
+          endpoint and the network path from the cluster.
+      expr: up == 0
+      for: 10m
+      labels:
+        severity: warning
