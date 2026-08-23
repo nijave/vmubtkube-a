@@ -75,6 +75,12 @@ spec:
                   secretKeyRef:
                     name: hyperdx-clickstack-config
                     key: mongo-uri
+              # Enables dashboard filter variables ($__filter macros in raw-SQL
+              # tiles). Read at runtime via next-runtime-env; feature is
+              # default-off upstream while it bakes. Without this, unexpanded
+              # $__filter macros reach ClickHouse and every raw-SQL tile errors.
+              - name: NEXT_PUBLIC_ENABLE_DASHBOARD_VARIABLES
+                value: "true"
           service:
             type: ClusterIP
           ingress:
