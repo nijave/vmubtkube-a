@@ -1,0 +1,183 @@
+{
+  "_id": "6a8b7c8daeb892a415c3446d",
+  "name": "coding-agent agent token trends",
+  "tiles": [
+    {
+      "id": "ln-tok-in-hour",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['input_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Input tokens by agent (hourly)"
+      }
+    },
+    {
+      "id": "ln-tok-in-5m",
+      "x": 12,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['input_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Input tokens by agent (5 min)"
+      }
+    },
+    {
+      "id": "ln-tok-out-hour",
+      "x": 0,
+      "y": 8,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Output tokens by agent (hourly)"
+      }
+    },
+    {
+      "id": "ln-tok-out-5m",
+      "x": 12,
+      "y": 8,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Output tokens by agent (5 min)"
+      }
+    },
+    {
+      "id": "ln-cache-read-hour",
+      "x": 0,
+      "y": 16,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['cache_read_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS cache_read FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Cache read tokens by agent (hourly)"
+      }
+    },
+    {
+      "id": "ln-cache-read-5m",
+      "x": 12,
+      "y": 16,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['cache_read_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS cache_read FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Cache read tokens by agent (5 min)"
+      }
+    },
+    {
+      "id": "ln-cache-write-hour",
+      "x": 0,
+      "y": 24,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['cache_creation_tokens'])), 0) AS cache_write FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Cache write (creation) tokens by agent (hourly)"
+      }
+    },
+    {
+      "id": "ln-cache-write-5m",
+      "x": 12,
+      "y": 24,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['cache_creation_tokens'])), 0) AS cache_write FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), $agent) AND $__filter(SpanAttributes['gen_ai.provider.name'], $provider) GROUP BY agent, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Cache write (creation) tokens by agent (5 min)"
+      }
+    }
+  ],
+  "team": "69d6f9db842db143c17e053b",
+  "tags": [],
+  "filters": [
+    {
+      "id": "flt-model",
+      "type": "QUERY_EXPRESSION",
+      "name": "Model",
+      "expression": "SpanAttributes['gen_ai.request.model']",
+      "source": "69d6f9dc842db143c17e0546",
+      "whereLanguage": "sql",
+      "appliesToSourceIds": [
+        "69d6f9dc842db143c17e0546"
+      ],
+      "isBroadcastEnabled": false,
+      "isVariableEnabled": true,
+      "variableName": "model",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
+    },
+    {
+      "id": "flt-agent",
+      "type": "QUERY_EXPRESSION",
+      "name": "Client / harness",
+      "expression": "if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName))",
+      "source": "69d6f9dc842db143c17e0546",
+      "whereLanguage": "sql",
+      "appliesToSourceIds": [
+        "69d6f9dc842db143c17e0546"
+      ],
+      "isBroadcastEnabled": false,
+      "isVariableEnabled": true,
+      "variableName": "agent",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
+    },
+    {
+      "id": "flt-provider",
+      "type": "QUERY_EXPRESSION",
+      "name": "Provider",
+      "expression": "SpanAttributes['gen_ai.provider.name']",
+      "source": "69d6f9dc842db143c17e0546",
+      "whereLanguage": "sql",
+      "appliesToSourceIds": [
+        "69d6f9dc842db143c17e0546"
+      ],
+      "isBroadcastEnabled": false,
+      "isVariableEnabled": true,
+      "variableName": "provider",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
+    }
+  ],
+  "savedFilterValues": [],
+  "containers": [],
+  "createdBy": "69d6f9db842db143c17e0537",
+  "updatedBy": "69d6f9db842db143c17e0537",
+  "provisioned": false,
+  "createdAt": "2026-08-23T23:04:45.052Z",
+  "updatedAt": "2026-08-23T23:33:37.421Z",
+  "__v": 0
+}
