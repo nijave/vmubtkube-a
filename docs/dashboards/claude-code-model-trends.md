@@ -38,6 +38,14 @@ renders a single group column; it uses
 metrics dashboard:
 `sum(output_tokens) / greatest(sum(duration_ms - ttft_ms), 1) * 1000`.
 
+Each filter also carries a `where` clause scoping its dropdown value query to
+the relevant spans (`SpanName LIKE 'chat %' AND
+ResourceAttributes['telemetry.source'] = 'coding-agent'` on the coding-agent
+dashboards, `SpanName = 'claude_code.llm_request' AND ServiceName =
+'claude-code'` on the claude-code one). Without it, the value lookup runs the
+expression against every span in the database and non-connector rows fall
+through to `ServiceName`, so the harness dropdown listed all services.
+
 ## Known limitations
 
 - **No interactive filters.** Dashboard-level filters do not inject into

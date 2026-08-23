@@ -127,3 +127,13 @@ substituting real epoch-milli values for the `{startDateMilliseconds:Int64}` /
 `{endDateMilliseconds:Int64}` placeholders (see
 [`../hyperdx-dashboards.md`](../hyperdx-dashboards.md) for why there is no
 `{timeFilter}` macro in raw-SQL tiles).
+
+## Filter value-query scope
+
+Each filter also carries a `where` clause scoping its dropdown value query to
+the relevant spans (`SpanName LIKE 'chat %' AND
+ResourceAttributes['telemetry.source'] = 'coding-agent'` on the coding-agent
+dashboards, `SpanName = 'claude_code.llm_request' AND ServiceName =
+'claude-code'` on the claude-code one). Without it, the value lookup runs the
+expression against every span in the database and non-connector rows fall
+through to `ServiceName`, so the harness dropdown listed all services.
