@@ -64,6 +64,28 @@ spec:
     app.kubernetes.io/name: prometheus
     prometheus: ext
 ---
+# The headless service above must stay clusterIP: None (it is the
+# Prometheus StatefulSet's governing service); this regular ClusterIP
+# gives clients a stable virtual IP across both replicas and carries the
+# external-dns GA hostname annotation (cluster Service IPs are routable
+# off-cluster).
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-ext-web
+  namespace: monitoring
+  annotations:
+    external-dns.kubernetes.io/hostname: prometheus-ext.k8s.somemissing.info
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 9090
+    targetPort: web
+  selector:
+    app.kubernetes.io/name: prometheus
+    prometheus: ext
+---
 apiVersion: v1
 kind: Secret
 metadata:
