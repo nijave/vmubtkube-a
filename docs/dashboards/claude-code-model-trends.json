@@ -11,7 +11,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] = 'false') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY model, ts ORDER BY ts",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Error rate % by model (hourly)"
@@ -26,7 +26,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] = 'false') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY model, ts ORDER BY ts",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Error rate % by model (5 min)"
@@ -41,7 +41,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(if(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])) > 0, (sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']))) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 0), 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY model, ts ORDER BY ts",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Generation tok/sec by model (hourly)"
@@ -56,7 +56,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(if(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])) > 0, (sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']))) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 0), 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY model, ts ORDER BY ts",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Generation tok/sec by model (5 min)"
@@ -71,7 +71,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2, 0) AS lat_ms FROM (SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(toFloat64OrZero(SpanAttributes['duration_ms']))) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
+        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2 / 1e6, 0) AS lat_ms FROM (SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(Duration)) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Latency p50/p90/p99 by model (hourly)"
@@ -86,7 +86,7 @@
       "config": {
         "displayType": "line",
         "configType": "sql",
-        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2, 0) AS lat_ms FROM (SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(toFloat64OrZero(SpanAttributes['duration_ms']))) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
+        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2 / 1e6, 0) AS lat_ms FROM (SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(Duration)) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND $__filter(SpanAttributes['gen_ai.request.model'], $model) AND $__filter(SpanAttributes['provider.name'], $provider) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Latency p50/p90/p99 by model (5 min)"
@@ -95,12 +95,42 @@
   ],
   "team": "69d6f9db842db143c17e053b",
   "tags": [],
-  "filters": [],
+  "filters": [
+    {
+      "id": "flt-model",
+      "type": "QUERY_EXPRESSION",
+      "name": "Model",
+      "expression": "SpanAttributes['gen_ai.request.model']",
+      "source": "69d6f9dc842db143c17e0546",
+      "whereLanguage": "sql",
+      "appliesToSourceIds": [
+        "69d6f9dc842db143c17e0546"
+      ],
+      "isBroadcastEnabled": false,
+      "isVariableEnabled": true,
+      "variableName": "model"
+    },
+    {
+      "id": "flt-provider",
+      "type": "QUERY_EXPRESSION",
+      "name": "Provider",
+      "expression": "SpanAttributes['provider.name']",
+      "source": "69d6f9dc842db143c17e0546",
+      "whereLanguage": "sql",
+      "appliesToSourceIds": [
+        "69d6f9dc842db143c17e0546"
+      ],
+      "isBroadcastEnabled": false,
+      "isVariableEnabled": true,
+      "variableName": "provider"
+    }
+  ],
   "savedFilterValues": [],
   "containers": [],
   "createdBy": "69d6f9db842db143c17e0537",
   "updatedBy": "69d6f9db842db143c17e0537",
   "provisioned": false,
   "createdAt": "2026-08-23T20:33:40.628Z",
-  "updatedAt": "2026-08-23T20:33:40.628Z"
+  "updatedAt": "2026-08-23T22:12:15.630Z",
+  "__v": 0
 }

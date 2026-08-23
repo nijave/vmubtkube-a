@@ -38,15 +38,40 @@ renders a single group column; it uses
 metrics dashboard:
 `sum(output_tokens) / greatest(sum(duration_ms - ttft_ms), 1) * 1000`.
 
+## Dashboard filter dropdowns
+
+Two variable-enabled dashboard filters render as dropdowns at the top of the
+dashboard: **Model** and **Provider**. Each is a `QUERY_EXPRESSION` entry in
+the doc's `filters` array with `isVariableEnabled: true`
+(`isBroadcastEnabled: false` — filtering happens via explicit macros in the
+tile SQL, not broadcast). Every tile's `sqlTemplate` consumes them via
+`$__filter(<expression>, $<variable>)` macros, which expand to
+`<expression> IN (<selected values>)` when values are picked and to `(1=1)`
+when nothing is selected, so charts stay valid unfiltered.
+
+| filter | variableName | expression | coverage note |
+| --- | --- | --- | --- |
+| Model | `$model` | `SpanAttributes['gen_ai.request.model']` | all spans |
+| Provider | `$provider` | `SpanAttributes['provider.name']` | ~99.8% of spans; reports the API provider (e.g. z.ai), not `gen_ai.system` |
+
+There is no harness dropdown — every span on this dashboard is Claude Code by
+definition.
+
+Expansion was verified with the deployed app's own `replaceMacros`
+(`common-utils/dist/macros.js`) against all 12 stored templates in both empty
+and selected states before applying.
+
 ## Known limitations
 
-- **No interactive filters.** Dashboard-level filters do not inject into
-  raw-SQL tiles, so there is no percentile/model picker; every series renders.
-  To isolate a percentile visually, read the `<model> · pNN` legend entries.
+- **No percentile filter.** The p50/p90/p99 split is baked into series
+  construction, so it can't be a dropdown; isolate percentiles visually via
+  the `<model> · pNN` legend entries.
 - **Series count grows with models used.** Each new `gen_ai.request.model`
   value adds lines to all six tiles (×3 on the latency tiles).
 - **Sparse buckets render as gaps.** Models used intermittently show broken
   lines rather than zero-filled ones.
+- **Provider selection drops unattributed spans.** Spans without
+  `provider.name` (~0.2%) are excluded whenever a provider is picked.
 
 ## Applying / re-exporting
 
