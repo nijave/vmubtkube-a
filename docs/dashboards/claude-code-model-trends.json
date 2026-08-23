@@ -1,0 +1,106 @@
+{
+  "_id": "6a8b5924aeb892a415c3446b",
+  "name": "claude-code model trends",
+  "tiles": [
+    {
+      "id": "ln-err-hour",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Error rate % by model (hourly)"
+      }
+    },
+    {
+      "id": "ln-err-5m",
+      "x": 12,
+      "y": 0,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(countIf(SpanAttributes['success'] != 'true') * 100.0 / count(), 2) AS err_pct FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Error rate % by model (5 min)"
+      }
+    },
+    {
+      "id": "ln-tok-hour",
+      "x": 0,
+      "y": 8,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Generation tok/sec by model (hourly)"
+      }
+    },
+    {
+      "id": "ln-tok-5m",
+      "x": 12,
+      "y": 8,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 1) AS gen_toks FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, ts ORDER BY ts",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Generation tok/sec by model (5 min)"
+      }
+    },
+    {
+      "id": "ln-lat-hour",
+      "x": 0,
+      "y": 16,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2, 0) AS lat_ms FROM (SELECT toStartOfHour(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(toFloat64OrZero(SpanAttributes['duration_ms']))) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Latency p50/p90/p99 by model (hourly)"
+      }
+    },
+    {
+      "id": "ln-lat-5m",
+      "x": 12,
+      "y": 16,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "sqlTemplate": "SELECT ts, concat(model, ' \u00b7 ', zp.1) AS series, round(zp.2, 0) AS lat_ms FROM (SELECT toStartOfFiveMinutes(Timestamp) AS ts, SpanAttributes['gen_ai.request.model'] AS model, arrayZip(['p50','p90','p99'], quantiles(0.5, 0.9, 0.99)(toFloat64OrZero(SpanAttributes['duration_ms']))) AS zp FROM otel.otel_traces WHERE SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY ts, model) ARRAY JOIN zp ORDER BY ts, series",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Latency p50/p90/p99 by model (5 min)"
+      }
+    }
+  ],
+  "team": "69d6f9db842db143c17e053b",
+  "tags": [],
+  "filters": [],
+  "savedFilterValues": [],
+  "containers": [],
+  "createdBy": "69d6f9db842db143c17e0537",
+  "updatedBy": "69d6f9db842db143c17e0537",
+  "provisioned": false,
+  "createdAt": "2026-08-23T20:33:40.628Z",
+  "updatedAt": "2026-08-23T20:33:40.628Z"
+}
