@@ -166,7 +166,7 @@ spec:
       containers:
         - name: collector
           # renovate: datasource=docker depName=ghcr.io/nijave/otel-agent-trace-connector
-          image: ghcr.io/nijave/otel-agent-trace-connector:v0.2.0
+          image: ghcr.io/nijave/otel-agent-trace-connector:v0.2.1
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           ports:
