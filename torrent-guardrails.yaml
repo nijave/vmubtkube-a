@@ -1,0 +1,37 @@
+# Pod-level guardrail for the torrent stack in media, evaluated by the
+# internal kube-prometheus rule set (label release: prom — this is where
+# kube-state-metrics series live; the ext Prometheus only scrapes VM
+# targets, see prometheus-ext.yaml).
+#
+# In-pod replacement for the host-level VPN-wedge probe in the
+# vmubttorrent01.rules group (application.kube-prometheus.yaml): a wedged
+# gluetun tunnel or crashed Flood loop takes the pod NotReady and fires
+# here. Quiet while the Deployment sits at replicas: 0 pre-cutover.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: torrent-guardrails
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: torrent
+    rules:
+    - alert: TorrentPodUnavailable
+      annotations:
+        summary: The torrent stack has no ready pods.
+        description: >-
+          deploy/torrent -n media has fewer ready replicas than desired.
+          Most likely the gluetun sidecar's health checks are failing
+          (WireGuard tunnel down/wedged) or Flood can't bind :3000. Check
+          'kubectl describe pod -l app.kubernetes.io/name=torrent -n media'
+          and gluetun logs before restarting with 'kubectl rollout restart
+          deploy/torrent -n media'. A restart re-dials the AirVPN tunnel;
+          peers reconnect on their own.
+      expr: |
+        kube_deployment_status_replicas_ready{namespace="media",deployment="torrent"}
+          < kube_deployment_spec_replicas{namespace="media",deployment="torrent"}
+      for: 10m
+      labels:
+        severity: warning

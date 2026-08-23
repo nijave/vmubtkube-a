@@ -1,0 +1,461 @@
+---
+# Torrent stack migration from vmubttorrent01 (Docker Compose) into the
+# media namespace. Design:
+# docs/superpowers/specs/2026-08-22-torrent-vm-to-k8s-design.md
+#
+# Pre-cutover state: the Deployment runs at replicas: 0. ArgoCD autosync
+# reconciles storage and secrets immediately, but no pod exists (and no
+# AirVPN session is claimed) until the cutover commit flips replicas to 1.
+#
+# Out-of-band prerequisites before cutover (runbook steps 1-5):
+#   - Bitwarden items gluetun-rtorrent-wireguard-{private-key,preshared-key,
+#     addresses} holding the VM's live wg-quick@air-ca identity, exported
+#     while the tunnel is still up (one live session per key)
+#   - volsync-torrent bucket on vmubthh01 S3
+#   - images/rtorrent/ built and pushed to registry.apps.nickv.me
+#     (then pin its digest below)
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: torrent-media
+spec:
+  capacity:
+    storage: 100Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nfs:
+    server: nas.apps.somemissing.info
+    path: /media/av/torrents
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
+  name: torrent-media
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Ti
+  volumeName: torrent-media
+  storageClassName: ""
+---
+# session/, watch/, cross-seed/ state, and flood/ (Flood's DB) all live on
+# this PVC; the pod bind-mounts the flood/ subdir at /var/lib/flood so
+# Flood state persists instead of living in the container layer.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
+  name: torrent-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 5Gi
+---
+# Replaces the manually-created gluetun-airvpn Secret (UNTRACKED.md audit).
+# The POC-era keys were revoked; the Bitwarden items must hold the VM's
+# live working identity so fastresume-era peers see the same WG address
+# (rtorrent.rc binds network.bind_address 10.162.220.102).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: gluetun-airvpn
+  namespace: media
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        VPN_SERVICE_PROVIDER: airvpn
+        VPN_TYPE: wireguard
+        WIREGUARD_IMPLEMENTATION: kernelspace
+        SERVER_COUNTRIES: canada
+  data:
+  - secretKey: WIREGUARD_PRIVATE_KEY
+    remoteRef:
+      key: gluetun-rtorrent-wireguard-private-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: WIREGUARD_PRESHARED_KEY
+    remoteRef:
+      key: gluetun-rtorrent-wireguard-preshared-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: WIREGUARD_ADDRESSES
+    remoteRef:
+      key: gluetun-rtorrent-wireguard-addresses
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+# mittwald kubernetes-secret-generator auto-fills data.password with a random
+# value. With ServerSideApply the controller owns the `data` field, so ArgoCD
+# self-heal won't clobber it. Default base64 encoding is correct here: the
+# password feeds an HTTP basic-auth header (nginx htpasswd + exporter), not a
+# URI. The rtorrent image builds /etc/nginx/.htpasswd and the exporter's
+# password file from this at startup.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rtorrent-rpc-auth
+  namespace: media
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+    secret-generator.v1.mittwald.de/secret-type: password
+    secret-generator.v1.mittwald.de/password-length: "32"
+type: Opaque
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: restic-repo-torrent
+  namespace: media
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        RESTIC_REPOSITORY: s3:https://vmubthh01.s.nickv.me:/volsync-torrent
+        RESTIC_PASSWORD: "{{ .password }}"
+        AWS_ACCESS_KEY_ID: "{{ .accessKey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: password
+    remoteRef:
+      key: volsync-restic-password-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: torrent-config
+  namespace: media
+spec:
+  sourcePVC: torrent-config
+  trigger:
+    schedule: "*/30 * * * *"
+  restic:
+    pruneIntervalDays: 14
+    repository: restic-repo-torrent
+    moverSecurityContext:
+      runAsUser: 1002
+      runAsGroup: 1001
+      fsGroup: 1001
+    retain:
+      hourly: 6
+      daily: 5
+      weekly: 4
+      monthly: 3
+      yearly: 0
+    copyMethod: Clone
+---
+# XML-RPC endpoint for radarr/sonarr/prowlarr/cross-seed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtorrent-rpc
+  namespace: media
+  annotations:
+    external-dns.kubernetes.io/hostname: rtorrent-rpc.k8s.somemissing.info
+  labels:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: rpc
+  selector:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flood
+  namespace: media
+  annotations:
+    external-dns.kubernetes.io/hostname: flood.k8s.somemissing.info
+  labels:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: flood
+  selector:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+---
+# Scraped by the ext Prometheus via the ServiceMonitor below; peer traffic
+# itself never touches a Service (it lands on the AirVPN forwarded port
+# through the tunnel).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtorrent-metrics
+  namespace: media
+  labels:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+spec:
+  type: ClusterIP
+  ports:
+  - name: metrics
+    port: 9135
+    targetPort: metrics
+  selector:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rtorrent-metrics
+  namespace: media
+  labels:
+    prometheus: ext
+spec:
+  namespaceSelector:
+    matchNames:
+      - media
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: torrent
+  endpoints:
+    - port: metrics
+      scheme: http
+      interval: 30s
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torrent
+  namespace: media
+  labels:
+    app.kubernetes.io/component: torrent
+    app.kubernetes.io/name: torrent
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  # Cutover commit flips this to 1 (runbook step 6); rollback scales back
+  # to 0 first to release the AirVPN tunnel identity.
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: torrent
+      app.kubernetes.io/name: torrent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: torrent
+        app.kubernetes.io/name: torrent
+    spec:
+      # userns isolation; kernel-mode WireGuard runs inside the pod's
+      # user namespace (gluetun >= v3.41 includes the userns fix the POC
+      # validated via pr-3336; forked image is contingency only, see
+      # docs/agent-memory/project_gluetun_fork.md).
+      hostUsers: false
+      # rtorrent saves full sessions for ~325 torrents on SIGTERM.
+      terminationGracePeriodSeconds: 90
+      # DNS goes through the tunnel (POC pattern); ndots=1 keeps
+      # single-label names from getting search-suffixed.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.4.4
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+      # Native sidecar running the AirVPN tunnel; the app containers share
+      # its netns. startupProbe gates their start until the tunnel is up.
+      - name: gluetun
+        image: ghcr.io/qdm12/gluetun:v3.41.3@sha256:fa19cc76b2af13d57a8d3dc3066f2ada061b1c761b8aecf989b3877c0486e027
+        restartPolicy: Always
+        env:
+        - name: LOG_LEVEL
+          value: info
+        # The WireGuard backend reads WIREGUARD_MTU; VPN_MTU is OpenVPN-only
+        # and ignored here. 1320 mirrors the VM's wg-quick config.
+        - name: WIREGUARD_MTU
+          value: "1320"
+        - name: HEALTH_SERVER_ADDRESS
+          value: "0.0.0.0:9999"
+        - name: HEALTH_TARGET_ADDRESSES
+          value: cloudflare.com:443,google.com:443
+        # In-cluster traffic to the Services DNATs into the netns and
+        # traverses gluetun's INPUT chain; without these allows every
+        # Service blackholes. Health server, nginx RPC2, Flood, exporter.
+        - name: FIREWALL_INPUT_PORTS
+          value: "9999,5000,3000,9135"
+        # AirVPN forwarded port for incoming peer traffic (locked at 16312;
+        # verify with the AirVPN port checker during cutover before any arr
+        # client is repointed).
+        - name: FIREWALL_VPN_INPUT_PORTS
+          value: "16312"
+        # Mirrors the VM's wg-quick ip-rule exemptions exactly: NAS
+        # (172.16.1.118), node/pod/service ranges, Contour LB VIPs stay
+        # off-tunnel.
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: 172.16.0.0/22,192.168.208.0/20,192.168.224.0/20,192.168.240.0/28
+        envFrom:
+        - secretRef:
+            name: gluetun-airvpn
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+        startupProbe:
+          httpGet:
+            path: /
+            port: 9999
+          initialDelaySeconds: 5
+          periodSeconds: 3
+          failureThreshold: 20
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9999
+          periodSeconds: 30
+          failureThreshold: 5
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 25m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      containers:
+      - name: rtorrent
+        # Built from images/rtorrent/ in this repo; first push is manual
+        # (out-of-band prerequisite) — pin the digest right after.
+        image: registry.apps.nickv.me/nijave/rtorrent:latest
+        env:
+        - name: RPC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: rtorrent-rpc-auth
+              key: password
+        ports:
+        - containerPort: 5000
+          name: rpc
+          protocol: TCP
+        - containerPort: 3000
+          name: flood
+          protocol: TCP
+        - containerPort: 9135
+          name: metrics
+          protocol: TCP
+        # Flood listens in this container; if its restart loop can't bind,
+        # the pod goes NotReady and the guardrail alert fires. rtorrent
+        # wedges (2026-08-15 incident) surface through the exporter scrape
+        # alert instead.
+        startupProbe:
+          tcpSocket:
+            port: flood
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          failureThreshold: 30
+        readinessProbe:
+          tcpSocket:
+            port: flood
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: flood
+          periodSeconds: 30
+          failureThreshold: 5
+        volumeMounts:
+        - name: config
+          mountPath: /mnt/config
+        - name: media
+          mountPath: /media/torrents
+        - name: config
+          mountPath: /var/lib/flood
+          subPath: flood
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 4Gi
+            cpu: 2000m
+      - name: cross-seed
+        image: ghcr.io/cross-seed/cross-seed:6@sha256:a1fed512261fd968c55cb03c51cff9c6620aa76a34b3b591afca95c890aa8225
+        args: [daemon]
+        ports:
+        - containerPort: 2468
+          name: http
+          protocol: TCP
+        securityContext:
+          runAsUser: 1002
+          runAsGroup: 1001
+          runAsNonRoot: true
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          subPath: cross-seed
+        - name: config
+          mountPath: /config/state
+          subPath: session
+          readOnly: true
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 50m
+          limits:
+            memory: 1Gi
+            cpu: 500m
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: torrent-config
+      - name: media
+        persistentVolumeClaim:
+          claimName: torrent-media
