@@ -59,6 +59,13 @@ selected, `(1=1)` when empty). See that doc for details and caveats
 (opencode spans carry no provider attribute and drop out when a provider is
 selected).
 
+Each filter also carries a `where` clause scoping its dropdown value query to
+canonical connector spans (`SpanName LIKE 'chat %' AND
+ResourceAttributes['telemetry.source'] = 'coding-agent'`). Without it, the
+value lookup runs the expression against every span in the database and
+non-connector rows fall through to `ServiceName`, so the harness dropdown
+listed all services in tracing.
+
 ## Known limitations
 
 - **opencode rows are flat zero on all four tiles** — it emits no token

@@ -138,7 +138,8 @@
       ],
       "isBroadcastEnabled": false,
       "isVariableEnabled": true,
-      "variableName": "model"
+      "variableName": "model",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
     },
     {
       "id": "flt-agent",
@@ -152,7 +153,8 @@
       ],
       "isBroadcastEnabled": false,
       "isVariableEnabled": true,
-      "variableName": "agent"
+      "variableName": "agent",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
     },
     {
       "id": "flt-provider",
@@ -166,7 +168,8 @@
       ],
       "isBroadcastEnabled": false,
       "isVariableEnabled": true,
-      "variableName": "provider"
+      "variableName": "provider",
+      "where": "SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent'"
     }
   ],
   "savedFilterValues": [],
@@ -175,6 +178,6 @@
   "updatedBy": "69d6f9db842db143c17e0537",
   "provisioned": false,
   "createdAt": "2026-08-23T23:04:45.052Z",
-  "updatedAt": "2026-08-23T23:04:45.052Z",
+  "updatedAt": "2026-08-23T23:33:37.421Z",
   "__v": 0
 }
