@@ -31,6 +31,20 @@ spec:
     helm:
       releaseName: hyperdx
       valuesObject:
+        global:
+          otelCollector:
+            # Merged into the OpAMP-managed collector config at startup (the
+            # chart wires CUSTOM_OTELCOL_CONFIG_FILE to the mounted file). The
+            # hub's remote config defines otlp/hyperdx but does not set a
+            # receive ceiling, so this leaf survives the merge; validated
+            # against the deployed collector binary (otelcol-hyperdx v0.155.0)
+            # with `otelcol validate` on the full effective config.
+            customConfig: |
+              receivers:
+                otlp/hyperdx:
+                  protocols:
+                    grpc:
+                      max_recv_msg_size_mib: 32
         clickhouse:
           enabled: false
         mongodb:
@@ -72,6 +86,17 @@ spec:
                 secretKeyRef:
                   name: clickhouse-otelcollector-credentials
                   key: password
+          # The collector's memory_limiter is fixed at limit_mib 1500 by the
+          # ClickStack base config; pod limits must stay comfortably above it,
+          # and above the 32 MiB receive ceiling, since inbound gRPC messages
+          # are decompressed before the limiter can gate them.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
 ---
 apiVersion: v1
 kind: Service
