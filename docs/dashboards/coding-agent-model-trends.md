@@ -56,15 +56,37 @@ not the claude-code ones:
   `<model> · pNN` via
   `arrayZip(['p50','p90','p99'], quantiles(...))` + `ARRAY JOIN`.
 
-## Known limitations
+- **Known limitations:** no percentile dropdown (percentile is baked into the
+  series construction); series count grows with models used (×3 on latency
+  tiles); sparse buckets render as gaps, not zero-filled lines; gen_toks lines
+  are flat-zero for models whose harnesses never set TTFT / `duration_ms`
+  attributes (e.g. codex-only models).
 
-Same as the claude-code trends dashboard:
+## Dashboard filter dropdowns
 
-- **No interactive filters** on raw-SQL tiles; every series renders.
-- **Series count grows with models used** (×3 on the latency tiles).
-- **Sparse buckets render as gaps**, not zero-filled lines.
-- **gen_toks lines are flat-zero** for models whose harnesses never set TTFT /
-  duration_ms attributes (e.g. codex-only models).
+Three variable-enabled dashboard filters render as dropdowns at the top of
+the dashboard: **Model**, **Client / harness**, and **Provider**. Each is a
+`QUERY_EXPRESSION` entry in the doc's `filters` array with
+`isVariableEnabled: true` (`isBroadcastEnabled: false` — filtering happens via
+explicit macros in the tile SQL, not broadcast). Every tile's `sqlTemplate`
+consumes them via `$__filter(<expression>, $<variable>)` macros, which expand
+to `<expression> IN (<selected values>)` when values are picked and to `(1=1)`
+when nothing is selected, so charts stay valid unfiltered.
+
+| filter | variableName | expression | coverage note |
+| --- | --- | --- | --- |
+| Model | `$model` | `SpanAttributes['gen_ai.request.model']` | all canonical spans |
+| Client / harness | `$agent` | `if(SpanAttributes['coding_agent.client.name'] != '', …, if(ServiceName LIKE 'codex%', 'codex', ServiceName))` | same normalization as the metrics dashboard |
+| Provider | `$provider` | `SpanAttributes['gen_ai.provider.name']` | claude_code + codex only — opencode emits no provider attribute, so opencode rows drop out when a provider is selected |
+
+Notes:
+
+- The macro argument parser is quote-aware and paren-counting, so the
+  comma-heavy nested `if()` harness expression parses as a single argument.
+- Expansion was verified with the deployed app's own `replaceMacros`
+  (`common-utils/dist/macros.js`) against all 12 stored templates in both
+  empty and selected states before applying.
+
 
 ## Applying / re-exporting
 
