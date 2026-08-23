@@ -108,7 +108,8 @@
       ],
       "isBroadcastEnabled": false,
       "isVariableEnabled": true,
-      "variableName": "model"
+      "variableName": "model",
+      "where": "SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code'"
     },
     {
       "id": "flt-provider",
@@ -122,7 +123,8 @@
       ],
       "isBroadcastEnabled": false,
       "isVariableEnabled": true,
-      "variableName": "provider"
+      "variableName": "provider",
+      "where": "SpanName = 'claude_code.llm_request' AND ServiceName = 'claude-code'"
     }
   ],
   "savedFilterValues": [],
@@ -131,6 +133,6 @@
   "updatedBy": "69d6f9db842db143c17e0537",
   "provisioned": false,
   "createdAt": "2026-08-23T20:33:40.628Z",
-  "updatedAt": "2026-08-23T22:12:15.630Z",
+  "updatedAt": "2026-08-23T23:33:37.449Z",
   "__v": 0
 }

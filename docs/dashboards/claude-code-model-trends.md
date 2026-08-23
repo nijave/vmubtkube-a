@@ -61,6 +61,14 @@ Expansion was verified with the deployed app's own `replaceMacros`
 (`common-utils/dist/macros.js`) against all 12 stored templates in both empty
 and selected states before applying.
 
+Each filter also carries a `where` clause scoping its dropdown value query to
+the relevant spans (`SpanName LIKE 'chat %' AND
+ResourceAttributes['telemetry.source'] = 'coding-agent'` on the coding-agent
+dashboards, `SpanName = 'claude_code.llm_request' AND ServiceName =
+'claude-code'` on the claude-code one). Without it, the value lookup runs the
+expression against every span in the database and non-connector rows fall
+through to `ServiceName`, so a harness-style dropdown would list every service.
+
 ## Known limitations
 
 - **No percentile filter.** The p50/p90/p99 split is baked into series
