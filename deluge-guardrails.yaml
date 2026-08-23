@@ -1,0 +1,50 @@
+# Pod-level guardrails for the deluge/unpackerr stack in media, evaluated
+# by the internal kube-prometheus rule set (label release: prom — this is
+# where kube-state-metrics series live).
+#
+# In-pod equivalent of the VPN-wedge probe the rtorrent VM had: a wedged
+# gluetun tunnel takes the pod NotReady and fires here. Quiet while the
+# Deployments sit at replicas: 0 pre-cutover.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: deluge-guardrails
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: deluge
+    rules:
+    - alert: DelugePodUnavailable
+      annotations:
+        summary: The deluge stack has no ready pods.
+        description: >-
+          deploy/deluge -n media has fewer ready replicas than desired.
+          Most likely the gluetun sidecar's health checks are failing
+          (WireGuard tunnel down/wedged) or the web UI isn't serving.
+          Check 'kubectl describe pod -l app.kubernetes.io/component=deluge
+          -n media' and gluetun logs before restarting with 'kubectl
+          rollout restart deploy/deluge -n media'. A restart re-dials the
+          AirVPN tunnel; peers reconnect on their own.
+      expr: |
+        kube_deployment_status_replicas_ready{namespace="media",deployment="deluge"}
+          < kube_deployment_spec_replicas{namespace="media",deployment="deluge"}
+      for: 10m
+      labels:
+        severity: warning
+    - alert: UnpackerrPodUnavailable
+      annotations:
+        summary: unpackerr has no ready pods.
+        description: >-
+          deploy/unpackerr -n media has fewer ready replicas than desired,
+          so completed archives stopped being unpacked for sonarr. Check
+          'kubectl describe pod -l app.kubernetes.io/component=unpackerr
+          -n media' and restart with 'kubectl rollout restart
+          deploy/unpackerr -n media'.
+      expr: |
+        kube_deployment_status_replicas_ready{namespace="media",deployment="unpackerr"}
+          < kube_deployment_spec_replicas{namespace="media",deployment="unpackerr"}
+      for: 10m
+      labels:
+        severity: warning
