@@ -43,7 +43,13 @@ spec:
         config:
           processors:
             batch:
-              send_batch_size: 1024
+              # 32 spans triggers a send almost immediately; send_batch_max_size
+              # splits any larger delivery so a single export never carries more
+              # than 256 spans. At 1024 with no cap, fat batches reached ~7 MB
+              # and were permanently dropped by the HyperDX collector's 4 MiB
+              # gRPC limit (464k spans lost in 24h on 2026-08-23).
+              send_batch_size: 32
+              send_batch_max_size: 256
               timeout: 5s
             memory_limiter:
               check_interval: 5s
@@ -102,6 +108,12 @@ spec:
               protocols:
                 grpc:
                   endpoint: ${env:MY_POD_IP}:4317
+                  # 32 MiB (collector v0.158 renamed the byte-based
+                  # max_recv_msg_size). Generous ceiling for bursty agent
+                  # deliveries; per-RPC decompression happens before the
+                  # memory_limiter can gate it, so pod memory limits are sized
+                  # to match.
+                  max_recv_msg_size_mib: 32
                   tls:
                     cert_file: /tls/tls.crt
                     key_file:  /tls/tls.key
@@ -241,11 +253,11 @@ spec:
 
         resources:
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: "1"
+            memory: 2Gi
           requests:
-            cpu: 10m
-            memory: 128Mi
+            cpu: 100m
+            memory: 256Mi
 
         podAnnotations:
           # Restart when the TLS secret rotates (cert-manager renews ~every 60d).
