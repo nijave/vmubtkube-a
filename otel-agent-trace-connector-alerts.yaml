@@ -1,0 +1,61 @@
+# Drop-detection alerts for the coding-agent trace connector
+# (otel-agent-trace-connector.yaml). Evaluated by the kube-prometheus-stack
+# Prometheus (ruleSelector matchLabels release: prom); metrics come from the
+# connector's :8888 /metrics endpoint via its ServiceMonitor. Scrape-down
+# coverage for the same target already exists in scrape-failure-alerts-k8s
+# (up == 0); these rules cover the silent failure mode scrape health cannot
+# see.
+#
+# 2026-08-23 incident context: the otlp_grpc exporter permanently dropped
+# oversized trace batches -- grpc ResourceExhausted above the 4 MiB message
+# limit is non-retryable, so exporterhelper discards them outright. Roughly
+# 14k spans/hour were lost for hours before anyone looked at pod logs;
+# up == 1 throughout and no other signal showed it. Root cause fixed by the
+# send_batch_size / send_batch_max_size changes (#485, #486); these rules make
+# any recurrence loud. While drops were ongoing the export-drop rule read
+# ~22 spans/s, so even small nonzero rates are worth treating as real.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: otel-agent-trace-connector-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: otel-agent-trace-connector
+    rules:
+    - alert: AgentTraceConnectorExportDrops
+      annotations:
+        summary: "Coding-agent trace connector dropped {{ $value | humanize }} spans/s to otel-collector."
+        description: >-
+          The otlp_grpc exporter is failing to send traces downstream.
+          exporterhelper counts these as permanent failures and discards the
+          batch, so every minute this stays up is agent telemetry gone for
+          good. Known cause: batch payloads exceeding the 4 MiB gRPC message
+          limit (ResourceExhausted). Check pod logs for 'Dropping data':
+          kubectl -n monitoring logs deploy/otel-agent-trace-connector | grep
+          -i resourceexhausted. Batch-size fixes live in the vmubtkube-a repo,
+          otel-agent-trace-connector.yaml.
+      expr: sum by (exporter) (rate(otelcol_exporter_send_failed_spans[10m])) > 0
+      for: 5m
+      labels:
+        severity: critical
+    - alert: AgentTraceConnectorIngestRejections
+      annotations:
+        summary: "Coding-agent trace connector is refusing or failing inbound telemetry."
+        description: >-
+          The otlp receiver rejected spans or log records instead of accepting
+          them -- refused means the client's request bounced (TLS, auth,
+          size), failed means it was accepted then errored inside the
+          pipeline. Agents usually surface this as their own OTLP exporter
+          errors, but headless runs may not. Compare
+          otelcol_receiver_accepted_* against otelcol_receiver_refused_* /
+          _failed_* for the affected signal.
+      expr: sum(rate(otelcol_receiver_refused_spans[10m])) +
+            sum(rate(otelcol_receiver_refused_log_records[10m])) +
+            sum(rate(otelcol_receiver_failed_spans[10m])) +
+            sum(rate(otelcol_receiver_failed_log_records[10m])) > 0
+      for: 5m
+      labels:
+        severity: warning
