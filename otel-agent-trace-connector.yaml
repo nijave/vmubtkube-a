@@ -79,11 +79,17 @@ data:
             value: coding-agent
             action: upsert
       batch:
-        # 256 spans keeps an export well under the 4 MiB gRPC message limit on
-        # every hop to otel-collector. At 1024, fat agent batches reach ~5 MB
-        # and ResourceExhausted is permanent -- exporterhelper drops them
-        # outright (~14k spans/hour observed).
+        # Both values keep an export well under the 4 MiB gRPC message limit
+        # on every hop to otel-collector. At 1024 spans, fat agent batches
+        # reach ~5 MB and ResourceExhausted is permanent -- exporterhelper
+        # drops them outright (~14k spans/hour observed).
+        # send_batch_size triggers a send; send_batch_max_size additionally
+        # splits a single large delivery into multiple capped exports, so no
+        # outgoing batch exceeds 256 spans even when one OTLP request arrives
+        # far larger. The cap is per-item, not per-byte: ~5 KB/span observed
+        # leaves ample headroom.
         send_batch_size: 256
+        send_batch_max_size: 256
         timeout: 5s
 
     exporters:
