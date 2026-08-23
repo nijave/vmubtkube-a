@@ -43,6 +43,11 @@ data:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
+            # 32 MiB (collector v0.159 renamed the byte-based
+            # max_recv_msg_size). Ceiling for bursty agent deliveries; sized
+            # together with the pod memory limit below, since an inbound
+            # message is decompressed in full before the pipeline can gate it.
+            max_recv_msg_size_mib: 32
             tls:
               cert_file: /tls/tls.crt
               key_file: /tls/tls.key
@@ -191,11 +196,11 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 10m
-              memory: 128Mi
+              cpu: 50m
+              memory: 256Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: "1"
+              memory: 1Gi
           volumeMounts:
             - name: config
               mountPath: /conf
