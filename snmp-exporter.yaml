@@ -169,6 +169,7 @@ spec:
   - targetPort: &targetPort 9116
     path: &path /snmp
     interval: &interval 30s
+    scrapeTimeout: &scrapeTimeout 25s
     relabelings: &relabelings
       - action: replace
         sourceLabels: [__param_target]
@@ -182,6 +183,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [core-switch]
@@ -190,6 +192,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [tp-link-omada]
@@ -198,6 +201,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [tp-link-omada]
@@ -206,6 +210,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [tp-link-omada]
@@ -214,6 +219,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [office-switch]
@@ -222,6 +228,7 @@ spec:
   - targetPort: *targetPort
     path: *path
     interval: *interval
+    scrapeTimeout: *scrapeTimeout
     relabelings: *relabelings
     params:
       auth: [tp-link-omada]
