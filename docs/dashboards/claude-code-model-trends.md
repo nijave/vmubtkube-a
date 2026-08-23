@@ -71,6 +71,21 @@ document). Changes are picked up by the HyperDX app without a restart. The
 `_id` in the JSON export is informational — the live document is matched by
 `name`.
 
+### Gotcha: BSON types on insert
+
+The JSON export is not insertable as-is via `mongosh`. The app stores and
+queries several fields with specific BSON types; if they are inserted as plain
+strings/ISO strings, **the dashboard silently disappears from the UI list**
+(the list query filters `team` by ObjectId, so a string-typed `team` never
+matches). When inserting/updating from a script, cast:
+
+- `team`, `createdBy`, `updatedBy` → `ObjectId(...)`
+- `createdAt`, `updatedAt` → `new Date("...")`
+- include `__v: 0`
+
+Symptom of getting this wrong: `findOne({name: ...})` still returns the doc,
+but it never appears in the dashboards list.
+
 Before applying tile SQL changes, validate them against ClickHouse directly by
 substituting real epoch-milli values for the `{startDateMilliseconds:Int64}` /
 `{endDateMilliseconds:Int64}` placeholders (see
