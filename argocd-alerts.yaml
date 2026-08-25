@@ -1,37 +1,43 @@
+# Alerts for ArgoCD Application health and sync state, evaluated by the
+# kube-prometheus-stack Prometheus (the only instance scraping the ArgoCD
+# controller metrics; see the ServiceMonitors in application.argocd.yaml).
+# Both Prometheus replicas evaluate the rules; duplicate argocd_app_info
+# series from the two scrape targets are collapsed by the max-by aggregation,
+# so each app produces a single alert series. Progressing is excluded from the
+# health rule: it is the normal state during syncs and rollouts.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: argocd-alerts
-  namespace: argocd
+  name: argocd-app-alerts
+  namespace: monitoring
   labels:
     release: prom
 spec:
   groups:
-  - name: argocd
+  - name: argocd-app-health
     rules:
-    - alert: ArgoCDAppOutOfSync
-      annotations:
-        summary: "{{ $labels.name }} has been out of sync for over 15 minutes."
-        description: "ArgoCD application {{ $labels.name }} in project {{ $labels.project }} has sync_status={{ $labels.sync_status }}. Check the ArgoCD UI for details."
-      expr: |
-        argocd_app_info{sync_status!="Synced"} == 1
-      for: 15m
-      labels:
-        severity: warning
     - alert: ArgoCDAppUnhealthy
       annotations:
-        summary: "{{ $labels.name }} has been unhealthy for over 15 minutes."
-        description: "ArgoCD application {{ $labels.name }} has health_status={{ $labels.health_status }}. Check the ArgoCD UI for details."
-      expr: |
-        argocd_app_info{health_status!~"Healthy|Progressing"} == 1
+        summary: "ArgoCD application {{ $labels.exported_namespace }}/{{ $labels.name }} unhealthy."
+        description: >-
+          ArgoCD application {{ $labels.exported_namespace }}/{{ $labels.name }}
+          has reported an unhealthy state ({{ with $labels.health_status }}{{
+          . }}{{ else }}non-healthy{{ end }}) for over 15 minutes. Check the
+          app in the ArgoCD UI for degraded resources or sync errors.
+      expr: max by (exported_namespace, name) (argocd_app_info{health_status!~"Healthy|Progressing"}) == 1
       for: 15m
       labels:
         severity: warning
-    - alert: ArgoCDAppSyncFailed
+    - alert: ArgoCDAppOutOfSync
       annotations:
-        summary: "{{ $labels.name }} sync has been failing."
-        description: "ArgoCD application {{ $labels.name }} has had sync failures in the last 30 minutes."
-      expr: |
-        increase(argocd_app_sync_total{phase!="Succeeded"}[30m]) > 0
+        summary: "ArgoCD application {{ $labels.exported_namespace }}/{{ $labels.name }} out of sync."
+        description: >-
+          ArgoCD application {{ $labels.exported_namespace }}/{{ $labels.name }}
+          has been out of sync (sync status: {{ with $labels.sync_status }}{{
+          . }}{{ else }}not Synced{{ end }}) for over 15 minutes. With
+          auto-sync enabled this means syncs are not converging; check recent
+          sync attempts in the ArgoCD UI.
+      expr: max by (exported_namespace, name) (argocd_app_info{sync_status!="Synced"}) == 1
+      for: 15m
       labels:
         severity: warning
