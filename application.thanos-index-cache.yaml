@@ -27,7 +27,7 @@ spec:
   source:
     chart: memcached
     repoURL: registry-1.docker.io/cloudpirates
-    targetRevision: 0.14.7
+    targetRevision: 0.14.8
     helm:
       releaseName: index-cache
       valuesObject:
