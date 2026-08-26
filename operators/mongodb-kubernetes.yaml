@@ -54,7 +54,7 @@ spec:
   source:
     chart: mongodb-kubernetes
     repoURL: https://mongodb.github.io/helm-charts
-    targetRevision: 1.10.0
+    targetRevision: 1.11.0
     helm:
       releaseName: mongodb-community-operator
       valuesObject:
