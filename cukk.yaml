@@ -136,15 +136,23 @@ roleRef:
 # Protect running cukk upgrade Job pods from voluntary eviction (kubectl
 # drain, node maintenance): the pods run privileged against the host and an
 # eviction mid-`apt-get install` leaves dpkg interrupted on the node, which
-# blocks all further upgrades. maxUnavailable: 0 counts only running pods,
-# so when no upgrade is in flight the budget is unsatisfied-by-absence and
-# drains of the node are unaffected. The operator pod (app: cukk) does not
-# match this selector and stays evictable.
+# blocks all further upgrades. The operator pod (app: cukk) does not match
+# this selector and stays evictable.
+#
+# Jobs do not implement the scale subresource, so the disruption controller
+# reports SyncFailed whenever any cukk Job pod exists, finished ones included
+# (cukk retains them for diagnostics). That is expected: the controller
+# fail-safe pins disruptionsAllowed to 0, which is what denies eviction of a
+# running upgrade pod, while terminal pods bypass PDB checks entirely, so
+# leftover finished pods never block drains. The annotation keeps ArgoCD
+# from surfacing the permanent SyncFailed condition as app Degraded.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: cukk-upgrade-pods
   namespace: kube-system
+  annotations:
+    argocd.argoproj.io/ignore-healthcheck: "true"
 spec:
   maxUnavailable: 0
   selector:
