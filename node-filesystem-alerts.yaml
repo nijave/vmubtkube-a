@@ -1,0 +1,76 @@
+# Node filesystem space alerts for the external node-exporter hosts, evaluated
+# by the `ext` Prometheus (ruleSelector matchLabels prometheus: ext) over its
+# six static node-exporter targets. The kube-prometheus-stack Prometheus
+# already ships the same alerts from the chart's bundled kubernetes-mixin rules
+# (prom-kp-node-exporter), so this file exists only for the ext hosts; the
+# expressions are kept identical to the mixin so both instances behave the
+# same. Both ext replicas evaluate these rules; duplicate ALERTS series differ
+# only by prometheus_replica and dedupe through Thanos like every other alert
+# here.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-filesystem-alerts-ext
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: node-filesystem
+    rules:
+    - alert: NodeFilesystemSpaceFillingUp
+      annotations:
+        summary: Filesystem is predicted to run out of space within the next 24 hours.
+        description: Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf "%.2f" $value }}% available space left and is filling up.
+      expr: |-
+        (
+          node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 15
+        and
+          predict_linear(node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""}[6h], 24*60*60) < 0
+        and
+          node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+        )
+      for: 1h
+      labels:
+        severity: warning
+    - alert: NodeFilesystemSpaceFillingUp
+      annotations:
+        summary: Filesystem is predicted to run out of space within the next 4 hours.
+        description: Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf "%.2f" $value }}% available space left and is filling up fast.
+      expr: |-
+        (
+          node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 10
+        and
+          predict_linear(node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""}[6h], 4*60*60) < 0
+        and
+          node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+        )
+      for: 1h
+      labels:
+        severity: critical
+    - alert: NodeFilesystemAlmostOutOfSpace
+      annotations:
+        summary: Filesystem has less than 5% space left.
+        description: Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf "%.2f" $value }}% available space left.
+      expr: |-
+        (
+          node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 5
+        and
+          node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+        )
+      for: 30m
+      labels:
+        severity: warning
+    - alert: NodeFilesystemAlmostOutOfSpace
+      annotations:
+        summary: Filesystem has less than 3% space left.
+        description: Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf "%.2f" $value }}% available space left.
+      expr: |-
+        (
+          node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 3
+        and
+          node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+        )
+      for: 30m
+      labels:
+        severity: critical
