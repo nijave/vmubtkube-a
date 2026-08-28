@@ -323,7 +323,7 @@ spec:
           # tracking is via the kubernetes manager + the searxng/searxng
           # packageRule (date-hash tags); an inline versioning= annotation
           # here never matched the custom regex manager
-          image: registry.apps.nickv.me/searxng/searxng:2026.8.22-9fea41204
+          image: registry.apps.nickv.me/searxng/searxng:2026.8.28-a30b2d474
           env:
             - name: SEARXNG_PORT
               value: "8080"
