@@ -28,11 +28,10 @@ directories:
   path: vendored/contour/base
 - contents:
   - git:
-      commitTitle: 'chore(deps): bump step-security/harden-runner from 2.19.4 to 2.20.1
-        (#6803)...'
-      sha: 378bdb622ed9712ef4a58370f6a17af033b7d343
+      commitTitle: 'feat(github): support Dependabot secrets (#6878)...'
+      sha: 279f56c84d5d4058c3bfdeeaf5b1c2febb8851c0
       tags:
-      - v2.9.0
+      - v2.10.0
     path: .
   path: vendored/external-secrets-crds/base
 - contents:
