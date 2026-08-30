@@ -102,6 +102,17 @@ data:
         endpoint: otel-collector.k8s.somemissing.info:4317
         tls:
           insecure: false
+      # Metrics diverge from the logs/traces path: instead of the second hop
+      # to otel-collector (which keeps `metrics: null`), remote-write straight
+      # to Thanos Receive -- the same URL kube-prometheus-stack and
+      # prometheus-ext use; the receive router has no auth.
+      prometheusremotewrite:
+        endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
+        # Resource attrs as labels: without this, claude-code/codex series are
+        # indistinguishable in Thanos (service.name) and the coding-agent tag
+        # (telemetry.source) never arrives.
+        resource_to_telemetry_conversion:
+          enabled: true
 
     service:
       extensions: [health_check]
@@ -130,13 +141,16 @@ data:
           receivers: [coding_agent, coding_agent/claude]
           processors: [resource/coding_agent, batch]
           exporters: [otlp_grpc]
-        # No metrics pipeline, deliberately: the downstream otel-collector sets
-        # `metrics: null`, so this cluster does not ingest OTLP metrics at all
-        # (the claude-code dashboards are built from otel_traces). Agents must
-        # therefore use the signal-specific OTEL_EXPORTER_OTLP_*_ENDPOINT
-        # variables, or set OTEL_METRICS_EXPORTER=none -- a generic endpoint
-        # pointed here will fail on the metrics service. See
-        # docs/coding-agent-traces.md.
+        # OTLP metrics ride the same receiver as logs/traces but remote-write
+        # to Thanos instead of forwarding to otel-collector (whose
+        # `metrics: null` stands, so the downstream contract is unchanged).
+        # Agent metric volume is low; `batch` is reused as-is -- its 16/64
+        # sizing was tuned for the 4 MiB gRPC hop, which this HTTP export is
+        # not subject to.
+        metrics/agents:
+          receivers: [otlp]
+          processors: [resource/coding_agent, batch]
+          exporters: [prometheusremotewrite]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -166,7 +180,7 @@ spec:
       containers:
         - name: collector
           # renovate: datasource=docker depName=ghcr.io/nijave/otel-agent-trace-connector
-          image: ghcr.io/nijave/otel-agent-trace-connector:v0.5.0
+          image: ghcr.io/nijave/otel-agent-trace-connector:v0.6.0
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           ports:
