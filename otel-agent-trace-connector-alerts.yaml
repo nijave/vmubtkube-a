@@ -41,21 +41,37 @@ spec:
       for: 5m
       labels:
         severity: critical
+    - alert: AgentTraceConnectorMetricsExportFailures
+      annotations:
+        summary: "Coding-agent trace connector is failing to send metrics to Thanos Receive."
+        description: >-
+          The prometheusremotewrite exporter is failing to deliver metric
+          points to thanos-receive-router. Retries absorb transient errors,
+          but once the sending queue fills the points are dropped for good,
+          and non-retryable 4xx rejections drop immediately. Check the pod
+          logs for the exporter error and that thanos-receive-router.thanos
+          is reachable and its ingestors healthy.
+      expr: sum by (exporter) (rate(otelcol_exporter_send_failed_metric_points[10m])) > 0
+      for: 5m
+      labels:
+        severity: warning
     - alert: AgentTraceConnectorIngestRejections
       annotations:
         summary: "Coding-agent trace connector is refusing or failing inbound telemetry."
         description: >-
-          The otlp receiver rejected spans or log records instead of accepting
-          them -- refused means the client's request bounced (TLS, auth,
-          size), failed means it was accepted then errored inside the
-          pipeline. Agents usually surface this as their own OTLP exporter
-          errors, but headless runs may not. Compare
+          The otlp receiver rejected spans, log records, or metric points
+          instead of accepting them -- refused means the client's request
+          bounced (TLS, auth, size), failed means it was accepted then
+          errored inside the pipeline. Agents usually surface this as their
+          own OTLP exporter errors, but headless runs may not. Compare
           otelcol_receiver_accepted_* against otelcol_receiver_refused_* /
           _failed_* for the affected signal.
       expr: sum(rate(otelcol_receiver_refused_spans[10m])) +
             sum(rate(otelcol_receiver_refused_log_records[10m])) +
+            sum(rate(otelcol_receiver_refused_metric_points[10m])) +
             sum(rate(otelcol_receiver_failed_spans[10m])) +
-            sum(rate(otelcol_receiver_failed_log_records[10m])) > 0
+            sum(rate(otelcol_receiver_failed_log_records[10m])) +
+            sum(rate(otelcol_receiver_failed_metric_points[10m])) > 0
       for: 5m
       labels:
         severity: warning
