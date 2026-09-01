@@ -31,7 +31,7 @@ spec:
       containers:
         - name: operator
           # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/cukk
-          image: registry.apps.nickv.me/nijave/cukk:latest@sha256:fc6cdf3cb370529c809c5a9cf285a4d42e19296aad22b1ccbb524ae8bbcf9922
+          image: registry.apps.nickv.me/nijave/cukk:latest@sha256:bb9e90df546abb3a31fc7708e59de51ce547da5c17dd6b70d4498c5d91a50f0d
           imagePullPolicy: Always
           ports:
             - containerPort: 9090
