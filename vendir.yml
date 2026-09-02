@@ -117,7 +117,7 @@ directories:
       - path: .
         git:
           url: https://github.com/go-vikunja/helm-chart
-          ref: v2.2.1
+          ref: v2.3.0
         includePaths:
           - Chart.yaml
           - Chart.lock
