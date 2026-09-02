@@ -74,10 +74,10 @@ spec:
             # 2026-09-01) and probed there like 25/143; IMAPS 993 and
             # ManageSieve 4190 are not forwarded, so they are probed on the
             # internal FQDN as service checks only.
-            - name: smtp.somemissing.info:587
+            - name: mail01-submission-587
               url: smtp.somemissing.info:587
               module: smtp_starttls
-            - name: imap.somemissing.info:995
+            - name: mail01-pop3s-995
               url: imap.somemissing.info:995
               module: pop3s_banner
             - name: mail01-imaps-993
