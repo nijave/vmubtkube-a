@@ -110,7 +110,7 @@ steps:
 
   mirror-images:
     # renovate: datasource=docker depName=ghcr.io/regclient/regctl
-    image: ghcr.io/regclient/regctl:v0.11.5-alpine
+    image: ghcr.io/regclient/regctl:v0.11.6-alpine
     depends_on: [vendir-sync]
     backend_options:
       kubernetes:
