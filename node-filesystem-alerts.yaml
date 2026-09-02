@@ -1,6 +1,6 @@
 # Node filesystem space alerts for the external node-exporter hosts, evaluated
 # by the `ext` Prometheus (ruleSelector matchLabels prometheus: ext) over its
-# six static node-exporter targets. The kube-prometheus-stack Prometheus
+# seven static node-exporter targets. The kube-prometheus-stack Prometheus
 # already ships the same alerts from the chart's bundled kubernetes-mixin rules
 # (prom-kp-node-exporter), so this file exists only for the ext hosts; the
 # expressions are kept identical to the mixin so both instances behave the
