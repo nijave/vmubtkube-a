@@ -69,6 +69,23 @@ spec:
             - name: smtp.somemissing.info
               url: smtp.somemissing.info:25
               module: smtp_starttls
+            # Email TLS-only listeners. Submission 587 and POP3S 995 are
+            # forwarded at the public edge (verified from an external host
+            # 2026-09-01) and probed there like 25/143; IMAPS 993 and
+            # ManageSieve 4190 are not forwarded, so they are probed on the
+            # internal FQDN as service checks only.
+            - name: smtp.somemissing.info:587
+              url: smtp.somemissing.info:587
+              module: smtp_starttls
+            - name: imap.somemissing.info:995
+              url: imap.somemissing.info:995
+              module: pop3s_banner
+            - name: mail01-imaps-993
+              url: vmubt1604mail01.homelab.somemissing.info:993
+              module: imaps_banner
+            - name: mail01-sieve-4190
+              url: vmubt1604mail01.homelab.somemissing.info:4190
+              module: sieve_banner
             # Web (HTTP)
             - name: nickv.me
               url: https://nickv.me
@@ -171,6 +188,26 @@ spec:
                   - send: "EHLO prober\r"
                   - expect: "^250-AUTH"
                   - send: "QUIT\r"
+            imaps_banner:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                tls: true
+                query_response:
+                  - expect: "^\\* OK"
+            pop3s_banner:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                tls: true
+                query_response:
+                  - expect: "^\\+OK"
+            sieve_banner:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                query_response:
+                  - expect: "^IMPLEMENTATION"
             irc_banner:
               prober: tcp
               timeout: 5s
@@ -201,14 +238,6 @@ spec:
                 preferred_ip_protocol: "ip4"
             tcp_connect:
               prober: tcp
-            pop3s_banner:
-              prober: tcp
-              tcp:
-                query_response:
-                - expect: "^+OK"
-                tls: true
-                tls_config:
-                  insecure_skip_verify: false
             grpc:
               prober: grpc
               grpc:
