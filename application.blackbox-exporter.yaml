@@ -212,7 +212,9 @@ spec:
               timeout: 5s
               tcp:
                 query_response:
-                  - expect: "^IMPLEMENTATION"
+                  # ManageSieve capabilities are quoted strings (RFC 5804):
+                  # the greeting is "IMPLEMENTATION" "Dovecot ... Pigeonhole".
+                  - expect: "^\"?IMPLEMENTATION"
             irc_banner:
               prober: tcp
               timeout: 5s
