@@ -1,0 +1,90 @@
+# Mail-stack alerts for vmubt1604mail01 (smtp.somemissing.info), evaluated
+# by the `ext` Prometheus (ruleSelector matchLabels prometheus: ext).
+#
+# - Queue metrics come from the postfix-queue-metrics textfile collector on
+#   the host (cron writes postfix_queue.prom under
+#   /var/lib/prometheus/node-exporter every 5m; source of truth lives in the
+#   infra workspace under hosts/vmubt1604mail01/), exposed via the
+#   node-exporter scrape target added in the same PR.
+# - Unit-state metrics ride node-exporter's systemd collector, which the
+#   Ubuntu package enables by default; postfix runs as the instance unit
+#   postfix@-.service (postfix.service is the oneshot wrapper).
+# - Mail01NodeExporterAbsent covers the gap scrape-failure-alerts.yaml
+#   documents: up == 0 cannot fire for a target that vanished from the
+#   scrape config. It is absent-only, so ScrapeFailed keeps owning the
+#   reachable-but-failing case without double-alerting.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mail01-alerts
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: mail01
+    rules:
+    - alert: MailServiceUnitDown
+      annotations:
+        summary: Mail-stack unit {{ $labels.name }} on mail01 has not been active for 5 minutes.
+        description: >-
+          {{ $labels.name }} on vmubt1604mail01 reports no active state via
+          node-exporter's systemd collector (covers postfix@-, dovecot,
+          opendkim, opendmarc, postgrey, and spamassassin). Check
+          'systemctl status {{ $labels.name }}' and 'journalctl -u
+          {{ $labels.name }}' on the host.
+      expr: |-
+        node_systemd_unit_state{
+          instance="vmubt1604mail01.homelab.somemissing.info:9100",
+          name=~"(postfix@-|dovecot|opendkim|opendmarc|postgrey|spamassassin)\.service",
+          state="active"
+        } == 0
+      for: 5m
+      labels:
+        severity: critical
+    - alert: MailQueueBacklog
+      annotations:
+        summary: Postfix queue on mail01 holds over 100 messages for an hour.
+        description: >-
+          Total across all queues exceeds 100 for 1h. Run 'postqueue -p' on
+          vmubt1604mail01; 'postcat -q <id>' shows why a message is stuck,
+          and 'postsuper -d ALL deferred' clears junk from the deferred queue.
+      expr: |-
+        sum(postfix_queue_messages{
+          instance="vmubt1604mail01.homelab.somemissing.info:9100"
+        }) > 100
+      for: 1h
+      labels:
+        severity: warning
+    - alert: MailDeferredQueueStuck
+      annotations:
+        summary: Postfix deferred queue on mail01 has held 20+ messages for a day.
+        description: >-
+          Deferred messages retry for ~5 days before bouncing, so 20+ parked
+          for 24h means a pile-up: dead remote, DNS failure, or outbound
+          blocking. Inspect with 'postqueue -p' and 'postcat -q' on
+          vmubt1604mail01.
+      expr: |-
+        postfix_queue_messages{
+          instance="vmubt1604mail01.homelab.somemissing.info:9100",
+          queue="deferred"
+        } > 20
+      for: 24h
+      labels:
+        severity: warning
+    - alert: Mail01NodeExporterAbsent
+      annotations:
+        summary: The mail01 node-exporter target is absent from the ext Prometheus.
+        description: >-
+          up{job="node-exporter", instance="vmubt1604mail01...:9100"} has no
+          series, so the target was removed or renamed in prometheus-ext.yaml
+          (ScrapeFailed cannot fire for a vanished job; ScrapeFailed owns the
+          reachable-but-failing case).
+      expr: |-
+        absent(up{
+          job="node-exporter",
+          instance="vmubt1604mail01.homelab.somemissing.info:9100"
+        })
+      for: 15m
+      labels:
+        severity: warning
