@@ -193,6 +193,11 @@ spec:
               timeout: 5s
               tcp:
                 tls: true
+                # Probed via the internal FQDN, which is not in the cert's
+                # SAN (smtp/imap.somemissing.info are); cert expiry stays
+                # covered by the public-edge probes on the same cert.
+                tls_config:
+                  insecure_skip_verify: true
                 query_response:
                   - expect: "^\\* OK"
             pop3s_banner:
