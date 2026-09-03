@@ -130,7 +130,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
       - name: selfoss
-        image: ghcr.io/nijave/selfoss:20260823-e2b2f50
+        image: ghcr.io/nijave/selfoss:20260903-efe3227
         ports:
         - containerPort: 8080
           name: http
@@ -164,7 +164,7 @@ spec:
             memory: 512Mi
             cpu: 1000m
       - name: cliupdate
-        image: ghcr.io/nijave/selfoss:20260823-e2b2f50
+        image: ghcr.io/nijave/selfoss:20260903-efe3227
         workingDir: /var/www/html
         command:
         - /bin/sh
