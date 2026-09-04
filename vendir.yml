@@ -19,7 +19,7 @@ directories:
       - path: .
         githubRelease:
           slug: cloudnative-pg/plugin-barman-cloud   # NOT cloudnative-pg-plugin-barman-cloud
-          tag: v0.14.0
+          tag: v0.15.0
           assetNames: ["manifest.yaml"]               # upstream renamed from barman-cloud-plugin-*.yaml
           disableAutoChecksumValidation: true          # release ships no checksum file
 

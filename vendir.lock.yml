@@ -8,8 +8,8 @@ directories:
   path: vendored/cnpg/base
 - contents:
   - githubRelease:
-      tag: v0.14.0
-      url: https://api.github.com/repos/cloudnative-pg/plugin-barman-cloud/releases/361662147
+      tag: v0.15.0
+      url: https://api.github.com/repos/cloudnative-pg/plugin-barman-cloud/releases/382241573
     path: .
   path: vendored/barman-cloud-plugin/base
 - contents:
