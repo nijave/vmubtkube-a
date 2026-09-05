@@ -187,6 +187,16 @@
       "schedule": ["on friday"]
     },
     {
+      "description": "Only update searxng on Fridays — highest-churn dep (12 update PRs in the 30 days before 2026-09-03); wildcard because the mirror-registry depName keeps its registry.apps.nickv.me prefix (see the versioning rule below)",
+      "matchPackageNames": ["**/searxng/searxng"],
+      "schedule": ["on friday"]
+    },
+    {
+      "description": "Only update argo-cd on Fridays (11 update PRs in the 30 days before 2026-09-03)",
+      "matchPackageNames": ["argo-cd"],
+      "schedule": ["on friday"]
+    },
+    {
       "description": "thanos-receive-controller uses date-based tags (main-YYYY-MM-DD-hash)",
       "matchPackageNames": ["quay.io/observatorium/thanos-receive-controller"],
       "versioning": "regex:^main-(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})-[a-f0-9]+$"
