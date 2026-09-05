@@ -162,6 +162,7 @@ spec:
       securityContext:
         runAsUser: 1009
         runAsGroup: 1001
+        supplementalGroups: [992]  # render group on the Intel iGPU nodes (a20-a23)
       containers:
       - name: jellyfin
         # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/jellyfin
@@ -220,9 +221,11 @@ spec:
           requests:
             memory: "1Gi"
             cpu: "10m"
+            gpu.intel.com/i915: "1"
           limits:
             memory: "4Gi"
             cpu: "2000m"
+            gpu.intel.com/i915: "1"
       volumes:
       - name: config
         persistentVolumeClaim:
