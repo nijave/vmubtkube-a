@@ -66,9 +66,12 @@ spec:
             - name: imap.somemissing.info
               url: imap.somemissing.info:143
               module: imap_starttls
+            # Port 25 is the MX listener: AUTH was deliberately removed from
+            # it 2026-09-03 (smtpd_tls_auth_only; SASL only on 587/465), so
+            # it gets the no-AUTH variant of the STARTTLS dialogue.
             - name: smtp.somemissing.info
               url: smtp.somemissing.info:25
-              module: smtp_starttls
+              module: smtp_starttls_noauth
             # Email TLS-only listeners. Submission 587 and POP3S 995 are
             # forwarded at the public edge (verified from an external host
             # 2026-09-01) and probed there like 25/143; IMAPS 993 and
@@ -187,6 +190,22 @@ spec:
                   - starttls: true
                   - send: "EHLO prober\r"
                   - expect: "^250-AUTH"
+                  - send: "QUIT\r"
+            # Port 25 variant: postfix must not advertise AUTH there, so the
+            # post-TLS EHLO asserts a capability it always sends instead.
+            smtp_starttls_noauth:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                query_response:
+                  - expect: "^220 ([^ ]+) ESMTP (.+)$"
+                  - send: "EHLO prober\r"
+                  - expect: "^250-STARTTLS"
+                  - send: "STARTTLS\r"
+                  - expect: "^220"
+                  - starttls: true
+                  - send: "EHLO prober\r"
+                  - expect: "PIPELINING"
                   - send: "QUIT\r"
             imaps_banner:
               prober: tcp
