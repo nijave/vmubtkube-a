@@ -9,6 +9,10 @@
 # - Unit-state metrics ride node-exporter's systemd collector, which the
 #   Ubuntu package enables by default; postfix runs as the instance unit
 #   postfix@-.service (postfix.service is the oneshot wrapper).
+# - Unit names are as of Ubuntu 24.04: SpamAssassin 4.0 ships the daemon as
+#   spamd.service — the jammy-era spamassassin.service vanished with the
+#   22.04 -> 24.04 upgrade (2026-09-03), so any rule still naming it fires
+#   forever.
 # - Mail01NodeExporterAbsent covers the gap scrape-failure-alerts.yaml
 #   documents: up == 0 cannot fire for a target that vanished from the
 #   scrape config. It is absent-only, so ScrapeFailed keeps owning the
@@ -34,13 +38,13 @@ spec:
         description: >-
           {{ $labels.name }} on vmubt1604mail01 reports no active state via
           node-exporter's systemd collector (covers postfix@-, dovecot,
-          opendkim, opendmarc, postgrey, and spamassassin). Check
+          opendkim, opendmarc, postgrey, and spamd). Check
           'systemctl status {{ $labels.name }}' and 'journalctl -u
           {{ $labels.name }}' on the host.
       expr: |-
         node_systemd_unit_state{
           instance="vmubt1604mail01.homelab.somemissing.info:9100",
-          name=~"(postfix@-|dovecot|opendkim|opendmarc|postgrey|spamassassin)\\.service",
+          name=~"(postfix@-|dovecot|opendkim|opendmarc|postgrey|spamd)\\.service",
           state="active"
         } == 0
       for: 5m
@@ -88,8 +92,8 @@ spec:
         }), "unit", "postgrey.service", "", "") == 1
         or label_replace(absent(node_systemd_unit_state{
           instance="vmubt1604mail01.homelab.somemissing.info:9100",
-          name="spamassassin.service"
-        }), "unit", "spamassassin.service", "", "") == 1
+          name="spamd.service"
+        }), "unit", "spamd.service", "", "") == 1
       for: 15m
       labels:
         severity: warning
