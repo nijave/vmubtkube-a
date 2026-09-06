@@ -231,7 +231,10 @@ spec:
               timeout: 5s
               tcp:
                 query_response:
-                  - expect: "^IMPLEMENTATION"
+                  # Banner is "IMPLEMENTATION" "Dovecot (Ubuntu)
+                  # Pigeonhole" — the leading quote defeats an
+                  # ^IMPLEMENTATION anchor; match Pigeonhole instead.
+                  - expect: "Pigeonhole"
             irc_banner:
               prober: tcp
               timeout: 5s
