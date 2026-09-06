@@ -212,11 +212,15 @@ spec:
               timeout: 5s
               tcp:
                 tls: true
-                # Probed via the internal FQDN, which is not in the cert's
-                # SAN (smtp/imap.somemissing.info are); cert expiry stays
-                # covered by the public-edge probes on the same cert.
+                # 993 is not forwarded at the public edge, so the probe must
+                # connect by the internal FQDN — but present and verify the
+                # public name from the cert's SAN (smtp/imap.somemissing.info
+                # are). insecure_skip_verify left VerifiedChains empty, which
+                # made the exporter emit Go zero-time as
+                # probe_ssl_last_chain_expiry_timestamp_seconds and tripped
+                # CertificatesNearExpiry from 2026-09-05.
                 tls_config:
-                  insecure_skip_verify: true
+                  server_name: imap.somemissing.info
                 query_response:
                   - expect: "^\\* OK"
             pop3s_banner:
