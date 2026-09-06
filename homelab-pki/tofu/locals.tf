@@ -15,7 +15,7 @@ locals {
         primary_email              = "nick@venenga.com"
         additional_email_addresses = ["nijave@gmail.com"]
       }
-      devices = ["nick-desktop", "nick-ipad", "nick-xps", "pixel7"]
+      devices = ["nick-desktop", "nick-ipad", "nick-xps", "pixel7", "p11pro"]
     }
     kara = {
       key  = { algorithm = "RSA", size = 2048 }
