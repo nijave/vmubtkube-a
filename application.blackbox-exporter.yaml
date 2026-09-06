@@ -66,9 +66,12 @@ spec:
             - name: imap.somemissing.info
               url: imap.somemissing.info:143
               module: imap_starttls
+            # Port 25 is the MX listener: AUTH was deliberately removed from
+            # it 2026-09-03 (smtpd_tls_auth_only; SASL only on 587/465), so
+            # it gets the no-AUTH variant of the STARTTLS dialogue.
             - name: smtp.somemissing.info
               url: smtp.somemissing.info:25
-              module: smtp_starttls
+              module: smtp_starttls_noauth
             # Email TLS-only listeners. Submission 587 and POP3S 995 are
             # forwarded at the public edge (verified from an external host
             # 2026-09-01) and probed there like 25/143; IMAPS 993 and
@@ -188,16 +191,36 @@ spec:
                   - send: "EHLO prober\r"
                   - expect: "^250-AUTH"
                   - send: "QUIT\r"
+            # Port 25 variant: postfix must not advertise AUTH there, so the
+            # post-TLS EHLO asserts a capability it always sends instead.
+            smtp_starttls_noauth:
+              prober: tcp
+              timeout: 5s
+              tcp:
+                query_response:
+                  - expect: "^220 ([^ ]+) ESMTP (.+)$"
+                  - send: "EHLO prober\r"
+                  - expect: "^250-STARTTLS"
+                  - send: "STARTTLS\r"
+                  - expect: "^220"
+                  - starttls: true
+                  - send: "EHLO prober\r"
+                  - expect: "PIPELINING"
+                  - send: "QUIT\r"
             imaps_banner:
               prober: tcp
               timeout: 5s
               tcp:
                 tls: true
-                # Probed via the internal FQDN, which is not in the cert's
-                # SAN (smtp/imap.somemissing.info are); cert expiry stays
-                # covered by the public-edge probes on the same cert.
+                # 993 is not forwarded at the public edge, so the probe must
+                # connect by the internal FQDN — but present and verify the
+                # public name from the cert's SAN (smtp/imap.somemissing.info
+                # are). insecure_skip_verify left VerifiedChains empty, which
+                # made the exporter emit Go zero-time as
+                # probe_ssl_last_chain_expiry_timestamp_seconds and tripped
+                # CertificatesNearExpiry from 2026-09-05.
                 tls_config:
-                  insecure_skip_verify: true
+                  server_name: imap.somemissing.info
                 query_response:
                   - expect: "^\\* OK"
             pop3s_banner:
@@ -212,7 +235,10 @@ spec:
               timeout: 5s
               tcp:
                 query_response:
-                  - expect: "^IMPLEMENTATION"
+                  # Banner is "IMPLEMENTATION" "Dovecot (Ubuntu)
+                  # Pigeonhole" — the leading quote defeats an
+                  # ^IMPLEMENTATION anchor; match Pigeonhole instead.
+                  - expect: "Pigeonhole"
             irc_banner:
               prober: tcp
               timeout: 5s
