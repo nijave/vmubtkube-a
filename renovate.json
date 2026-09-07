@@ -241,6 +241,12 @@
       "versioning": "regex:^(?<major>latest)$"
     },
     {
+      "description": "yt-dlp",
+      "matchPackageNames": ["registry.apps.nickv.me/nijave/yt-dlp"],
+      "pinDigests": true,
+      "versioning": "regex:^(?<major>latest)$"
+    },
+    {
       "description": "cpu-benchmark: self-built, rebuilt by hand rarely; latest is the only tag, tracked by digest",
       "matchPackageNames": ["registry.apps.nickv.me/cpu-benchmark"],
       "pinDigests": true,

@@ -131,8 +131,8 @@ spec:
             runAsGroup: 1001
           containers:
           - name: yt-dlp
-            # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/yt-dlp
-            image: registry.apps.nickv.me/yt-dlp:latest
+            # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/yt-dlp
+            image: registry.apps.nickv.me/nijave/yt-dlp:latest
             imagePullPolicy: Always
             env:
             - name: TZ
