@@ -1,0 +1,151 @@
+# MySQL alert rules for vmubtmysql01 (Percona Server 8.4.11), evaluated by
+# the `ext` Prometheus (ruleSelector matchLabels prometheus: ext). Metrics
+# come from the mysqld-exporter static job in prometheus-ext.yaml added in
+# the same PR, so no rule fires as absent in between syncs.
+#
+# Adapted from samber/awesome-prometheus-alerts
+# dist/rules/mysql/mysqld-exporter.yml (same lineage as the mongodb rules in
+# application.kube-prometheus.yaml). Deviations from upstream, per-host:
+# - Dropped the replication trio (slave io/sql thread, lag): this host runs
+#   no replica, so those series never exist.
+# - Dropped innodb history_len: needs mysql_info_schema_innodb_metrics_*
+#   series, but the innodb_metrics collector is off in exporter defaults
+#   (six scrapers: global_status, global_variables, innodb_cmp,
+#   innodb_cmpmem, query_response_time, slave_status).
+# - Dropped prepared-statements utilization and HighQPS (>10k QPS is
+#   unreachable on this box): info-level noise for this workload.
+# - MysqlSlowQueries rescaled: slow_query_log runs at a 250 ms threshold
+#   with log_queries_not_using_indexes=1, so a slow-query trickle is normal
+#   here — upstream's any-slow-query-in-1m would fire constantly. 20 in 5m
+#   sustained for 10m instead.
+# - Host sizing baked into the connection rules: max_connections is 75, so
+#   80% is ~60 connections; open_files_limit is 9500.
+#
+# Alert ownership split (see also scrape-failure-alerts.yaml):
+# - ScrapeFailed owns exporter-not-scrapeable (up == 0).
+# - MysqlDown below owns exporter-reachable-but-DB-down (mysqld down or the
+#   exporter's account/credentials broken; mysql_up == 0).
+# - Mysql01ExporterAbsent covers the vanished-job gap scrape-failure-alerts
+#   documents (up == 0 cannot fire for a job removed from the scrape
+#   config); same pattern as Mail01NodeExporterAbsent.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mysql01-alerts
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: mysql01
+    rules:
+    - alert: Mysql01ExporterAbsent
+      annotations:
+        summary: mysqld-exporter job on mysql01 has vanished from ext's scrape config.
+        description: >-
+          up{job="mysqld-exporter"} has been absent for 10m: the job was
+          removed from prometheus-ext.yaml, the exporter stopped serving
+          before the first successful scrape, or DNS/port 9104 broke before
+          the target ever registered. ScrapeFailed cannot cover this (a
+          never-existing series never reads 0). Check the mysqld-exporter
+          unit on vmubtmysql01 and the job entry in prometheus-ext.yaml.
+      expr: absent(up{job="mysqld-exporter"})
+      for: 10m
+      labels:
+        severity: warning
+    - alert: MysqlDown
+      annotations:
+        summary: MySQL on {{ $labels.instance }} is not reachable by the exporter.
+        description: >-
+          mysql_up == 0 for 1m while the exporter itself answers scrapes:
+          mysqld is down, or the exporter's account cannot authenticate
+          (password rotated, grants dropped, auth plugin change). Check
+          'systemctl status mysql' on vmubtmysql01 and the exporter journal
+          for the connection error.
+      expr: mysql_up{job="mysqld-exporter"} == 0
+      for: 1m
+      labels:
+        severity: critical
+    - alert: MysqlRestarted
+      annotations:
+        summary: MySQL on {{ $labels.instance }} restarted within the last minute.
+        description: >-
+          mysql_global_status_uptime < 60. Expected during planned windows
+          (upgrades, tmpdir changes); unexpected otherwise. Correlate with
+          the HA recorder and mail01 reconnects.
+      expr: mysql_global_status_uptime{job="mysqld-exporter"} < 60
+      for: 0m
+      labels:
+        severity: info
+    - alert: MysqlTooManyConnections
+      annotations:
+        summary: MySQL on {{ $labels.instance }} above 80% of max_connections.
+        description: >-
+          More than 80% of connections in use (max_connections is 75 on
+          this host, so ~60). Check who holds them:
+          sudo mysql -e "SELECT user, host, count(*) FROM information_schema.processlist GROUP BY user, host ORDER BY 3 DESC";
+          the usual suspects are the HA recorder (4 sessions typical),
+          selfoss cron bursts, and mail01 lookups.
+      expr: max_over_time(mysql_global_status_threads_connected{job="mysqld-exporter"}[1m]) / mysql_global_variables_max_connections{job="mysqld-exporter"} * 100 > 80 and mysql_global_variables_max_connections{job="mysqld-exporter"} > 0
+      for: 2m
+      labels:
+        severity: warning
+    - alert: MysqlHighThreadsRunning
+      annotations:
+        summary: MySQL on {{ $labels.instance }} has over 60% of max_connections actively running.
+        description: >-
+          More than 60% of connections in Running state for 2m — queries
+          are executing, not idling. Cross-check vda latency and CPU on the
+          node-exporter series for the same host, and the slow log (shipped
+          by Datadog) for what is running long.
+      expr: max_over_time(mysql_global_status_threads_running{job="mysqld-exporter"}[1m]) / mysql_global_variables_max_connections{job="mysqld-exporter"} * 100 > 60 and mysql_global_variables_max_connections{job="mysqld-exporter"} > 0
+      for: 2m
+      labels:
+        severity: warning
+    - alert: MysqlSlowQueries
+      annotations:
+        summary: MySQL on {{ $labels.instance }} logging slow queries at a sustained elevated rate.
+        description: >-
+          More than 20 slow queries per 5m sustained for 10m. A trickle is
+          normal here (250 ms threshold, log_queries_not_using_indexes=1);
+          this rate means either the HA history range scans got heavier or
+          something new is scanning. Inspect mysql-slow.log via Datadog.
+      expr: delta(mysql_global_status_slow_queries{job="mysqld-exporter"}[5m]) > 20
+      for: 10m
+      labels:
+        severity: warning
+    - alert: MysqlInnodbLogWaits
+      annotations:
+        summary: InnoDB log waits growing on {{ $labels.instance }}.
+        description: >-
+          innodb_log_waits increasing faster than 10/s: writes are waiting
+          on redo log capacity. This host runs innodb_redo_log_capacity=4G
+          tuned for ~770 MB/day with selfoss burst peaks of ~85 MB/s —
+          waits here mean either sustained burst overload or the redo
+          setting regressed.
+      expr: deriv(mysql_global_status_innodb_log_waits{job="mysqld-exporter"}[15m]) > 10
+      for: 0m
+      labels:
+        severity: warning
+    - alert: MysqlTooManyOpenFiles
+      annotations:
+        summary: MySQL on {{ $labels.instance }} above 75% of open_files_limit.
+        description: >-
+          innodb_num_open_files above 75% of open_files_limit (9500 here,
+          set in custom.cnf with table_open_cache=512). Raise
+          open_files_limit if this persists.
+      expr: mysql_global_status_innodb_num_open_files{job="mysqld-exporter"} / mysql_global_variables_open_files_limit{job="mysqld-exporter"} * 100 > 75 and mysql_global_variables_open_files_limit{job="mysqld-exporter"} > 0
+      for: 2m
+      labels:
+        severity: warning
+    - alert: MysqlInnodbForceRecoveryIsEnabled
+      annotations:
+        summary: innodb_force_recovery is set on {{ $labels.instance }}.
+        description: >-
+          innodb_force_recovery is non-zero. Nothing in this host's config
+          sets it, so someone enabled it manually — recovery mode limits
+          writes and should be reverted as soon as the repair is done.
+      expr: mysql_global_variables_innodb_force_recovery{job="mysqld-exporter"} != 0
+      for: 2m
+      labels:
+        severity: warning
