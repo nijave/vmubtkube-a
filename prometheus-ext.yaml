@@ -108,6 +108,14 @@ stringData:
         - vmcentelk01.homelab.somemissing.info:9100
         - vmubt1604mail01.homelab.somemissing.info:9100
         - vmubt1804mysql01.homelab.somemissing.info:9100
+    # mysqld_exporter 0.20.0 on the same host (manual binary + systemd; see
+    # the infra workspace's vmubtmysql01.md). UFW admits 9104 from this
+    # cluster's subnet only.
+    - job_name: mysqld-exporter
+      scrape_interval: 15s
+      static_configs:
+      - targets:
+        - vmubt1804mysql01.homelab.somemissing.info:9104
     - job_name: ubthv01
       scrape_interval: 10s
       static_configs:
