@@ -60,7 +60,7 @@ spec:
               main:
                 image:
                   repository: ghcr.io/immich-app/immich-server
-                  tag: v3.1.0
+                  tag: v3.2.0
                 resources:
                   requests:
                     cpu: 50m
@@ -81,7 +81,7 @@ spec:
                   image:
                     repository: ghcr.io/immich-app/immich-machine-learning
                     # OpenVINO variant -> Intel iGPU acceleration (matches server tag)
-                    tag: v3.1.0-openvino
+                    tag: v3.2.0-openvino
                   env:
                     # Keep the CLIP model resident for fast first-search after startup.
                     # Preload names must match the active Smart Search model set in the UI.
