@@ -28,10 +28,10 @@ directories:
   path: vendored/contour/base
 - contents:
   - git:
-      commitTitle: 'feat(github): support Dependabot secrets (#6878)...'
-      sha: 279f56c84d5d4058c3bfdeeaf5b1c2febb8851c0
+      commitTitle: 'chore: prepare release support matrix (#6993)...'
+      sha: e8f12e1f1646e0ad47966458023ff10c9577f2b0
       tags:
-      - v2.10.0
+      - v2.11.0
     path: .
   path: vendored/external-secrets-crds/base
 - contents:
