@@ -18,7 +18,7 @@
 
 FROM ghcr.io/opentofu/opentofu:1.12-minimal AS tofu
 
-FROM alpine:3.24.1
+FROM alpine:3.24.2
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
 
 RUN apk add --no-cache ca-certificates=20260611-r0
