@@ -5,20 +5,9 @@
 # anonymous.conditions covers the two paths below (k8s 1.34+ allowlist), plus
 # --service-account-jwks-uri pointing here for AWS IRSA.
 ---
-# Cluster CA for Contour upstream validation. kube-root-ca.crt is a ConfigMap and
-# Contour only reads Secrets, so it is copied here. Refresh if the cluster CA rotates.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kube-apiserver-ca
-  namespace: default
-type: Opaque
-data:
-  ca.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJQmRBZkJYQlZ3TzR3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRBek16RXlNRFExTURKYUZ3MHpOREF6TWpreU1EVXdNREphTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUREZThnVm5xQkx1QUlWNFBTSktGdGNDc3FFQ0taTW5jL3cyTmg2bXArQzgwcHdKaTh3bG5WVEgvL2QKRWRQbTc2VTV4bGkySEhPenRWczd4c1BGcDMyYWo3OGxwVHUzQkNPdkQ3ZnhGYnlyeFdSWmtGcWZjTGd5WGkvYwpCLy9lOXU3czM4WSszWENBRmtHdlJxaTB2aWp5UzJZVXpYVXlkQklFbjFFeElmN2prYjU0R0w3b1VDVkJvbEZvCkp5NTdoVW1ubmlwelpqS0ZMMnQ0aDA5N2l0ZVVIUldhZ1A2d2owaEFYd0UxV0JOb29DeG5kNi9GTmJyYjlkcjMKUU1GbXMzaFlROVBIRkNjK09PazMzT0pia3RXeGhqVG1yb3RzbThGVUF3M052ZlJNMnVCS0gzclpXZFdUbDhwMgphY0NDc0pKNEQvWVZmQTJsUmNOMU5nL2JzWU1IQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJURFZlRWlVckd5TDFWYXRnaXBKcXdDMklqa1BUQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQUJvbjhQOWNVNwp3OXl3aFlPZUxBcTdPbmgzdkkxT3MwOGR5bVFUbG1VZWdFQlJlRkJFZWcrckJMa0RGbFp6SzM4K3lNYWhpR1U0CjNVUlZWS0VXeWJRb0NTNkFMd0N0dXNDSTJ5VGl6c29LU0I4M1A2cDFhWVVFOWlid2YwTVowUW94R2VkV0Z3bTcKam94bXEvMXhhL1lQTWVSWEw4a2RjM011USt3YTNMY0dvV1hyVmE5OWxwMVlSZ01zbmlKVXNHZGVxQXFpcXowTQpKRW5HRndpc1A1U1FObTlPYmFya3ZZM2lLZ1pyVnJwb0dmS0lsVFo3RlVXSEZ4alBPOEpyZDJvYmNkclZTN2p1CkV0eS9XVE1KVGkrWmVRSXNYUzFWdFpBTTVrNGhpUlBGeENrRmp5SXNiWFVRQWhSWkZiOTdNeXhtYjVtUE1NenAKanZQQ0tuZ296emtvCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
----
-# Routes to the built-in default/kubernetes Service (port name https, 443 -> 6443,
-# endpoints auto-maintained by the apiserver). Apiserver cert SANs include
-# kubernetes.default, so upstream validation works through the ClusterIP.
+# Upstream TLS validation uses the kube-apiserver-ca Secret, copied from
+# default/kube-root-ca.crt by the cm-to-secret-propagator (see
+# cm-secret-propagator.yaml; Contour only reads Secrets, not ConfigMaps).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

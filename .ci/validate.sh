@@ -10,6 +10,8 @@ set -euo pipefail
 # for the CRD kind itself (kubernetes-json-schema gap); CRD contents are
 # upstream-generated anyway. The CRDs-catalog location validates our CRs
 # (Application, ExternalSecret, HTTPProxy, Cluster, VPA, ...).
+# -skip metacontroller kinds: no schema for them in kubernetes-json-schema or
+# CRDs-catalog; validated server-side by the live cluster instead.
 # Match validation to the live cluster version (cukk auto-upgrades the
 # cluster, so never hardcode it). Works in CI step pods via the default SA
 # (GET /version is allowed by system:public-info-viewer) and locally via
@@ -60,7 +62,7 @@ fi
 
 KUBECONFORM="kubeconform
   -strict -summary
-  -skip CustomResourceDefinition
+  -skip CustomResourceDefinition,DecoratorController,CompositeController
   $SCHEMA_LOCATIONS"
 
 if [ -n "$KUBE_VERSION" ]; then
