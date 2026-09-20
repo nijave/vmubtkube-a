@@ -1,0 +1,139 @@
+# Public OIDC endpoint for the kube-apiserver service-account token issuer.
+#
+# Exposes /.well-known/openid-configuration and /openid/v1/jwks at
+# https://oidc-k8s.apps.somemissing.info via Contour so the API server's OIDC
+# issuer is reachable from outside the homelab (required for AWS STS to
+# validate projected service-account tokens). All other paths 404 at Contour,
+# keeping the public surface minimal.
+#
+# NOTE: until the apiservers get
+# --service-account-jwks-uri=https://oidc-k8s.apps.somemissing.info/openid/v1/jwks
+# (kubeadm ClusterConfiguration apiServer.extraArgs, applied on all three
+# control-plane nodes), the discovery doc still advertises the internal
+# jwks_uri (https://<node>:6443). The proxy path is correct once that flag
+# lands.
+#
+# DNS: public resolution comes from the CNAME oidc-k8s.apps -> clmb.dyn.nickv.me
+# in the somemissing.info zone (dnsimple tofu repo, somemissing_info.tf). The
+# internal apps.somemissing.info BIND subzone record is created by external-dns
+# from this HTTPProxy. cert-manager issues via DNS-01 (dnsimple webhook), so no
+# HTTP reachability is needed before the cert exists.
+---
+# Cluster CA (public cert, from kube-root-ca.crt) used by Contour to validate
+# the kube-apiserver's upstream TLS certificate. Rotate by re-copying the
+# kube-root-ca.crt configmap if the cluster CA is ever rotated.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kube-apiserver-ca
+  namespace: default
+type: Opaque
+data:
+  ca.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJQmRBZkJYQlZ3TzR3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRBek16RXlNRFExTURKYUZ3MHpOREF6TWpreU1EVXdNREphTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUREZThnVm5xQkx1QUlWNFBTSktGdGNDc3FFQ0taTW5jL3cyTmg2bXArQzgwcHdKaTh3bG5WVEgvL2QKRWRQbTc2VTV4bGkySEhPenRWczd4c1BGcDMyYWo3OGxwVHUzQkNPdkQ3ZnhGYnlyeFdSWmtGcWZjTGd5WGkvYwpCLy9lOXU3czM4WSszWENBRmtHdlJxaTB2aWp5UzJZVXpYVXlkQklFbjFFeElmN2prYjU0R0w3b1VDVkJvbEZvCkp5NTdoVW1ubmlwelpqS0ZMMnQ0aDA5N2l0ZVVIUldhZ1A2d2owaEFYd0UxV0JOb29DeG5kNi9GTmJyYjlkcjMKUU1GbXMzaFlROVBIRkNjK09PazMzT0pia3RXeGhqVG1yb3RzbThGVUF3M052ZlJNMnVCS0gzclpXZFdUbDhwMgphY0NDc0pKNEQvWVZmQTJsUmNOMU5nL2JzWU1IQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJURFZlRWlVckd5TDFWYXRnaXBKcXdDMklqa1BUQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQUJvbjhQOWNVNwp3OXl3aFlPZUxBcTdPbmgzdkkxT3MwOGR5bVFUbG1VZWdFQlJlRkJFZWcrckJMa0RGbFp6SzM4K3lNYWhpR1U0CjNVUlZWS0VXeWJRb0NTNkFMd0N0dXNDSTJ5VGl6c29LU0I4M1A2cDFhWVVFOWlid2YwTVowUW94R2VkV0Z3bTcKam94bXEvMXhhL1lQTWVSWEw4a2RjM011USt3YTNMY0dvV1hyVmE5OWxwMVlSZ01zbmlKVXNHZGVxQXFpcXowTQpKRW5HRndpc1A1U1FObTlPYmFya3ZZM2lLZ1pyVnJwb0dmS0lsVFo3RlVXSEZ4alBPOEpyZDJvYmNkclZTN2p1CkV0eS9XVE1KVGkrWmVRSXNYUzFWdFpBTTVrNGhpUlBGeENrRmp5SXNiWFVRQWhSWkZiOTdNeXhtYjVtUE1NenAKanZQQ0tuZ296emtvCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+---
+# Headless-style Service + manual Endpoints for the three control-plane nodes.
+# kube-apiserver listens on 6443 per node (secure-port); the kube-api VIP only
+# exists in workstation /etc/hosts, so the endpoints target node IPs directly.
+# Port must be named https so Contour speaks TLS upstream.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-apiserver-oidc
+  namespace: default
+spec:
+  ports:
+    - name: https
+      port: 6443
+      protocol: TCP
+      targetPort: 6443
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kube-apiserver-oidc
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 172.16.1.65
+      - ip: 172.16.1.66
+      - ip: 172.16.1.67
+    ports:
+      - name: https
+        port: 6443
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: oidc-k8s-apps-somemissing-info-cert
+  namespace: default
+spec:
+  secretName: oidc-k8s-apps-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn oidc-k8s.apps.somemissing.info
+  dnsNames:
+    - *cn
+# Public OIDC discovery must be readable by unauthenticated clients (e.g. AWS
+# STS fetching the discovery doc / JWKS). The ClusterRole below grants
+# system:anonymous get access to both non-resource paths (verified working via
+# impersonation). NOTE: on Kubernetes 1.34+ the anonymous authenticator only
+# lets requests through for a configured endpoint allowlist (default:
+# /healthz, /livez, /readyz, /version), enforced before authorization. Until
+# the apiservers get an AuthenticationConfiguration with anonymous.conditions
+# covering /.well-known/openid-configuration and /openid/v1/jwks, anonymous
+# requests to these paths 403 at the apiserver regardless of RBAC.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: public-oidc-discovery
+rules:
+  - verbs:
+      - get
+    nonResourceURLs:
+      - /.well-known/openid-configuration
+      - /openid/v1/jwks
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: anonymous-public-oidc-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: public-oidc-discovery
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: system:anonymous
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: kube-apiserver-oidc
+  namespace: default
+spec:
+  virtualhost:
+    fqdn: oidc-k8s.apps.somemissing.info
+    tls:
+      secretName: oidc-k8s-apps-somemissing-info-tls
+  routes:
+    - conditions:
+        - prefix: /.well-known/openid-configuration
+      services:
+        - name: kube-apiserver-oidc
+          port: 6443
+          protocol: tls
+          validation:
+            caSecret: kube-apiserver-ca
+            subjectName: kubernetes.default
+    - conditions:
+        - prefix: /openid/v1/jwks
+      services:
+        - name: kube-apiserver-oidc
+          port: 6443
+          protocol: tls
+          validation:
+            caSecret: kube-apiserver-ca
+            subjectName: kubernetes.default
