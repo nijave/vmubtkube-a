@@ -64,3 +64,12 @@ spec:
           validation:
             caSecret: kube-apiserver-ca
             subjectName: kubernetes.default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,ServerSideApply=true
+    external-dns.kubernetes.io/hostname: oidc-k8s.apps.somemissing.info
+  name: kubernetes
+  namespace: default
