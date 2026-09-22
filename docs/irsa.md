@@ -23,8 +23,13 @@ If a third consumer needs ambient AWS credentials, revisit installing it
 
 | workload | IAM role (tofu `irsa.tf`) | how credentials reach the pod |
 |---|---|---|
-| `external-dns/route53-ddns` CronJob | `k8s-external-dns` | pod sets `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` pointing at a projected ServiceAccount token volume (`audience: sts.amazonaws.com`); AWS CLI v2 credential chain does the `AssumeRoleWithWebIdentity` exchange |
 | cert-manager | `k8s-cert-manager` | none — the Route53 solver uses cert-manager's "IAM Role with dedicated Kubernetes ServiceAccount" mode: dedicated un-annotated SA `k8s-cert-manager`, RBAC Role/RoleBinding for `serviceaccounts/token`, and `route53.role` + `auth.kubernetes.serviceAccountRef` on the ClusterIssuers |
+
+`aws_iam_role.k8s_external_dns` is provisioned but currently unconsumed: a
+Route53 DDNS CronJob was built and then dropped (2026-09-22) — no DDNS updater
+is active; the owner plans a router-based one, which cannot use IRSA and will
+need a scoped IAM user with static keys when it happens. Delete the role then
+if the router path is permanent.
 
 ## IAM side (owned by the dnsimple tofu repo)
 
