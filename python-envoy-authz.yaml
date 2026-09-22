@@ -102,7 +102,7 @@ spec:
       containers:
       - name: python-envoy-authz
         # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/python-envoy-authz
-        image: registry.apps.nickv.me/nijave/python-envoy-authz:latest@sha256:00c551a482d5d7fc00965d23b1bfa2a090cb24eb73ea7c77b07182c86ff02fcf
+        image: registry.apps.nickv.me/nijave/python-envoy-authz:latest@sha256:46a8ec4e71ce9b049019a0ad1e09ca262bf4a5ad700344066fa2a61ac8866e5a
         imagePullPolicy: Always
         resources:
           requests:
