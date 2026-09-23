@@ -10,7 +10,7 @@ directories:
       - path: .
         githubRelease:
           slug: cloudnative-pg/cloudnative-pg
-          tag: v1.30.0
+          tag: v1.30.1
           assetNames: ["cnpg-*.yaml"]
           disableAutoChecksumValidation: true   # checksums ship in a release asset, not parseable from notes
 
