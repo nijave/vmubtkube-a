@@ -1,0 +1,86 @@
+# Let's Encrypt ClusterIssuers using the native Route53 DNS01 solver (IRSA).
+#
+# Prep for the dnsimple->route53 cutover: creates the issuers but flips
+# NOTHING — every existing Certificate keeps its cert-manager-webhook-dnsimple
+# issuerRef until the post-cutover flip. The route53 solver cannot pass a
+# challenge until Route53 is authoritative (the _acme-challenge TXT must be
+# publicly resolvable), so first real issuance is only possible after the NS
+# change; account registration happens now and needs no DNS.
+#
+# Auth is cert-manager's documented "IAM Role with dedicated Kubernetes
+# ServiceAccount" mode (cert-manager.io/docs/configuration/acme/dns01/route53):
+# the solver mints a bound token for the un-annotated k8s-cert-manager SA
+# (audience sts.amazonaws.com) and exchanges it via AssumeRoleWithWebIdentity
+# for role/k8s-cert-manager (tofu irsa.tf; trust pins this SA's sub). No
+# webhook, no secrets — see docs/irsa.md.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-cert-manager
+  namespace: cert-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k8s-cert-manager-tokenrequest
+  namespace: cert-manager
+rules:
+  - apiGroups: ['']
+    resources: ['serviceaccounts/token']
+    resourceNames: ['k8s-cert-manager']
+    verbs: ['create']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cert-manager-k8s-cert-manager-tokenrequest
+  namespace: cert-manager
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager
+    namespace: cert-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: k8s-cert-manager-tokenrequest
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-route53-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@somemissing.info
+    privateKeySecretRef:
+      name: letsencrypt-route53-staging-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-2
+            role: arn:aws:iam::794213477926:role/k8s-cert-manager
+            auth:
+              kubernetes:
+                serviceAccountRef:
+                  name: k8s-cert-manager
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-route53-production
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@somemissing.info
+    privateKeySecretRef:
+      name: letsencrypt-route53-production-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-2
+            role: arn:aws:iam::794213477926:role/k8s-cert-manager
+            auth:
+              kubernetes:
+                serviceAccountRef:
+                  name: k8s-cert-manager
