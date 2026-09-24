@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: homelab-pki
+
+resources:
+  - rbac.yaml
+  - pvc.yaml
+  - reconcile-job.yaml
+  - crl-refresh-cronjob.yaml
+
+# Hash-suffixed ConfigMap so any .tf/lock change re-rolls the Job/CronJob
+# that reference it (kustomize rewrites the configMap.name in pod specs).
+configMapGenerator:
+  - name: homelab-pki-tofu-config
+    files:
+      - tofu/main.tf
+      - tofu/ca.tf
+      - tofu/devices.tf
+      - tofu/locals.tf
+      - tofu/crl.tf
+      - tofu/.terraform.lock.hcl

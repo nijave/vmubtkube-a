@@ -1,0 +1,13 @@
+# OpenTofu plugin cache + TF_DATA_DIR. Regenerable: plain prune, no backup;
+# a wiped cache just means one cold `tofu init`.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pki-tofu-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: zfs-generic-iscsi-csi
