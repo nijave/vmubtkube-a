@@ -42,7 +42,7 @@ unsupported-ness is an upstream support policy, accepted here.
 | Image | `ghcr.io/opentofu/opentofu:<exact semver>`, direct pull, `imagePullPolicy: IfNotPresent`, renovate annotation `# renovate: datasource=docker depName=ghcr.io/opentofu/opentofu` |
 | Config delivery | kustomize `configMapGenerator` (`homelab-pki-tofu-config`) from the six files in `tofu/`, hash-suffixed, mounted read-only at `/config` |
 | Version pinning | `.terraform.lock.hcl` committed in `homelab-pki/tofu/`, included in the ConfigMap; `tofu init -lockfile=readonly` as the drift backstop |
-| Tofu writes | `TF_DATA_DIR=/tofu/data`, `TOFU_PLUGIN_CACHE_DIR=/tofu/plugin-cache` — both on the PVC, never on `/config` |
+| Tofu writes | `TF_DATA_DIR=/tofu/data`, `TF_PLUGIN_CACHE_DIR=/tofu/plugin-cache` — both on the PVC, never on `/config` |
 | Cache volume | PVC `pki-tofu-cache`, 10Gi, RWO, `zfs-generic-iscsi-csi`, no annotations (regenerable cache; plain prune is fine, no volsync backup) |
 | App structure | `homelab-pki/` kustomize app (fluentbit pattern) + root `application.homelab-pki.yaml` child Application; root `homelab-pki.yaml` deleted |
 | Provider bumps | Renovate terraform manager (default `**/*.tf` patterns already cover the dir): constraint + lock file in one PR; repo-wide `lockFileMaintenance` refreshes locked versions |
@@ -125,7 +125,7 @@ containers:
     env:
       - name: TF_DATA_DIR
         value: /tofu/data
-      - name: TOFU_PLUGIN_CACHE_DIR
+      - name: TF_PLUGIN_CACHE_DIR
         value: /tofu/plugin-cache
     volumeMounts:
       - name: config
@@ -149,9 +149,10 @@ volumes:
 - The first run warms the plugin cache (one download per provider); later
   runs resolve from the lock and hardlink from the cache (`TF_DATA_DIR` and
   the cache share the PVC filesystem). No registry traffic on routine runs.
-- Env var spellings (`TF_DATA_DIR`, `TOFU_PLUGIN_CACHE_DIR`) and
-  `-lockfile=readonly` support are verified against the running `tofu`
-  during implementation; adjust names there if OpenTofu expects others.
+- Env var spellings verified against the OpenTofu 1.12 binary (2026-09-23,
+  `strings` on the local install): `TF_DATA_DIR` and `TF_PLUGIN_CACHE_DIR`
+  are honored; no `TOFU_`-prefixed plugin-cache variant exists in 1.12.
+  `-lockfile=readonly` is accepted by `tofu init`.
 - Pin the tag to the newest stable OpenTofu at implementation time (the
   retired Dockerfile used the 1.12 line; `main.tf` requires `>= 1.11.0`).
 
@@ -252,7 +253,7 @@ irreplaceable is exposed to the race.
 2. Local: `cd homelab-pki/tofu && tofu init -backend=false && tofu validate`
    succeeds; lock contains linux_amd64 `h1:` hashes.
 3. Confirm env spellings against the pinned image (`tofu help environment`
-   or equivalent): `TF_DATA_DIR`, `TOFU_PLUGIN_CACHE_DIR`; confirm
+   or equivalent): `TF_DATA_DIR`, `TF_PLUGIN_CACHE_DIR`; confirm
    `-lockfile=readonly` is accepted by `tofu init`.
 4. After sync: child app Synced/Healthy; `pki-tofu-cache` Bound; hook Job
    completes; `pki-crl` Secret refresh timestamp advances; CRL consumers
