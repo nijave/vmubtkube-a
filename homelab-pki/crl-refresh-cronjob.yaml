@@ -26,6 +26,10 @@ spec:
               args:
                 - |
                   set -eux
+                  # OpenTofu 1.12.6 stats TF_PLUGIN_CACHE_DIR at CLI-config load,
+                  # before init would create it: a fresh PVC has no subdirs, so
+                  # pre-create them or init emits a config diagnostic.
+                  mkdir -p /tofu/plugin-cache /tofu/data
                   tofu -chdir=/config init -input=false -no-color -lockfile=readonly
                   tofu -chdir=/config apply -input=false -auto-approve -no-color
               env:
