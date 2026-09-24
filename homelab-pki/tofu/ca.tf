@@ -1,5 +1,5 @@
 # The CA cert+key are delivered from Bitwarden via ExternalSecret into the
-# `pki-ca` Secret (never in git) -- see homelab-pki.yaml. This resource
+# `pki-ca` Secret (never in git) -- see homelab-pki/rbac.yaml. This resource
 # never regenerates or re-signs the CA.
 data "kubernetes_secret_v1" "ca" {
   metadata {
