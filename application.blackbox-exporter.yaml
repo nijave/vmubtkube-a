@@ -123,10 +123,6 @@ spec:
               url: https://renovate-releases.apps.somemissing.info/v1/releases/cpu-benchmark
               module: renovate_releases_2xx
               interval: 60s
-            - name: renovate-releases-homelab-pki
-              url: https://renovate-releases.apps.somemissing.info/v1/releases/nijave/homelab-pki
-              module: renovate_releases_2xx
-              interval: 60s
             - name: renovate-releases-jellyfin
               url: https://renovate-releases.apps.somemissing.info/v1/releases/jellyfin
               module: renovate_releases_2xx

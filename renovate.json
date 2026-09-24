@@ -264,11 +264,6 @@
       "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-\\S+$"
     },
     {
-      "description": "homelab-pki: self-built semver tags; tftest never passes the service's tag filter",
-      "matchPackageNames": ["registry.apps.nickv.me/nijave/homelab-pki"],
-      "versioning": "semver"
-    },
-    {
       "description": "jellyfin.yaml and python-envoy-authz.yaml are also scanned by the kubernetes manager, where registryAliases maps the mirror host to Docker Hub — these self-built repos don't exist there. The regex-manager annotation (custom datasource) owns them; disable the broken duplicate dep (thanos pattern).",
       "matchManagers": ["kubernetes"],
       "matchPackageNames": ["**/jellyfin", "**/nijave/python-envoy-authz"],
