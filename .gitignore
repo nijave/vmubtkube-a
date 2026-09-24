@@ -1,3 +1,4 @@
 .claude
 .tmp
 local_files/
+homelab-pki/tofu/.terraform/
