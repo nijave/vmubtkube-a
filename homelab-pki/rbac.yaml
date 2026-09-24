@@ -1,0 +1,61 @@
+# pki-reconciler: cert/CRL Secret writes, the pki-ca ExternalSecret target,
+# and the OpenTofu kubernetes-backend state Secret + lock Lease.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pki-reconciler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pki-reconciler
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pki-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: pki-reconciler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pki-reconciler
+---
+# CA cert+key delivered from Bitwarden (ha-ca-crt / ha-ca-key). Opaque, read
+# directly by tofu/ca.tf's kubernetes_secret_v1 data source. Never in git.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pki-ca
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    name: pki-ca
+  data:
+    # conversionStrategy/decodingStrategy/metadataPolicy are CRD defaults spelled
+    # out explicitly: Argo owns spec.data as an atomic list and diffs
+    # client-side, so omitting them reads as permanent drift.
+    - secretKey: tls.crt
+      remoteRef:
+        key: ha-ca-crt
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+    - secretKey: tls.key
+      remoteRef:
+        key: ha-ca-key
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None

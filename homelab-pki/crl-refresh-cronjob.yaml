@@ -1,0 +1,51 @@
+# concurrencyPolicy Forbid; the OpenTofu state lock also guards against
+# overlap with the Sync-hook Job.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pki-crl-refresh
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: pki-reconciler
+          containers:
+            - name: reconcile
+              # renovate: datasource=docker depName=ghcr.io/opentofu/opentofu
+              image: ghcr.io/opentofu/opentofu:1.12.6
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eux
+                  tofu -chdir=/config init -input=false -no-color -lockfile=readonly
+                  tofu -chdir=/config apply -input=false -auto-approve -no-color
+              env:
+                - name: TF_DATA_DIR
+                  value: /tofu/data
+                - name: TF_PLUGIN_CACHE_DIR
+                  value: /tofu/plugin-cache
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: tofu-cache
+                  mountPath: /tofu
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }
+          volumes:
+            - name: config
+              configMap:
+                name: homelab-pki-tofu-config
+            - name: tofu-cache
+              persistentVolumeClaim:
+                claimName: pki-tofu-cache

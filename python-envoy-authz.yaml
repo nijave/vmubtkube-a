@@ -16,6 +16,43 @@ spec:
       key: ca-ha.apps.somemissing.info
       decodingStrategy: None
       metadataPolicy: None
+# pki-crl-reader: identity used by the homelab-pki SecretStore below to
+# copy the CRL k8s→k8s. The Role/RoleBinding grant it read access to the
+# pki-crl Secret in the homelab-pki namespace (written by the tofu
+# reconciler). Lives here, not in the homelab-pki kustomization, because
+# the kustomize namespace transformer would rewrite the projectcontour
+# ServiceAccount's namespace.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pki-crl-reader
+  namespace: projectcontour
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pki-crl-reader
+  namespace: homelab-pki
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["pki-crl"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pki-crl-reader
+  namespace: homelab-pki
+subjects:
+  - kind: ServiceAccount
+    name: pki-crl-reader
+    namespace: projectcontour
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pki-crl-reader
 ---
 apiVersion: external-secrets.io/v1
 kind: SecretStore

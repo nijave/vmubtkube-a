@@ -1,5 +1,6 @@
-# Adding or removing a device means editing this file and rebuilding the
-# image (see homelab-pki/README.md).
+# Adding or removing a device means editing this file and committing --
+# the kustomize ConfigMap hash rolls the reconcile Job on the next Argo
+# sync (see homelab-pki/README.md).
 
 locals {
   users = {
@@ -65,6 +66,6 @@ locals {
 
   # Revoke a device: add { serial_number = "<serial>", reason = "..." } here
   # (look up the current serial via `tofu output device_serials`), then
-  # rebuild/push/apply. See homelab-pki/README.md.
+  # commit/push. See homelab-pki/README.md.
   revoked_serials = []
 }

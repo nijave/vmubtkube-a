@@ -69,7 +69,8 @@ with per-tag digests and build timestamps. The wiring PR removed every
 populated `ignoreDeps` entry, added per-image packageRules (latest-tracked
 with `pinDigests` for cukk, python-envoy-authz, cpu-benchmark,
 democratic-csi, and renovate-release-api itself; `^v` semver for the
-jellyfin fork; plain semver for homelab-pki) plus annotations on each
+jellyfin fork; plain semver for homelab-pki, until it moved to the public
+OpenTofu image 2026-09 and the rule was removed) plus annotations on each
 image line. democratic-csi joined the set beyond the original six: hex
 SHAs never order, so latest-tracking is the only flow that yields updates;
 the bootstrap copied `146445b` to `latest`, and its CI must keep publishing
