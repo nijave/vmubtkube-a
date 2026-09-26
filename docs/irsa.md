@@ -44,7 +44,10 @@ if the router path is permanent.
   - cert-manager: route53 DNS01 page policy (TXT-only change condition,
     zone-scoped to the five domains)
 - Zone ids referenced there must match `tofu output zone_ids` — update both if
-  zones are ever recreated.
+  zones are ever recreated. **They are currently stale by design**: the
+  Route53 mirror is parked (2026-09-24, `route53_mirror_enabled=false`) until
+  the Feb 2027 cutover; refreshing them is on the re-enable checklist in the
+  migration plan (dnsimple tofu repo).
 
 ## Adding a new AWS consumer
 
