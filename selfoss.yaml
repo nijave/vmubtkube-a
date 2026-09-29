@@ -46,7 +46,7 @@ spec:
           use_system_font=
           share=
           wallabag=
-          allow_public_update_access=
+          allow_public_update_access=0
           unread_order=asc
           load_images_on_mobile=1
           auto_hide_read_on_mobile=0
