@@ -1,0 +1,5 @@
+queue_rules:
+  - name: default
+    batch_max_wait_time: "10"
+    batch_size: 5
+    merge_method: merge
