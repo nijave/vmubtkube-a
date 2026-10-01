@@ -1,5 +1,23 @@
 queue_rules:
   - name: default
-    batch_max_wait_time: "10"
+    batch_max_wait_time: "5 minutes"
     batch_size: 5
     merge_method: merge
+    merge_conditions:
+      - status-success=ci/woodpecker/pr/woodpecker
+      - -conflict
+
+pull_request_rules:
+  - name: queue renovate pull requests
+    conditions:
+      - author=renovate[bot]
+      - -draft
+      - -conflict
+      # Never auto-queue Immich VectorChord bumps (see the cloudnative-vectorchord
+      # rule in renovate.json): PG-major (18-x) needs an offline pg_upgrade, and
+      # VC-major (17-1.x) needs ALTER EXTENSION vchord UPDATE + REINDEX.
+      - -title~=^.*tensorchord/cloudnative-vectorchord docker tag to v(1[89]|[2-9][0-9])-.*$
+      - -title~=^.*tensorchord/cloudnative-vectorchord docker tag to v\d+-[1-9]\..*$
+    actions:
+      queue:
+        name: default
