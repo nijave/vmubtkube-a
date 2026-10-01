@@ -20,7 +20,7 @@ spec:
           containers:
             - name: reconcile
               # renovate: datasource=docker depName=ghcr.io/opentofu/opentofu
-              image: ghcr.io/opentofu/opentofu:1.13.0
+              image: ghcr.io/opentofu/opentofu:1.13.1
               imagePullPolicy: IfNotPresent
               command: ["/bin/sh", "-c"]
               args:
