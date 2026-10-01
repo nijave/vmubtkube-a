@@ -59,7 +59,7 @@ spec:
       secretName: ha-apps-somemissing-info-tls
       clientValidation:
         caSecret: ca-ha-homelab-somemissing-info-tls
-        optionalClientCertificate: true
+        optionalClientCertificate: false
     authorization:
       extensionRef:
         name: python-envoy-authz
