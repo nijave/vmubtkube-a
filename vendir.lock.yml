@@ -58,10 +58,10 @@ directories:
   path: vendored/metrics-server/base
 - contents:
   - git:
-      commitTitle: 'chore: update appVersion to 2.6.0'
-      sha: 2d4bfbfc9d1a66fb47c0422169058ff03295e10c
+      commitTitle: 'chore: update appVersion to 2.7.0'
+      sha: 002672d6e3e7c4b1452a9f68c46181214ad8c755
       tags:
-      - v2.3.0
+      - v2.4.0
     path: .
   path: vendored/vikunja/upstream
 - contents:
