@@ -38,9 +38,10 @@ fi
 # race (see validate.sh); without it every built-in kind is skipped during the
 # window before yannh/kubernetes-json-schema publishes the new patch's dir.
 MASTER_STRICT_FALLBACK="-schema-location https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json"
+# CRDs-catalog commit pinned for datreeio/CRDs-catalog#991 (see sync-schemas.sh)
 SCHEMA_LOCATIONS="
   -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/f1e7f6bc0537bf0622ffe6e47dbaa85914fabbec/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
   $MASTER_STRICT_FALLBACK"
 if [ -n "${SCHEMA_MIRROR:-}" ]; then
   KUBE_VERSION="$KUBE_VERSION" sh "$(dirname "$0")/sync-schemas.sh" \

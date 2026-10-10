@@ -71,8 +71,21 @@ fi
 [ -d "$KJS/$VDIR" ] \
   || echo "WARNING: kubernetes-json-schema has no $VDIR; kubeconform will fall back to master/remote" >&2
 
+# Pinned to the parent of datreeio/CRDs-catalog b7e2015, which regenerated the
+# external-secrets.io schemas with a stray "additionalProperties": false inside
+# a `properties` map; kubeconform can't compile them and reports "could not
+# find schema for SecretStore". Upstream: datreeio/CRDs-catalog#991. Set to
+# "main" (here and in validate.sh / validate-helm.sh) once that is fixed.
+CRDS_REF=${CRDS_REF:-f1e7f6bc0537bf0622ffe6e47dbaa85914fabbec}
+
 if [ ! -d "$CRDS/.git" ]; then
   git clone --quiet --depth 1 https://github.com/datreeio/CRDs-catalog "$CRDS"
+fi
+if [ "$CRDS_REF" != main ]; then
+  if [ "$(git -C "$CRDS" rev-parse HEAD)" != "$CRDS_REF" ]; then
+    git -C "$CRDS" fetch --quiet --depth 1 origin "$CRDS_REF"
+    git -C "$CRDS" reset --quiet --hard FETCH_HEAD
+  fi
 elif [ ! -f "$CRDS/.git/FETCH_HEAD" ] || [ -n "$(find "$CRDS/.git/FETCH_HEAD" -mtime +7)" ]; then
   # refresh weekly so new CRD versions (renovate chart bumps) keep validating;
   # best-effort — a stale mirror still beats the flaky raw CDN
