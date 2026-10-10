@@ -47,6 +47,16 @@
       ],
       "datasourceTemplate": "{{#if datasource}}{{datasource}}{{else}}docker{{/if}}",
       "autoReplaceStringTemplate": "{{#if newDigest}}{{#if currentDigest}}{{{replace currentDigest newDigest replaceString}}}{{else}}{{{replaceString}}}@{{{newDigest}}}{{/if}}{{else}}{{{replace currentValue newValue replaceString}}}{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "immich server/ML images: track GitHub releases instead of GHCR tags. The GHCR repos hold 30k+/200k+ pr-*/commit-* tags at 1000 per page, and one failed page fails the whole docker lookup (no-result). Captures only the vX.Y.Z prefix so variant suffixes like -openvino are preserved.",
+      "managerFilePatterns": ["/^immich/application\\.immich\\.yaml$/"],
+      "matchStrings": [
+        "repository:\\s*ghcr\\.io/immich-app/immich-(?:server|machine-learning)\\s*\\n(?:\\s*#.*\\n)*\\s*tag:\\s*[\"']?(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "immich-app/immich",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
@@ -108,6 +118,12 @@
       "description": "thanos is handled by the custom regex manager with a registryUrl annotation (registryAliases maps to DockerHub but thanos lives on quay.io)",
       "matchPackageNames": ["**/thanos/thanos"],
       "matchManagers": ["kubernetes"],
+      "enabled": false
+    },
+    {
+      "description": "immich server/ML images are tracked by the immich custom regex manager via GitHub releases; the helm-values docker lookup pages through hundreds of thousands of GHCR tags and fails with no-result",
+      "matchManagers": ["helm-values"],
+      "matchPackageNames": ["ghcr.io/immich-app/immich-server", "ghcr.io/immich-app/immich-machine-learning"],
       "enabled": false
     },
     {
