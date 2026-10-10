@@ -38,9 +38,10 @@ export KUBE_VERSION
 # structurally stable across patches, so it's a safe match for any recent patch.
 MASTER_STRICT_FALLBACK="-schema-location https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json"
 
+# CRDs-catalog commit pinned for datreeio/CRDs-catalog#991 (see sync-schemas.sh)
 SCHEMA_LOCATIONS="
   -schema-location default
-  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+  -schema-location https://raw.githubusercontent.com/datreeio/CRDs-catalog/f1e7f6bc0537bf0622ffe6e47dbaa85914fabbec/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
   $MASTER_STRICT_FALLBACK"
 if [ -n "${SCHEMA_MIRROR:-}" ]; then
   sh "$(dirname "$0")/sync-schemas.sh" \
