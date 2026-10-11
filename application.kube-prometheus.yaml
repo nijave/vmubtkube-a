@@ -111,6 +111,49 @@ spec:
             enabled: true
         kube-state-metrics:
           replicas: 2
+          # Altinity ClickHouseInstallation (CHI) state for the reconcile
+          # alerts in clickhouse-operator-alerts.yaml. The operator sets no
+          # observedGeneration, and status.status keeps its last value
+          # (Completed) when the operator stops reconciling. status.chop-ip
+          # is the useful field: the operator rewrites it with its own pod IP
+          # at the start of every reconcile, and it always reconciles after
+          # its own pod IP changes (decideReconcileGate in 0.27.x).
+          customResourceState:
+            enabled: true
+            config:
+              kind: CustomResourceStateMetrics
+              spec:
+                resources:
+                - groupVersionKind:
+                    group: clickhouse.altinity.com
+                    version: v1
+                    kind: ClickHouseInstallation
+                  labelsFromPath:
+                    namespace: [metadata, namespace]
+                    name: [metadata, name]
+                  metrics:
+                  # kube_customresource_clickhouseinstallation_status_info
+                  - name: clickhouseinstallation_status_info
+                    help: ClickHouseInstallation status as last written by the operator.
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          status: [status, status]
+                          chop_version: [status, chop-version]
+                          chop_ip: [status, chop-ip]
+                  # kube_customresource_clickhouseinstallation_metadata_generation
+                  - name: clickhouseinstallation_metadata_generation
+                    help: ClickHouseInstallation metadata.generation.
+                    each:
+                      type: Gauge
+                      gauge:
+                        path: [metadata, generation]
+          rbac:
+            extraRules:
+            - apiGroups: [clickhouse.altinity.com]
+              resources: [clickhouseinstallations]
+              verbs: [list, watch]
         additionalPrometheusRulesMap:
           blackbox-exporter-alerts:
             groups:

@@ -1,0 +1,122 @@
+# Alerts for the Altinity ClickHouse operator (operators/clickhouse-operator.yaml)
+# not reconciling ClickHouseInstallations (CHIs). Evaluated by the
+# kube-prometheus-stack Prometheus (ruleSelector matchLabels release: prom).
+# Inputs:
+#   - kube_customresource_clickhouseinstallation_* from the kube-state-metrics
+#     customResourceState config in application.kube-prometheus.yaml
+#   - clickhouse_operator_* from the operator's :9999 endpoint, scraped by the
+#     ServiceMonitor below
+#
+# 2026-10 incident context: CHI hyperdx/hyperdx reached metadata.generation
+# 15, but the operator had not reconciled it since generation 7 (June). The
+# operator only watched its own namespace. status.status still said
+# Completed, status.chop-version said 0.25.6 while 0.27.4 ran, and nothing
+# alerted. The operator sets no observedGeneration, so no status field shows
+# the drift directly. The rules below use what the operator does write:
+# status.chop-ip (its own pod IP, written at the start of every reconcile)
+# and its per-CHI metrics.
+#
+# Both Prometheus replicas evaluate the rules, and kube-state-metrics runs 2
+# replicas; the max-by aggregations collapse the duplicate series.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-operator
+  namespace: operators
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: altinity-clickhouse-operator
+      app.kubernetes.io/instance: clickhouse-operator
+  endpoints:
+    # Operator reconcile metrics only. The chart's own ServiceMonitor
+    # (serviceMonitor.enabled) also scrapes the ch-metrics exporter on :8888,
+    # which would duplicate the ClickHouse metrics already scraped directly
+    # by the clickhouse-hyperdx ServiceMonitor (hyperdx-clickhouse.yaml).
+    - port: op-metrics
+      path: /metrics
+      interval: 30s
+      # The operator labels its per-CHI series with the CHI's namespace
+      # (plus chi=<name>). Keep that label instead of renaming it to
+      # exported_namespace, so the series join to kube-state-metrics on
+      # namespace.
+      honorLabels: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: clickhouse-operator-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: clickhouse-operator
+    rules:
+    - alert: ClickHouseInstallationNotReconciled
+      annotations:
+        summary: "ClickHouseInstallation {{ $labels.namespace }}/{{ $labels.name }} not reconciled by the running operator."
+        description: >-
+          status.chop-ip of CHI {{ $labels.namespace }}/{{ $labels.name }} is
+          "{{ $labels.chop_ip }}" (last written by operator
+          {{ with $labels.chop_version }}{{ . }}{{ else }}unknown{{ end }}),
+          and no running clickhouse-operator pod has that IP. The operator
+          rewrites chop-ip at the start of every reconcile and always
+          reconciles after its pod IP changes, so the current operator pod has
+          not started a reconcile of this CHI for 30m. Spec changes are not
+          being applied. status.status ({{ $labels.status }}) is stale and can
+          still say Completed. Check the operator's watch namespaces
+          (operators/clickhouse-operator.yaml) and its logs:
+          kubectl -n operators logs deploy/clickhouse-operator-altinity-clickhouse-operator
+          -c altinity-clickhouse-operator.
+      expr: |
+        max by (namespace, name, chop_ip, chop_version, status) (
+          kube_customresource_clickhouseinstallation_status_info
+        )
+        unless on (chop_ip)
+          label_replace(
+            kube_pod_info{namespace="operators", pod=~"clickhouse-operator-altinity-clickhouse-operator-.+"},
+            "chop_ip", "$1", "pod_ip", "(.+)"
+          )
+      for: 30m
+      labels:
+        severity: warning
+    - alert: ClickHouseInstallationUnknownToOperator
+      annotations:
+        summary: "ClickHouse operator does not track ClickHouseInstallation {{ $labels.namespace }}/{{ $labels.name }}."
+        description: >-
+          CHI {{ $labels.namespace }}/{{ $labels.name }} exists, but the
+          operator's clickhouse_operator_chi metric has had no series for it
+          for 30m. The operator registers a CHI in that metric when it picks
+          the CHI up from its watch, so it is not watching this CHI at all:
+          most likely its namespace is outside watch.namespaces in the
+          operator configuration. This rule also fires when the operator
+          metrics scrape fails (see ScrapeFailed).
+      expr: |
+        max by (namespace, name) (kube_customresource_clickhouseinstallation_status_info)
+        unless on (namespace, name)
+          label_replace(
+            max by (namespace, chi) (clickhouse_operator_chi) > 0,
+            "name", "$1", "chi", "(.+)"
+          )
+      for: 30m
+      labels:
+        severity: warning
+    - alert: ClickHouseInstallationReconcileStuck
+      annotations:
+        summary: "ClickHouseInstallation {{ $labels.namespace }}/{{ $labels.name }} reconcile is {{ $labels.status }}."
+        description: >-
+          CHI {{ $labels.namespace }}/{{ $labels.name }} has had status
+          {{ $labels.status }} for over 1h. Aborted means the operator gave up
+          (see .status.errors and the operator logs). InProgress for this long
+          means a reconcile is stuck, for example while waiting on a host that
+          does not become ready.
+      expr: |
+        max by (namespace, name, status) (
+          kube_customresource_clickhouseinstallation_status_info{status=~"InProgress|Aborted"}
+        )
+      for: 1h
+      labels:
+        severity: warning
