@@ -33,6 +33,13 @@ spec:
       releaseName: prom
       valuesObject:
         nameOverride: kp
+        alertmanager:
+          # alertmanager.yaml is rendered from git values; opt out of the
+          # global Secret .data ignoreDifferences in argocd-cm so config
+          # edits reach the cluster.
+          secret:
+            annotations:
+              k8s.somemissing.info/argocd-manage-secret-data: "true"
         grafana:
           env:
             GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector.k8s.somemissing.info:4317
