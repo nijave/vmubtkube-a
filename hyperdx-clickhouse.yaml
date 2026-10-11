@@ -200,6 +200,60 @@ spec:
                   memory: 1Gi
                 limits:
                   memory: 8Gi
+            # The operator mounts the data volume into every container.
+            # Both replicas hold the full dataset, so only replica 0-0
+            # runs the backup schedule; the other serves the API for
+            # restores.
+            - name: clickhouse-backup
+              image: altinity/clickhouse-backup:2.8.1
+              imagePullPolicy: IfNotPresent
+              command:
+                - bash
+                - -c
+                - |
+                  if [ "$(hostname)" = chi-hyperdx-replicated-0-0-0 ]; then
+                    exec /bin/clickhouse-backup server --watch
+                  fi
+                  exec /bin/clickhouse-backup server
+              envFrom:
+                - secretRef:
+                    name: clickhouse-backup-s3
+              env:
+                - name: REMOTE_STORAGE
+                  value: s3
+                - name: S3_ENDPOINT
+                  value: http://nas.apps.somemissing.info:9001
+                - name: S3_BUCKET
+                  value: clickhouse-backup
+                - name: S3_PATH
+                  value: "{cluster}/{shard}"
+                - name: S3_FORCE_PATH_STYLE
+                  value: "true"
+                - name: WATCH_INTERVAL
+                  value: 6h
+                - name: FULL_INTERVAL
+                  value: 24h
+                # Drop the local copy after upload; its hard links would
+                # otherwise pin merged-away parts on the data volume.
+                - name: BACKUPS_TO_KEEP_LOCAL
+                  value: "-1"
+                - name: BACKUPS_TO_KEEP_REMOTE
+                  value: "12"
+                - name: API_LISTEN
+                  value: 0.0.0.0:7171
+                - name: API_ENABLE_METRICS
+                  value: "true"
+                - name: API_CREATE_INTEGRATION_TABLES
+                  value: "true"
+              ports:
+                - name: backup-api
+                  containerPort: 7171
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 2Gi
     volumeClaimTemplates:
       # Telemetry with a 30-day TTL on two replicas: merges rewrite parts
       # constantly, so NAS snapshots and syncoid copies cost far more than
