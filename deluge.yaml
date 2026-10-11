@@ -1,0 +1,487 @@
+---
+# Deluge stack migration from vmcent74deluge (Docker Compose) into the
+# media namespace. Design:
+# docs/superpowers/specs/2026-08-22-deluge-vm-to-k8s-design.md
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: deluge-media
+spec:
+  capacity:
+    storage: 100Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nfs:
+    server: nas.apps.somemissing.info
+    path: /media/av
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
+  name: deluge-media
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Ti
+  volumeName: deluge-media
+  storageClassName: ""
+---
+# unpackerr gets its own binding to the same export; it mounts only the
+# torrents/ subtree (see subPath below). Capacity is advisory on static PVs.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: unpackerr-media
+spec:
+  capacity:
+    storage: 100Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  nfs:
+    server: nas.apps.somemissing.info
+    path: /media/av
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
+  name: unpackerr-media
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Ti
+  volumeName: unpackerr-media
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=confirm
+  name: deluge-data
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 40Gi
+---
+# The VM's live AirVPN WireGuard identity (gluetun env) from Bitwarden.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: gluetun-airvpn
+  namespace: media
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        VPN_SERVICE_PROVIDER: airvpn
+        SERVER_COUNTRIES: canada
+        VPN_TYPE: wireguard
+        WIREGUARD_IMPLEMENTATION: kernelspace
+        WIREGUARD_ADDRESSES: "{{ .WIREGUARD_ADDRESSES }}"
+        WIREGUARD_PRESHARED_KEY: "{{ .WIREGUARD_PRESHARED_KEY }}"
+        WIREGUARD_PRIVATE_KEY: "{{ .WIREGUARD_PRIVATE_KEY }}"
+  data:
+  - secretKey: WIREGUARD_PRIVATE_KEY
+    remoteRef:
+      key: gluetun-deluge-wireguard-private-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: WIREGUARD_PRESHARED_KEY
+    remoteRef:
+      key: gluetun-deluge-wireguard-preshared-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: WIREGUARD_ADDRESSES
+    remoteRef:
+      key: gluetun-deluge-wireguard-addresses
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+# Rotated sonarr API key (the VM compose file carried it in plaintext).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: unpackerr-sonarr
+  namespace: media
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        UN_SONARR_0_API_KEY: "{{ .apiKey }}"
+  data:
+  - secretKey: apiKey
+    remoteRef:
+      key: sonarr-api-key
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: restic-repo-deluge
+  namespace: media
+spec:
+  refreshInterval: 300s
+  secretStoreRef:
+    name: default
+    kind: ClusterSecretStore
+  target:
+    template:
+      type: Opaque
+      data:
+        RESTIC_REPOSITORY: s3:https://vmubthh01.s.nickv.me:/volsync-deluge
+        RESTIC_PASSWORD: "{{ .password }}"
+        AWS_ACCESS_KEY_ID: "{{ .accessKey }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .secretKey }}"
+  data:
+  - secretKey: password
+    remoteRef:
+      key: volsync-restic-password-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: accessKey
+    remoteRef:
+      key: volsync-restic-repo-id-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+  - secretKey: secretKey
+    remoteRef:
+      key: volsync-restic-repo-secret-1
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: deluge-data
+  namespace: media
+spec:
+  sourcePVC: deluge-data
+  trigger:
+    schedule: "*/30 * * * *"
+  restic:
+    pruneIntervalDays: 14
+    repository: restic-repo-deluge
+    moverSecurityContext:
+      runAsUser: 1002
+      runAsGroup: 1001
+      fsGroup: 1001
+    retain:
+      hourly: 6
+      daily: 5
+      weekly: 4
+      monthly: 3
+      yearly: 0
+    copyMethod: Clone
+---
+# Web UI + exporter metrics in one Service so the existing arr
+# ServiceMonitor (media.yaml, label app.kubernetes.io/name: arr) scrapes
+# the metrics port — same shape as the sonarr Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: deluge
+  namespace: media
+  annotations:
+    external-dns.kubernetes.io/hostname: deluge.k8s.somemissing.info
+  labels:
+    app.kubernetes.io/component: deluge
+    app.kubernetes.io/name: arr
+spec:
+  type: ClusterIP
+  ports:
+  - name: https
+    port: 443
+    targetPort: http
+  - name: metrics
+    port: 9354
+    targetPort: metrics
+  selector:
+    app.kubernetes.io/component: deluge
+    app.kubernetes.io/name: arr
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deluge
+  namespace: media
+  labels:
+    app.kubernetes.io/component: deluge
+    app.kubernetes.io/name: arr
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  # Cutover commit flips this to 1 (runbook step 5); rollback scales back
+  # to 0 first to release the AirVPN tunnel identity.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: deluge
+      app.kubernetes.io/name: arr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: deluge
+        app.kubernetes.io/name: arr
+    spec:
+      # No user namespace: NFS volumes do not support idmap mounts, so the
+      # deluge-media PVC cannot mount under userns. Kernelspace WireGuard
+      # in upstream gluetun >= v3.41 needs no /dev/net/tun, so the forked
+      # image is not needed.
+      # Clean session save for ~325 torrents on SIGTERM.
+      terminationGracePeriodSeconds: 60
+      # DNS goes through the tunnel (POC pattern); ndots=1 keeps
+      # single-label names from getting search-suffixed.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.4.4
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+      # Native sidecar running the AirVPN tunnel; the app containers share
+      # its netns. startupProbe gates their start until the tunnel is up.
+      - name: gluetun
+        image: ghcr.io/qdm12/gluetun:v3.41.3@sha256:fa19cc76b2af13d57a8d3dc3066f2ada061b1c761b8aecf989b3877c0486e027
+        restartPolicy: Always
+        env:
+        - name: LOG_LEVEL
+          value: info
+        # The WireGuard backend reads WIREGUARD_MTU; VPN_MTU is OpenVPN-only
+        # and ignored here. 1320 mirrors the VM's wg-quick config.
+        - name: WIREGUARD_MTU
+          value: "1320"
+        - name: HEALTH_SERVER_ADDRESS
+          value: "0.0.0.0:9999"
+        - name: HEALTH_TARGET_ADDRESSES
+          value: cloudflare.com:443,google.com:443
+        # In-cluster traffic to the Service DNATs into the netns and
+        # traverses gluetun's INPUT chain; without these allows every
+        # scrape blackholes. Health server, web UI, exporter metrics.
+        - name: FIREWALL_INPUT_PORTS
+          value: "9999,8112,9354"
+        # AirVPN forwarded port for incoming peer traffic (locked at 59836;
+        # verify with the AirVPN port checker during cutover before any arr
+        # client is repointed).
+        - name: FIREWALL_VPN_INPUT_PORTS
+          value: "59836"
+        # Mirrors the VM's off-tunnel exemptions: NAS, node/pod/service
+        # ranges, Contour LB VIPs.
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: 172.16.0.0/22,192.168.208.0/20,192.168.224.0/20,192.168.240.0/28
+        envFrom:
+        - secretRef:
+            name: gluetun-airvpn
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+        startupProbe:
+          httpGet:
+            path: /
+            port: 9999
+          initialDelaySeconds: 5
+          periodSeconds: 3
+          failureThreshold: 20
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9999
+          periodSeconds: 30
+          failureThreshold: 5
+        # Readiness: a failing tunnel takes the pod NotReady (startup and
+        # liveness alone would just restart gluetun).
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9999
+          periodSeconds: 10
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 25m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      containers:
+      - name: deluge
+        image: lscr.io/linuxserver/deluge:latest@sha256:33a939576f7ecfc1227db1a0cb2afce030ce983e620ec9d93c956e3700e21fe9
+        env:
+        - name: TZ
+          value: Etc/UTC
+        - name: PUID
+          value: "1002"
+        - name: PGID
+          value: "1001"
+        ports:
+        - containerPort: 8112
+          name: http
+          protocol: TCP
+        # deluge-web serves self-signed TLS (web.conf https: true); kubelet
+        # skips certificate verification for HTTPS probes.
+        startupProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTPS
+          initialDelaySeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+            scheme: HTTPS
+          initialDelaySeconds: 5
+        volumeMounts:
+        # Migrated VM state lands at /config (LSIO runs deluged with
+        # -c /config); exact /media path parity keeps fastresumes valid.
+        - name: config
+          mountPath: /config
+        - name: media
+          mountPath: /media
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: 250m
+          limits:
+            memory: 4Gi
+            cpu: 2000m
+      - name: deluge-exporter
+        image: docker.io/tobbez/deluge_exporter:latest@sha256:d44a0f6eb047345b04b2fbd8281cb0066670763741f2e227d0afa9d877a2106d
+        ports:
+        - containerPort: 9354
+          name: metrics
+          protocol: TCP
+        # Whole config volume read-only at /root/.config/deluge (deluge
+        # state lives directly in /config); talks to deluged over
+        # localhost, so no cross-pod RPC hole through gluetun's firewall.
+        # Metric names unchanged -> TooManyPausedTorrents unaffected.
+        volumeMounts:
+        - name: config
+          mountPath: /root/.config/deluge
+          readOnly: true
+        resources:
+          requests:
+            memory: 32Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+            cpu: 250m
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: deluge-data
+      - name: media
+        persistentVolumeClaim:
+          claimName: deluge-media
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unpackerr
+  namespace: media
+  labels:
+    app.kubernetes.io/component: unpackerr
+    app.kubernetes.io/name: arr
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: unpackerr
+      app.kubernetes.io/name: arr
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: unpackerr
+        app.kubernetes.io/name: arr
+    spec:
+      securityContext:
+        runAsUser: 1002
+        runAsGroup: 1001
+        runAsNonRoot: true
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+      - name: unpackerr
+        image: docker.io/golift/unpackerr:latest@sha256:4ec141eeb0cb2f971d7c92f21cc40b0d2d50d7920eb7a0557443cca52270c0b0
+        env:
+        - name: TZ
+          value: Etc/UTC
+        - name: UN_DEBUG
+          value: "true"
+        - name: UN_SONARR_0_URL
+          value: http://sonarr.media.svc.cluster.local:8989
+        - name: UN_SONARR_0_PATHS_0
+          value: /media/torrents
+        envFrom:
+        - secretRef:
+            name: unpackerr-sonarr
+        # subPath torrents: the PVC serves the export root /media/av, and a
+        # bare mount would nest paths as /media/torrents/torrents/... so
+        # sonarr-provided paths wouldn't resolve. No config PVC (stateless).
+        volumeMounts:
+        - name: media
+          mountPath: /media/torrents
+          subPath: torrents
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 50m
+          limits:
+            memory: 1Gi
+            cpu: 500m
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: unpackerr-media

@@ -6,4 +6,3 @@ Audit date: 2026-07-02
 
 | Namespace | Secret | Notes |
 |-----------|--------|-------|
-| media | gluetun-airvpn | VPN secret, manually created |

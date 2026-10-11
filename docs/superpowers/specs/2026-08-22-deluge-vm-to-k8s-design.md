@@ -37,9 +37,10 @@ scope; it belongs to the vmubttorrent01 stack).
 
 ### Workload topology (namespace `media`)
 
-**Deployment `deluge`** — single replica, `Recreate`, `hostUsers: false`
-(userns isolation), terminationGracePeriodSeconds ≥ 30 (clean session
-save on SIGTERM):
+**Deployment `deluge`** — single replica, `Recreate`, no user namespace
+(`hostUsers` defaults to true — NFS volumes do not support idmap mounts,
+so the media PVC rules out userns), terminationGracePeriodSeconds ≥ 30
+(clean session save on SIGTERM):
 
 | container | image | notes |
 |---|---|---|
@@ -73,26 +74,29 @@ gluetun container details:
   (mirrors the VM's off-tunnel exemptions: NAS, node/pod/service ranges,
   Contour VIPs).
 - `securityContext`: NET_ADMIN + NET_RAW. startupProbe on :9999 gates the
-  app containers.
+  app containers; a readinessProbe on :9999 makes a failing tunnel take
+  the pod NotReady.
 
-Upstream gluetun is expected to work now under userns without the old
-forked-image workaround (see `docs/agent-memory/project_gluetun_fork.md`,
-stale after this migration); first-boot verification covers this.
-Fallback if it regresses: the documented fork path as contingency only.
+The pod runs upstream gluetun v3.41.3; kernelspace WireGuard needs no TUN
+device. The NFS volume rules out userns (see above). The gluetun-fork
+memory note (`docs/agent-memory/project_gluetun_fork.md`) is stale and
+gets refreshed at decom.
 
 deluge container details:
 
-- Volume mounts: `deluge-data` PVC at `/config` (LSIO layout; migrated
-  state lands in `/config/.config/deluge`), media PVC at `/media`
-  (**exact path parity** keeps fastresumes valid).
-- Ports: 8112 `http`. Probes mirror the sabnzbd shape (startupProbe tcp,
-  liveness/readiness http `/`).
+- Volume mounts: `deluge-data` PVC at `/config` (LSIO runs
+  `deluged -c /config`, so migrated state lands directly in `/config`),
+  media PVC at `/media` (**exact path parity** keeps fastresumes valid).
+- Ports: 8112 `http` (self-signed TLS, `web.conf` `https: true`). Probes
+  mirror the sabnzbd shape (startupProbe tcp, liveness/readiness httpGet
+  `/`) with `scheme: HTTPS`.
 
 deluge-exporter sidecar details:
 
-- Mounts `.config/deluge` subPath read-only for auth/config, connects to
-  deluged over **localhost** — no cross-pod RPC hole through the gluetun
-  firewall. Exposes port `metrics` :9354.
+- Mounts the whole `config` volume read-only at `/root/.config/deluge`
+  (deluge state lives directly in `/config`), connects to deluged over
+  **localhost** — no cross-pod RPC hole through the gluetun firewall.
+  Exposes port `metrics` :9354.
 
 **Deployment `unpackerr`** — separate plain pod, no VPN:
 
@@ -123,13 +127,15 @@ deluge-exporter sidecar details:
 
 ### Exposure & monitoring
 
-- Service `deluge` (ClusterIP): port `http` 80→8112, GA annotation
+- Service `deluge` (ClusterIP): port `https` 443→8112, GA annotation
   `external-dns.kubernetes.io/hostname: deluge.k8s.somemissing.info`
   (Service IPs are routable; matches sonarr/sabnzbd pattern).
 - Exporter service entry carries label `app.kubernetes.io/name: arr` so
-  the existing `arr` ServiceMonitor scrapes it; remove the static
-  `deluge` job from `additionalScrapeConfigs` in
-  `application.kube-prometheus.yaml`. Metric names unchanged →
+  the existing `arr` ServiceMonitor scrapes it. The static `deluge` job
+  in `additionalScrapeConfigs` (`application.kube-prometheus.yaml`) is
+  removed in the cutover commit, not at merge: the VM keeps reporting
+  until cutover, and the generic `up == 0` alert does not fire after VM
+  power-off. Metric names unchanged →
   `TooManyPausedTorrents` rule unaffected.
 - New guardrail alert: deluge pod not-ready / health endpoint down for
   10m → warning (in-pod equivalent of the VPN-wedge probe rtorrent had).
@@ -139,8 +145,13 @@ deluge-exporter sidecar details:
 
 ### Config deltas applied to migrated state (before first start)
 
-- `core.conf`: `listen_interface: ""` (no `airvpn` iface in pod; gluetun's
-  firewall is the killswitch), `allow_remote: true`, `natpmp/upnp` off.
+- `core.conf`: `listen_interface` and `outgoing_interface` `"airvpn"` →
+  `"tun0"` (gluetun's WireGuard interface; gluetun's firewall is the
+  killswitch), `natpmp/upnp` off.
+- `web.conf` keeps `https: true`; the Service exposes 443 and the probes
+  use `scheme: HTTPS`.
+- `plugins_location` needs no change: deluge 2.2 never reads it and loads
+  user plugins from `/config/plugins`.
 - Everything else (ports 58846/59836, paths, plugins ltConfig/AutoAdd/
   Label/Stats) carried over untouched.
 
@@ -153,6 +164,8 @@ deluge-exporter sidecar details:
 2. Bitwarden items: restic repo trio for `restic-repo-deluge`; **rotated**
    sonarr API key. Consult the mittwald/ESO encoding memory note when
    authoring ExternalSecrets.
+3. Delete the manually created `gluetun-airvpn` Secret in `media` (POC
+   leftover, revoked keys) before merge so the ExternalSecret can own it.
 
 ## Cutover runbook
 
@@ -171,26 +184,33 @@ WireGuard key, so the VM tunnel drops before the pod dials in.
     not down — fast rollback), then `sudo systemctl stop wg-quick@airvpn`
     — frees the connection.
 4. Sync state: helper pod mounts `deluge-data`; rsync
-   VM:`/var/lib/deluge/.config/deluge/` → `<pvc>/.config/deluge/`;
-   apply the core.conf deltas. The copy starts only after every VM
-   service is stopped so fastresume state is consistent (same rationale
-   as the sibling spec).
-5. Flip replicas to 1 (cutover commit). Verify in order:
+   VM:`/var/lib/deluge/.config/deluge/` → `<pvc>/` (PVC root = `/config`);
+   apply the core.conf deltas (`listen_interface`/`outgoing_interface`
+   `"tun0"`, `natpmp/upnp` off).
+   Start the copy only after every VM service stops so fastresume state
+   stays consistent (same rationale as the sibling spec).
+5. Flip replicas to 1 for `deluge` AND `unpackerr`, and remove the static
+   `deluge` scrape job from `application.kube-prometheus.yaml` (cutover
+   commit). Verify in order:
    - gluetun startupProbe passing, WG handshake established
    - egress IP via tunnel is an AirVPN exit (curl ifconfig.me)
    - inbound :59836 reachable through the tunnel (online AirVPN port
      checker) — before any client is repointed
    - torrents resume without rehash (spot-check several; labels/plugins
      intact); NFS writes work as 1002:1001
+   - plugins load (Label, AutoAdd; ltConfig's egg sits in plugins/bak on
+     the VM, so the VM doesn't load it today — restore or disable it)
    - web UI serves at `deluge.k8s.somemissing.info`; exporter metrics
      flowing; guardrail alert quiet
 6. Repoint radarr/sonarr download clients to
-   `deluge.k8s.somemissing.info`; re-enable them; run one small
+   `deluge.k8s.somemissing.info` port 443 with SSL on (self-signed
+   cert); re-enable them; run one small
    end-to-end test download; confirm unpackerr picked up the rotated key
    (next completed archive unpacks).
 7. Burn-in 24–48h: alerts quiet, upload moving.
 8. Power VM off; PR removing `vmcent74deluge:9100` from
-   `prometheus-ext.yaml`.
+   `prometheus-ext.yaml` (only this scrape change remains; the static
+   `deluge` job already went in the cutover commit).
 9. Soak ~1 week → decom VM (delete + DNS cleanup), delete
    `local_files/gluetun-poc.yaml` + `local_files/qds.yaml` (closes TODO
    working-tree-cleanup item), update TODO.md / UNTRACKED.md entries,
@@ -200,16 +220,16 @@ WireGuard key, so the VM tunnel drops before the pod dials in.
 
 Scale the `deluge` Deployment back to `replicas: 0` first (releases the
 tunnel identity), `wg-quick up airvpn` on the VM, `docker compose start`,
-re-point radarr/sonarr to the VM hostname. `argocd.argoproj.io/
-sync-options: Prune=confirm` annotations keep PVs/PVCs safe throughout.
+re-point radarr/sonarr to the VM hostname. Restoring the static `deluge`
+scrape job is optional (VM metrics only).
+`argocd.argoproj.io/sync-options: Prune=confirm` annotations keep
+PVs/PVCs safe throughout.
 
 ## Risks & mitigations
 
 - **Deluge version delta** (Alpine 2.x build vs LSIO 2.x): state/fastresume
   formats are compatible across deluge 2.x. Worst case a forced recheck;
   data itself is untouched.
-- **Upstream gluetun under userns**: expected fixed; verified at first
-  boot. Contingency = forked-image path already proven by the poc.
 - **Port-forward mismatch**: forwarded port must be 59836; verified
   during cutover step 5 before arr clients are repointed.
 - **Key sharing across migrations**: deluge and rtorrent stacks hold
