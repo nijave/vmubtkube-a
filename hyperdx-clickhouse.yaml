@@ -149,6 +149,13 @@ spec:
       prometheus/metrics: "true"
       prometheus/events: "true"
       prometheus/asynchronous_metrics: "true"
+    files:
+      # Server logs already reach HyperDX from stdout via the otel-logs
+      # agent; system.text_log duplicated them with no TTL.
+      config.d/disable_text_log.xml: |
+        <clickhouse>
+          <text_log remove="1"/>
+        </clickhouse>
     clusters:
       - name: replicated
         layout:
