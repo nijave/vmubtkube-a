@@ -257,10 +257,10 @@
       "versioning": "regex:^(?<major>latest)$"
     },
     {
-      "description": "yt-dlp",
+      "description": "yt-dlp: built by nijave/yt-dlp-Docker CI, which pushes monotonic date-based tags (YYYYMMDD-githash, the selfoss scheme) plus latest. A dated pin parses the date as one integer (same compatibility-suffix trap as selfoss) and keeps its digest.",
       "matchPackageNames": ["registry.apps.nickv.me/nijave/yt-dlp"],
       "pinDigests": true,
-      "versioning": "regex:^(?<major>latest)$"
+      "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
     },
     {
       "description": "cpu-benchmark: self-built, rebuilt by hand rarely; latest is the only tag, tracked by digest",
