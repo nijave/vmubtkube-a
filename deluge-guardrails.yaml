@@ -1,11 +1,10 @@
-# Pod-level guardrails for the deluge/unpackerr stack in media, evaluated
-# by the internal kube-prometheus rule set (label release: prom — this is
-# where kube-state-metrics series live).
+# Pod-level guardrails for deluge in media, evaluated by the internal
+# kube-prometheus rule set (label release: prom — this is where
+# kube-state-metrics series live).
 #
 # In-pod equivalent of the VPN-wedge probe the rtorrent VM had: a wedged
 # gluetun tunnel fails the sidecar's readinessProbe on the health server
-# (:9999), which takes the pod NotReady and fires here. Quiet while the
-# Deployments sit at replicas: 0 pre-cutover.
+# (:9999), which takes the pod NotReady and fires here.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -32,21 +31,6 @@ spec:
       expr: |
         kube_deployment_status_replicas_ready{namespace="media",deployment="deluge"}
           < kube_deployment_spec_replicas{namespace="media",deployment="deluge"}
-      for: 10m
-      labels:
-        severity: warning
-    - alert: UnpackerrPodUnavailable
-      annotations:
-        summary: unpackerr has no ready pods.
-        description: >-
-          deploy/unpackerr -n media has fewer ready replicas than desired,
-          so completed archives stopped being unpacked for sonarr. Check
-          'kubectl describe pod -l app.kubernetes.io/component=unpackerr
-          -n media' and restart with 'kubectl rollout restart
-          deploy/unpackerr -n media'.
-      expr: |
-        kube_deployment_status_replicas_ready{namespace="media",deployment="unpackerr"}
-          < kube_deployment_spec_replicas{namespace="media",deployment="unpackerr"}
       for: 10m
       labels:
         severity: warning
