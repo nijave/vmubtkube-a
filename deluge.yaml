@@ -22,11 +22,12 @@
 # scrape job from application.kube-prometheus.yaml.
 #
 # Config deltas applied to migrated state before first start (cutover step
-# 4, NOT here): core.conf listen_interface "" and outgoing_interface ""
-# (no airvpn iface in the pod; gluetun's firewall is the killswitch),
-# natpmp/upnp off, plugins_location "/config/plugins"; web.conf https
-# false (Service and probes are plain HTTP). Paths and ports carry over
-# untouched.
+# 4, NOT here): core.conf listen_interface and outgoing_interface
+# "airvpn" -> "tun0" (gluetun's WireGuard interface; gluetun's firewall is
+# the killswitch), natpmp/upnp off. web.conf keeps https: true (self-signed
+# TLS), so the Service is 443 and the probes use scheme HTTPS.
+# plugins_location needs no change: deluge 2.2 never reads it and loads
+# user plugins from /config/plugins. Paths and ports carry over untouched.
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -122,9 +123,12 @@ spec:
       type: Opaque
       data:
         VPN_SERVICE_PROVIDER: airvpn
+        SERVER_COUNTRIES: canada
         VPN_TYPE: wireguard
         WIREGUARD_IMPLEMENTATION: kernelspace
-        SERVER_COUNTRIES: canada
+        WIREGUARD_ADDRESSES: "{{ .WIREGUARD_ADDRESSES }}"
+        WIREGUARD_PRESHARED_KEY: "{{ .WIREGUARD_PRESHARED_KEY }}"
+        WIREGUARD_PRIVATE_KEY: "{{ .WIREGUARD_PRIVATE_KEY }}"
   data:
   - secretKey: WIREGUARD_PRIVATE_KEY
     remoteRef:
@@ -247,8 +251,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: http
-    port: 80
+  - name: https
+    port: 443
     targetPort: http
   - name: metrics
     port: 9354
@@ -270,7 +274,7 @@ metadata:
 spec:
   # Cutover commit flips this to 1 (runbook step 5); rollback scales back
   # to 0 first to release the AirVPN tunnel identity.
-  replicas: 0
+  replicas: 1
   strategy:
     type: Recreate
   selector:
@@ -383,6 +387,8 @@ spec:
         - containerPort: 8112
           name: http
           protocol: TCP
+        # deluge-web serves self-signed TLS (web.conf https: true); kubelet
+        # skips certificate verification for HTTPS probes.
         startupProbe:
           tcpSocket:
             port: http
@@ -393,11 +399,13 @@ spec:
           httpGet:
             path: /
             port: http
+            scheme: HTTPS
           initialDelaySeconds: 5
         readinessProbe:
           httpGet:
             path: /
             port: http
+            scheme: HTTPS
           initialDelaySeconds: 5
         volumeMounts:
         # Migrated VM state lands at /config (LSIO runs deluged with
@@ -451,8 +459,7 @@ metadata:
     app.kubernetes.io/component: unpackerr
     app.kubernetes.io/name: arr
 spec:
-  # Flips to 1 together with the deluge Deployment in the cutover commit.
-  replicas: 0
+  replicas: 1
   strategy:
     type: Recreate
   selector:

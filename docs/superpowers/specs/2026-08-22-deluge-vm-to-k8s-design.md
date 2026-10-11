@@ -87,8 +87,9 @@ deluge container details:
 - Volume mounts: `deluge-data` PVC at `/config` (LSIO runs
   `deluged -c /config`, so migrated state lands directly in `/config`),
   media PVC at `/media` (**exact path parity** keeps fastresumes valid).
-- Ports: 8112 `http`. Probes mirror the sabnzbd shape (startupProbe tcp,
-  liveness/readiness http `/`).
+- Ports: 8112 `http` (self-signed TLS, `web.conf` `https: true`). Probes
+  mirror the sabnzbd shape (startupProbe tcp, liveness/readiness httpGet
+  `/`) with `scheme: HTTPS`.
 
 deluge-exporter sidecar details:
 
@@ -126,7 +127,7 @@ deluge-exporter sidecar details:
 
 ### Exposure & monitoring
 
-- Service `deluge` (ClusterIP): port `http` 80→8112, GA annotation
+- Service `deluge` (ClusterIP): port `https` 443→8112, GA annotation
   `external-dns.kubernetes.io/hostname: deluge.k8s.somemissing.info`
   (Service IPs are routable; matches sonarr/sabnzbd pattern).
 - Exporter service entry carries label `app.kubernetes.io/name: arr` so
@@ -144,10 +145,13 @@ deluge-exporter sidecar details:
 
 ### Config deltas applied to migrated state (before first start)
 
-- `core.conf`: `listen_interface: ""` and `outgoing_interface: ""` (no
-  `airvpn` iface in pod; gluetun's firewall is the killswitch),
-  `natpmp/upnp` off, `plugins_location: "/config/plugins"`.
-- `web.conf`: `https: false` (Service and probes are plain HTTP).
+- `core.conf`: `listen_interface` and `outgoing_interface` `"airvpn"` →
+  `"tun0"` (gluetun's WireGuard interface; gluetun's firewall is the
+  killswitch), `natpmp/upnp` off.
+- `web.conf` keeps `https: true`; the Service exposes 443 and the probes
+  use `scheme: HTTPS`.
+- `plugins_location` needs no change: deluge 2.2 never reads it and loads
+  user plugins from `/config/plugins`.
 - Everything else (ports 58846/59836, paths, plugins ltConfig/AutoAdd/
   Label/Stats) carried over untouched.
 
@@ -181,9 +185,8 @@ WireGuard key, so the VM tunnel drops before the pod dials in.
     — frees the connection.
 4. Sync state: helper pod mounts `deluge-data`; rsync
    VM:`/var/lib/deluge/.config/deluge/` → `<pvc>/` (PVC root = `/config`);
-   apply the deltas (core.conf: `listen_interface ""`,
-   `outgoing_interface ""`, `natpmp/upnp` off,
-   `plugins_location "/config/plugins"`; web.conf: `https false`).
+   apply the core.conf deltas (`listen_interface`/`outgoing_interface`
+   `"tun0"`, `natpmp/upnp` off).
    Start the copy only after every VM service stops so fastresume state
    stays consistent (same rationale as the sibling spec).
 5. Flip replicas to 1 for `deluge` AND `unpackerr`, and remove the static
@@ -200,7 +203,8 @@ WireGuard key, so the VM tunnel drops before the pod dials in.
    - web UI serves at `deluge.k8s.somemissing.info`; exporter metrics
      flowing; guardrail alert quiet
 6. Repoint radarr/sonarr download clients to
-   `deluge.k8s.somemissing.info`; re-enable them; run one small
+   `deluge.k8s.somemissing.info` port 443 with SSL on (self-signed
+   cert); re-enable them; run one small
    end-to-end test download; confirm unpackerr picked up the rotated key
    (next completed archive unpacks).
 7. Burn-in 24–48h: alerts quiet, upload moving.
