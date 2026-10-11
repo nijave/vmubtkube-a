@@ -223,9 +223,9 @@ spec:
                 - name: S3_ENDPOINT
                   value: http://nas.apps.somemissing.info:9001
                 - name: S3_BUCKET
-                  value: thanos
+                  value: clickhouse-backup
                 - name: S3_PATH
-                  value: clickhouse-backup/{cluster}/{shard}
+                  value: "{cluster}/{shard}"
                 - name: S3_FORCE_PATH_STYLE
                   value: "true"
                 - name: WATCH_INTERVAL
