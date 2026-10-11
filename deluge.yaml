@@ -235,6 +235,40 @@ spec:
     app.kubernetes.io/component: deluge
     app.kubernetes.io/name: arr
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: deluge-k8s-somemissing-info-cert
+  namespace: media
+spec:
+  secretName: deluge-k8s-somemissing-info-tls
+  issuerRef:
+    name: cert-manager-webhook-dnsimple-production
+    kind: ClusterIssuer
+  commonName: &cn deluge.k8s.somemissing.info
+  dnsNames:
+    - *cn
+---
+# deluge-web reads its TLS cert/key paths from web.conf on the config PVC
+# (not env) and writes its in-memory config back on shutdown, so a one-off
+# edit would not stick. LSIO runs /custom-cont-init.d scripts as root before
+# the services start: repoint web.conf at the cert-manager files every boot.
+# Rewrite in place (not sed -i) to keep web.conf's abc owner and mode.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deluge-web-tls-init
+  namespace: media
+data:
+  10-web-tls.sh: |
+    #!/usr/bin/with-contenv bash
+    f=/config/web.conf
+    [ -f "$f" ] || exit 0
+    new=$(sed -E \
+      -e 's#("cert": )"[^"]*"#\1"/cert/tls.crt"#' \
+      -e 's#("pkey": )"[^"]*"#\1"/cert/tls.key"#' "$f")
+    printf '%s\n' "$new" > "$f"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -244,6 +278,8 @@ metadata:
     app.kubernetes.io/component: deluge
     app.kubernetes.io/name: arr
   annotations:
+    # Also rolls the pod when cert-manager renews the TLS Secret; deluge-web
+    # only loads the cert at startup.
     reloader.stakater.com/auto: "true"
 spec:
   # Cutover commit flips this to 1 (runbook step 5); rollback scales back
@@ -361,8 +397,8 @@ spec:
         - containerPort: 8112
           name: http
           protocol: TCP
-        # deluge-web serves self-signed TLS (web.conf https: true); kubelet
-        # skips certificate verification for HTTPS probes.
+        # deluge-web serves TLS (web.conf https: true) with the Let's
+        # Encrypt cert from deluge-k8s-somemissing-info-tls.
         startupProbe:
           tcpSocket:
             port: http
@@ -388,6 +424,12 @@ spec:
           mountPath: /config
         - name: media
           mountPath: /media
+        - name: tls
+          mountPath: /cert
+          readOnly: true
+        - name: tls-init
+          mountPath: /custom-cont-init.d
+          readOnly: true
         resources:
           requests:
             memory: 512Mi
@@ -424,6 +466,15 @@ spec:
       - name: media
         persistentVolumeClaim:
           claimName: deluge-media
+      # 0440 + fsGroup 1001: deluge-web (abc, gid 1001) can read tls.key.
+      - name: tls
+        secret:
+          secretName: deluge-k8s-somemissing-info-tls
+          defaultMode: 0440
+      - name: tls-init
+        configMap:
+          name: deluge-web-tls-init
+          defaultMode: 0755
 ---
 apiVersion: apps/v1
 kind: Deployment
