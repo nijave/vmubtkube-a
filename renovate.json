@@ -259,16 +259,8 @@
     {
       "description": "yt-dlp: built by nijave/yt-dlp-Docker CI, which pushes monotonic date-based tags (YYYYMMDD-githash, the selfoss scheme) plus latest. A dated pin parses the date as one integer (same compatibility-suffix trap as selfoss) and keeps its digest.",
       "matchPackageNames": ["registry.apps.nickv.me/nijave/yt-dlp"],
-      "matchCurrentValue": "/^\\d{8}-[a-f0-9]+$/",
       "pinDigests": true,
       "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
-    },
-    {
-      "description": "yt-dlp: transitional. The pre-CI hand-built image has only a latest tag; while yt-dlp.yaml still pins latest@digest, track the digest behind latest (the CI also moves latest). Delete this rule once the pin moves to a dated tag.",
-      "matchPackageNames": ["registry.apps.nickv.me/nijave/yt-dlp"],
-      "matchCurrentValue": "latest",
-      "pinDigests": true,
-      "versioning": "regex:^(?<major>latest)$"
     },
     {
       "description": "cpu-benchmark: self-built, rebuilt by hand rarely; latest is the only tag, tracked by digest",
