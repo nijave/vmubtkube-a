@@ -253,12 +253,20 @@ spec:
             tag: v0.5.7
         storageClasses:
           - name: zfs-generic-iscsi-csi
+            # StorageClass parameters are immutable; Argo must delete and
+            # recreate the class to change them (existing PVs are unaffected).
+            annotations:
+              argocd.argoproj.io/sync-options: Replace=true,Force=true
             defaultClass: true
             reclaimPolicy: Delete
             volumeBindingMode: Immediate
             allowVolumeExpansion: true
             parameters:
               fsType: ext4
+              # read the democratic-csi.org/config PVC annotation; the fork
+              # accepts ZFS user properties there, e.g. homelab:sanoid-skip
+              # and syncoid:sync for the NAS snapshot/replication jobs
+              load-config-from-pvc: "true"
               csi.storage.k8s.io/node-stage-secret-name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
               csi.storage.k8s.io/node-stage-secret-namespace: kube-system
             mountOptions: []
