@@ -134,7 +134,7 @@ spec:
             # Built by github.com/nijave/yt-dlp-Docker (Woodpecker)
             # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/yt-dlp
             image: registry.apps.nickv.me/nijave/yt-dlp:20261011-ec1ac3d@sha256:0157ee490d9885f7bf5ff3131bc6099ed6968332798c7fcbdd51d6901d050e5b
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             env:
             - name: TZ
               value: Etc/UTC
