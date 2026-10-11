@@ -131,6 +131,9 @@ spec:
             runAsGroup: 1001
           containers:
           - name: yt-dlp
+            # Built by github.com/nijave/yt-dlp-Docker (Woodpecker). Move this
+            # pin to the first dated CI tag (YYYYMMDD-sha@sha256:...) once it
+            # exists; renovate.json tracks either form.
             # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/yt-dlp
             image: registry.apps.nickv.me/nijave/yt-dlp:latest@sha256:22b2003d2cf8727f496262011fe1bdeffbe9bc101eb52862a323456525c6080e
             imagePullPolicy: Always
