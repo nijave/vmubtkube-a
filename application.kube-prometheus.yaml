@@ -245,6 +245,12 @@ spec:
             annotations:
               external-dns.kubernetes.io/hostname: prometheus.k8s.somemissing.info
           prometheusSpec:
+            # The chart renders additionalScrapeConfigs (and the alertmanager /
+            # relabel config Secrets) from git values; without this opt-in the
+            # global Secret .data ignoreDifferences in argocd-cm keeps the live
+            # Secret stale and Argo still reports Synced.
+            additionalPrometheusSecretsAnnotations:
+              k8s.somemissing.info/argocd-manage-secret-data: "true"
             replicas: 2
             # `hard` = requiredDuringScheduling on hostname; with 8 nodes and 2
             # replicas this guarantees they land on separate hosts so a single
