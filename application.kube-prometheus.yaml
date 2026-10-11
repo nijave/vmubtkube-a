@@ -400,9 +400,6 @@ spec:
               matchLabels:
                 release: prom
             additionalScrapeConfigs:
-            - job_name: 'deluge'
-              static_configs:
-              - targets: ['vmcent74deluge.homelab.somemissing.info:9354']
             - job_name: jellyfin
               static_configs:
               - targets: ['jellyfin.apps.somemissing.info:80']

@@ -106,7 +106,7 @@ deluge-exporter sidecar details:
   the export root `/media/av`; a bare mount would nest paths as
   `/media/torrents/torrents/…` and sonarr-provided paths wouldn't
   resolve); no config PVC (stateless).
-- `UN_SONARR_0_URL=http://sonarr.media.svc.cluster.local:8989`; **rotated**
+- `UN_SONARR_0_URL=http://sonarr.media.svc.cluster.local`; **rotated**
   sonarr API key injected via ExternalSecret (Bitwarden item created
   out-of-band; removes the compose-file plaintext key).
 
@@ -152,8 +152,10 @@ deluge-exporter sidecar details:
   use `scheme: HTTPS`.
 - `plugins_location` needs no change: deluge 2.2 never reads it and loads
   user plugins from `/config/plugins`.
-- Everything else (ports 58846/59836, paths, plugins ltConfig/AutoAdd/
-  Label/Stats) carried over untouched.
+- Everything else (ports 58846/59836, paths, plugins AutoAdd/Label/Stats)
+  carried over untouched. ltConfig is dropped: its egg sat unused in
+  `plugins/bak` on the VM, so cutover removed it from `enabled_plugins`
+  and deleted the egg and `ltconfig.conf`.
 
 ## Out-of-band prerequisites (before cutover)
 
@@ -198,8 +200,7 @@ WireGuard key, so the VM tunnel drops before the pod dials in.
      checker) — before any client is repointed
    - torrents resume without rehash (spot-check several; labels/plugins
      intact); NFS writes work as 1002:1001
-   - plugins load (Label, AutoAdd; ltConfig's egg sits in plugins/bak on
-     the VM, so the VM doesn't load it today — restore or disable it)
+   - plugins load (AutoAdd, Label, Stats; ltConfig dropped, see above)
    - web UI serves at `deluge.k8s.somemissing.info`; exporter metrics
      flowing; guardrail alert quiet
 6. Repoint radarr/sonarr download clients to
