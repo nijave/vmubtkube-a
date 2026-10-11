@@ -61,6 +61,14 @@ kind: PersistentVolumeClaim
 metadata:
   name: buildkitd-cache
   namespace: woodpecker
+  # Opt out of NAS ZFS snapshots/replication: build cache is reproducibly
+  # rebuilt by builds. democratic-csi reads the config at volume creation.
+  annotations:
+    democratic-csi.org/config: |
+      zfs:
+        datasetProperties:
+          homelab:sanoid-skip: "true"
+          syncoid:sync: "false"
 spec:
   accessModes:
     - ReadWriteOnce

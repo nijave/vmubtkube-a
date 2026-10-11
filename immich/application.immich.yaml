@@ -105,6 +105,14 @@ spec:
               type: persistentVolumeClaim
               size: 20Gi
               accessMode: ReadWriteOnce
+              # Opt out of NAS ZFS snapshots/replication for the cache PVC:
+              # it holds re-downloadable model weights.
+              annotations:
+                democratic-csi.org/config: |
+                  zfs:
+                    datasetProperties:
+                      homelab:sanoid-skip: "true"
+                      syncoid:sync: "false"
         valkey:
           enabled: true
           controllers:
