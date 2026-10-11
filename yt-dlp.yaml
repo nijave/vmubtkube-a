@@ -132,7 +132,7 @@ spec:
           containers:
           - name: yt-dlp
             # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/yt-dlp
-            image: registry.apps.nickv.me/nijave/yt-dlp:latest@sha256:22b2003d2cf8727f496262011fe1bdeffbe9bc101eb52862a323456525c6080e
+            image: registry.apps.nickv.me/nijave/yt-dlp:latest@sha256:0157ee490d9885f7bf5ff3131bc6099ed6968332798c7fcbdd51d6901d050e5b
             imagePullPolicy: Always
             env:
             - name: TZ
