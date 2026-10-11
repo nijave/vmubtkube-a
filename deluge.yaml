@@ -2,32 +2,6 @@
 # Deluge stack migration from vmcent74deluge (Docker Compose) into the
 # media namespace. Design:
 # docs/superpowers/specs/2026-08-22-deluge-vm-to-k8s-design.md
-#
-# Pre-cutover state: both Deployments run at replicas: 0. ArgoCD autosync
-# reconciles storage and secrets immediately, but no pod exists (and no
-# AirVPN session is claimed) until the cutover commit flips replicas to 1.
-#
-# Out-of-band prerequisites before cutover (runbook steps 1-4):
-#   - Bitwarden items gluetun-deluge-wireguard-{private-key,preshared-key,
-#     addresses} holding the VM's live wg-quick@airvpn identity, exported
-#     while the tunnel is still up (one live session per key; never shared
-#     with the vmubttorrent01 stack)
-#   - rotated sonarr API key in Bitwarden as sonarr-api-key (replaces the
-#     plaintext key baked into the VM compose file)
-#   - volsync-deluge bucket on vmubthh01 S3
-#   - delete the manually created gluetun-airvpn Secret in media (POC
-#     leftover, revoked keys) before merge so the ExternalSecret owns it
-#
-# The cutover commit (runbook step 5) also removes the static `deluge`
-# scrape job from application.kube-prometheus.yaml.
-#
-# Config deltas applied to migrated state before first start (cutover step
-# 4, NOT here): core.conf listen_interface and outgoing_interface
-# "airvpn" -> "tun0" (gluetun's WireGuard interface; gluetun's firewall is
-# the killswitch), natpmp/upnp off. web.conf keeps https: true (self-signed
-# TLS), so the Service is 443 and the probes use scheme HTTPS.
-# plugins_location needs no change: deluge 2.2 never reads it and loads
-# user plugins from /config/plugins. Paths and ports carry over untouched.
 ---
 apiVersion: v1
 kind: PersistentVolume
