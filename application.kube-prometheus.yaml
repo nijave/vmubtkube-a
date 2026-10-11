@@ -404,6 +404,16 @@ spec:
                 cpu: 500m
             storageSpec:
               volumeClaimTemplate:
+                # Opt out of NAS ZFS snapshots/replication for the Prometheus
+                # data PVCs: local TSDB data is remote-written to Thanos Receive
+                # and 7d retention makes it cheap to rebuild.
+                metadata:
+                  annotations:
+                    democratic-csi.org/config: |
+                      zfs:
+                        datasetProperties:
+                          homelab:sanoid-skip: "true"
+                          syncoid:sync: "false"
                 spec:
                   resources:
                     requests:

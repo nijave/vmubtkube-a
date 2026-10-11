@@ -86,7 +86,17 @@ spec:
                 limits:
                   memory: 1Gi
     volumeClaimTemplates:
+      # Opt out of NAS ZFS snapshots/replication for the keeper data PVC:
+      # raft log state is recovered from the other 2 keepers. democratic-csi
+      # reads the annotation at volume creation.
       - name: default
+        metadata:
+          annotations:
+            democratic-csi.org/config: |
+              zfs:
+                datasetProperties:
+                  homelab:sanoid-skip: "true"
+                  syncoid:sync: "false"
         spec:
           accessModes:
             - ReadWriteOnce

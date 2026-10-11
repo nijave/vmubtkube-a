@@ -143,6 +143,14 @@ spec:
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
+      # Opt out of NAS ZFS snapshots/replication: compaction state is rebuilt
+      # from object storage. democratic-csi reads this at volume creation.
+      annotations:
+        democratic-csi.org/config: |
+          zfs:
+            datasetProperties:
+              homelab:sanoid-skip: "true"
+              syncoid:sync: "false"
       creationTimestamp: null
       labels:
         app.kubernetes.io/component: database-compactor
