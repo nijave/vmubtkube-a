@@ -144,6 +144,7 @@ spec:
       default/allow_experimental_object_type: "1"
       default/distributed_ddl_entry_format_version: "5"
     settings:
+      logger/level: information
       prometheus/endpoint: /metrics
       prometheus/port: "9363"
       prometheus/metrics: "true"
