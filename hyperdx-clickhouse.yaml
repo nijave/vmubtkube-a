@@ -201,8 +201,18 @@ spec:
                 limits:
                   memory: 8Gi
     volumeClaimTemplates:
+      # Telemetry with a 30-day TTL on two replicas: merges rewrite parts
+      # constantly, so NAS snapshots and syncoid copies cost far more than
+      # they protect. clickhouse-backup covers recovery.
       - name: data
         reclaimPolicy: Retain
+        metadata:
+          annotations: &snapshot-skip
+            democratic-csi.org/config: |
+              zfs:
+                datasetProperties:
+                  homelab:sanoid-skip: "true"
+                  syncoid:sync: "false"
         spec:
           accessModes:
             - ReadWriteOnce
@@ -211,6 +221,8 @@ spec:
             requests:
               storage: 250Gi
       - name: logs
+        metadata:
+          annotations: *snapshot-skip
         spec:
           accessModes:
             - ReadWriteOnce
