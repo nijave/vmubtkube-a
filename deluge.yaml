@@ -15,10 +15,18 @@
 #   - rotated sonarr API key in Bitwarden as sonarr-api-key (replaces the
 #     plaintext key baked into the VM compose file)
 #   - volsync-deluge bucket on vmubthh01 S3
+#   - delete the manually created gluetun-airvpn Secret in media (POC
+#     leftover, revoked keys) before merge so the ExternalSecret owns it
+#
+# The cutover commit (runbook step 5) also removes the static `deluge`
+# scrape job from application.kube-prometheus.yaml.
 #
 # Config deltas applied to migrated state before first start (cutover step
-# 4, NOT here): core.conf listen_interface "" / allow_remote true /
-# natpmp upnp off. Paths and ports carry over untouched.
+# 4, NOT here): core.conf listen_interface "" and outgoing_interface ""
+# (no airvpn iface in the pod; gluetun's firewall is the killswitch),
+# natpmp/upnp off, plugins_location "/config/plugins"; web.conf https
+# false (Service and probes are plain HTTP). Paths and ports carry over
+# untouched.
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -98,8 +106,7 @@ spec:
     requests:
       storage: 40Gi
 ---
-# Replaces nothing in-cluster (the VM kept its state local); migrated state
-# lands at /config/.config/deluge via rsync during cutover. LSIO layout.
+# The VM's live AirVPN WireGuard identity (gluetun env) from Bitwarden.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -276,11 +283,10 @@ spec:
         app.kubernetes.io/component: deluge
         app.kubernetes.io/name: arr
     spec:
-      # userns isolation; kernel-mode WireGuard runs inside the pod's
-      # user namespace (gluetun >= v3.41 includes the userns fix the POC
-      # validated via pr-3336; forked image is contingency only, see
-      # docs/agent-memory/project_gluetun_fork.md).
-      hostUsers: false
+      # No user namespace: NFS volumes do not support idmap mounts, so the
+      # deluge-media PVC cannot mount under userns. Kernelspace WireGuard
+      # in upstream gluetun >= v3.41 needs no /dev/net/tun, so the forked
+      # image is not needed.
       # Clean session save for ~325 torrents on SIGTERM.
       terminationGracePeriodSeconds: 60
       # DNS goes through the tunnel (POC pattern); ndots=1 keeps
@@ -348,6 +354,14 @@ spec:
             port: 9999
           periodSeconds: 30
           failureThreshold: 5
+        # Readiness: a failing tunnel takes the pod NotReady (startup and
+        # liveness alone would just restart gluetun).
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9999
+          periodSeconds: 10
+          failureThreshold: 3
         resources:
           requests:
             memory: 64Mi
@@ -386,8 +400,8 @@ spec:
             port: http
           initialDelaySeconds: 5
         volumeMounts:
-        # Migrated VM state lands at /config/.config/deluge; exact /media
-        # path parity keeps fastresumes valid.
+        # Migrated VM state lands at /config (LSIO runs deluged with
+        # -c /config); exact /media path parity keeps fastresumes valid.
         - name: config
           mountPath: /config
         - name: media
@@ -405,14 +419,13 @@ spec:
         - containerPort: 9354
           name: metrics
           protocol: TCP
-        # Auth/config from the same state dir, read-only; talks to deluged
-        # over localhost, so no cross-pod RPC hole through gluetun's
-        # firewall. Metric names unchanged -> TooManyPausedTorrents
-        # unaffected.
+        # Whole config volume read-only at /root/.config/deluge (deluge
+        # state lives directly in /config); talks to deluged over
+        # localhost, so no cross-pod RPC hole through gluetun's firewall.
+        # Metric names unchanged -> TooManyPausedTorrents unaffected.
         volumeMounts:
         - name: config
           mountPath: /root/.config/deluge
-          subPath: .config/deluge
           readOnly: true
         resources:
           requests:

@@ -3,7 +3,8 @@
 # where kube-state-metrics series live).
 #
 # In-pod equivalent of the VPN-wedge probe the rtorrent VM had: a wedged
-# gluetun tunnel takes the pod NotReady and fires here. Quiet while the
+# gluetun tunnel fails the sidecar's readinessProbe on the health server
+# (:9999), which takes the pod NotReady and fires here. Quiet while the
 # Deployments sit at replicas: 0 pre-cutover.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -21,10 +22,11 @@ spec:
         summary: The deluge stack has no ready pods.
         description: >-
           deploy/deluge -n media has fewer ready replicas than desired.
-          Most likely the gluetun sidecar's health checks are failing
-          (WireGuard tunnel down/wedged) or the web UI isn't serving.
-          Check 'kubectl describe pod -l app.kubernetes.io/component=deluge
-          -n media' and gluetun logs before restarting with 'kubectl
+          Most likely the gluetun sidecar's readinessProbe on the health
+          server is failing (WireGuard tunnel down/wedged) or the web UI
+          isn't serving. Check 'kubectl describe pod -l
+          app.kubernetes.io/component=deluge -n media' and gluetun logs
+          before restarting with 'kubectl
           rollout restart deploy/deluge -n media'. A restart re-dials the
           AirVPN tunnel; peers reconnect on their own.
       expr: |
