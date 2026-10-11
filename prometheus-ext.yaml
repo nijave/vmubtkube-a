@@ -91,6 +91,10 @@ kind: Secret
 metadata:
   name: prometheus-ext-scrape-configs
   namespace: monitoring
+  annotations:
+    # Values live in git, so opt out of argocd-cm's global Secret .data
+    # ignoreDifferences; otherwise scrape config edits never reach the cluster.
+    k8s.somemissing.info/argocd-manage-secret-data: "true"
 stringData:
   scrape-configs.yaml: |
     - job_name: prometheus
