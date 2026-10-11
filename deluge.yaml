@@ -412,10 +412,11 @@ spec:
         resources:
           requests:
             memory: 32Mi
-            cpu: 10m
+            cpu: 50m
           limits:
             memory: 128Mi
-            cpu: 250m
+            # 250m throttled (CPUThrottlingHigh) scraping ~325 torrents.
+            cpu: 1000m
       volumes:
       - name: config
         persistentVolumeClaim:
@@ -461,7 +462,7 @@ spec:
         - name: UN_DEBUG
           value: "true"
         - name: UN_SONARR_0_URL
-          value: http://sonarr.media.svc.cluster.local:8989
+          value: http://sonarr.media.svc.cluster.local
         - name: UN_SONARR_0_PATHS_0
           value: /media/torrents
         envFrom:

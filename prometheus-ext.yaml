@@ -102,7 +102,6 @@ stringData:
       static_configs:
       - targets:
         - ubthv01.homelab.somemissing.info:9100
-        - vmcent74deluge.homelab.somemissing.info:9100
         - vmcent74docker.homelab.somemissing.info:9100
         - vmcent74web02.homelab.somemissing.info:9100
         - vmcentelk01.homelab.somemissing.info:9100
