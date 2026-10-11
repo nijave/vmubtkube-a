@@ -48,7 +48,3 @@ spec:
                   # CHIs/CHKs in hyperdx were never reconciled. ".*" = all.
                   include:
                     - ".*"
-              logger:
-                # temporary: debug why CHI hyperdx/hyperdx is not reconciled
-                # (V(2)/V(3) log informer events and reconcile steps)
-                v: "3"
