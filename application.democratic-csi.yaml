@@ -229,7 +229,7 @@ spec:
             image:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: latest@sha256:c562a48a19f0aba7f5ae61a64c5aaa559de35d8725aa9bae8a8538de87af45a8
+              tag: latest@sha256:b8a3db7fc9bcdafd8f129806acdca8a871be215180b8316153308fa06421681c
         node:
           cleanup:
             image:
@@ -240,7 +240,7 @@ spec:
             image:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: latest@sha256:c562a48a19f0aba7f5ae61a64c5aaa559de35d8725aa9bae8a8538de87af45a8
+              tag: latest@sha256:b8a3db7fc9bcdafd8f129806acdca8a871be215180b8316153308fa06421681c
           driverRegistrar:
             image:
               # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
