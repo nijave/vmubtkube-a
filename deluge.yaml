@@ -151,6 +151,8 @@ spec:
       monthly: 3
       yearly: 0
     copyMethod: Clone
+    # temporary clone PVC: ephemeral class keeps it out of sanoid/syncoid
+    storageClassName: zfs-generic-iscsi-csi-ephemeral
 ---
 # Web UI + exporter metrics in one Service so the existing arr
 # ServiceMonitor (media.yaml, label app.kubernetes.io/name: arr) scrapes
