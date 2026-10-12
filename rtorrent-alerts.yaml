@@ -1,16 +1,14 @@
 # Alert rules for the rtorrent stack, evaluated by the `ext` Prometheus
-# (ruleSelector matchLabels prometheus: ext).
+# (ruleSelector matchLabels prometheus: ext) against the VM until cutover.
 #
-# Sources scraped here, by migration phase (see
-# docs/superpowers/specs/2026-08-22-torrent-vm-to-k8s-design.md):
-#   - pre-cutover: the rtorrent-exporter ScrapeConfig against the
-#     vmubttorrent01 VM (kept until decom; the node_exporter target and the
-#     vmubttorrent01.rules group retire with the VM)
-#   - post-cutover: the ServiceMonitor on svc/rtorrent-metrics in media
-#     (torrent.yaml), rendered as job "serviceMonitor/media/rtorrent-metrics/*"
-#
-# The exprs below match either job so alerts stay meaningful across the whole
-# transition without a mid-migration edit.
+# This branch merges while vmubttorrent01 is still live, so the rules keep
+# matching the VM's rtorrent-exporter ScrapeConfig job. The cutover commit
+# switches this PrometheusRule to label release: prom (the in-cluster
+# kube-prometheus, which scrapes svc/rtorrent-metrics in media via the
+# ServiceMonitor in torrent.yaml), changes the job matcher below to
+# job="rtorrent-metrics", and deletes scrapeconfig-rtorrent-exporter.yaml.
+# (The node_exporter target and the vmubttorrent01.rules group retire with
+# the VM at decom.)
 #
 # 2026-08-15 incident context: rtorrent's event loop wedged between 02:02
 # (last successful RPC2 response) and 02:04 UTC (first 504). The process
@@ -42,11 +40,10 @@ spec:
           A 504 means rtorrent itself is wedged; restart with
           'cd /mnt/docker && docker compose restart rtorrent' on the VM or
           'kubectl rollout restart deploy/torrent -n media' post-cutover.
-      # Matches both the operator-rendered ScrapeConfig job
-      # ("scrapeConfig/<namespace>/<name>") and the post-cutover
-      # ServiceMonitor job ("serviceMonitor/media/rtorrent-metrics/<n>");
-      # absent() fires only when neither job exists.
-      expr: up{job=~"scrapeConfig/.*/rtorrent-exporter|serviceMonitor/media/rtorrent-metrics/.*"} != 1 or absent(up{job=~"scrapeConfig/.*/rtorrent-exporter|serviceMonitor/media/rtorrent-metrics/.*"})
+      # The operator renders ScrapeConfig jobs as
+      # "scrapeConfig/<namespace>/<name>", so match on a regex rather than
+      # the bare CR name.
+      expr: up{job=~"scrapeConfig/.*/rtorrent-exporter"} != 1 or absent(up{job=~"scrapeConfig/.*/rtorrent-exporter"})
       for: 10m
       labels:
         severity: critical
