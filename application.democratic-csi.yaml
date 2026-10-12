@@ -55,7 +55,16 @@ spec:
             # democratic-csi:managed_resource and would block DeleteVolume forever;
             # only snapshots with the property set locally/received count as managed
             deleteVolumeIgnoreForeignSnapshots: true
-          
+
+            # clone PVCs (VolSync copyMethod: Clone) are short-lived; keep them
+            # out of sanoid and syncoid, or their backup copies pin the parent's
+            # @volume-source-for-volume-* snapshot and break replication.
+            # A PVC annotation can still override these.
+            cloneDatasetProperties:
+              set:
+                "homelab:sanoid-skip": "true"
+                "syncoid:sync": "false"
+
             # can be used to set arbitrary values on the dataset/zvol
             # can use handlebars templates with the parameters from the storage class/CO
             #datasetProperties:
