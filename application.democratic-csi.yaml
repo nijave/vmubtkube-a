@@ -56,14 +56,12 @@ spec:
             # only snapshots with the property set locally/received count as managed
             deleteVolumeIgnoreForeignSnapshots: true
 
-            # clone PVCs (VolSync copyMethod: Clone) are short-lived; keep them
-            # out of sanoid and syncoid, or their backup copies pin the parent's
-            # @volume-source-for-volume-* snapshot and break replication.
-            # A PVC annotation can still override these.
+            # a clone of a volume excluded from sanoid/syncoid stays excluded
+            # (zfs clones don't inherit properties from their origin)
             cloneDatasetProperties:
-              set:
-                "homelab:sanoid-skip": "true"
-                "syncoid:sync": "false"
+              copy:
+                - "homelab:sanoid-skip"
+                - "syncoid:sync"
 
             # can be used to set arbitrary values on the dataset/zvol
             # can use handlebars templates with the parameters from the storage class/CO
