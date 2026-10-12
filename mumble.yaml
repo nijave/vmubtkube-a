@@ -88,6 +88,9 @@ spec:
       monthly: 3
       yearly: 0
     copyMethod: Clone
+    # clone and cache PVCs: ephemeral class keeps them out of sanoid/syncoid
+    storageClassName: zfs-generic-iscsi-csi-ephemeral
+    cacheStorageClassName: zfs-generic-iscsi-csi-ephemeral
 ---
 apiVersion: v1
 kind: Service

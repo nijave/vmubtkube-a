@@ -55,7 +55,14 @@ spec:
             # democratic-csi:managed_resource and would block DeleteVolume forever;
             # only snapshots with the property set locally/received count as managed
             deleteVolumeIgnoreForeignSnapshots: true
-          
+
+            # a clone of a volume excluded from sanoid/syncoid stays excluded
+            # (zfs clones don't inherit properties from their origin)
+            cloneDatasetProperties:
+              copy:
+                - "homelab:sanoid-skip"
+                - "syncoid:sync"
+
             # can be used to set arbitrary values on the dataset/zvol
             # can use handlebars templates with the parameters from the storage class/CO
             #datasetProperties:
@@ -275,5 +282,32 @@ spec:
               controller-publish-secret:
               # manually create Secret and parameter for this one
               # node-stage-secret:
+              node-publish-secret:
+              controller-expand-secret:
+          # short-lived volumes (VolSync clone PVCs, scratch space): skipped by
+          # sanoid and syncoid on the NAS. A replicated clone outlives its
+          # source on the backup pool and pins the parent's
+          # @volume-source-for-volume-* snapshot, which breaks syncoid.
+          - name: zfs-generic-iscsi-csi-ephemeral
+            annotations:
+              argocd.argoproj.io/sync-options: Replace=true,Force=true
+            defaultClass: false
+            reclaimPolicy: Delete
+            volumeBindingMode: Immediate
+            allowVolumeExpansion: true
+            parameters:
+              fsType: ext4
+              load-config-from-pvc: "true"
+              config: |
+                zfs:
+                  datasetProperties:
+                    "homelab:sanoid-skip": "true"
+                    "syncoid:sync": "false"
+              csi.storage.k8s.io/node-stage-secret-name: node-stage-secret-zfs-generic-iscsi-csi-democratic-csi
+              csi.storage.k8s.io/node-stage-secret-namespace: kube-system
+            mountOptions: []
+            secrets:
+              provisioner-secret:
+              controller-publish-secret:
               node-publish-secret:
               controller-expand-secret:
