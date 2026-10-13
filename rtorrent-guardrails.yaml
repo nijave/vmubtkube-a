@@ -1,13 +1,11 @@
 # Pod-level guardrail for the torrent stack in media, evaluated by the
 # internal kube-prometheus rule set (label release: prom — this is where
-# kube-state-metrics series live; the ext Prometheus only scrapes VM
-# targets, see prometheus-ext.yaml).
+# kube-state-metrics series live).
 #
-# In-pod replacement for the host-level VPN-wedge probe in the
-# vmubttorrent01.rules group (application.kube-prometheus.yaml): a wedged
-# gluetun tunnel fails the sidecar's readinessProbe on the health server
-# (:9999), which takes the pod NotReady and fires here. Quiet while the
-# Deployments sit at replicas: 0 pre-cutover.
+# In-pod replacement for the VM's host-level vpn-probe alert
+# (VpnTunnelUnusable, retired with vmubttorrent01): a wedged gluetun tunnel
+# fails the sidecar's readinessProbe on the health server (:9999), which
+# takes the pod NotReady and fires here.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -28,7 +26,7 @@ spec:
           server is failing (WireGuard tunnel down/wedged) or nginx's RPC
           listener isn't serving. Check 'kubectl describe pod -l
           app.kubernetes.io/name=rtorrent -n media' and gluetun logs before
-          restarting with 'kubectl rollout restart deploy/torrent -n
+          restarting with 'kubectl rollout restart deploy/rtorrent -n
           media'. A restart re-dials the VPN tunnel; peers reconnect on
           their own.
       expr: |
