@@ -1,13 +1,21 @@
-# Alert rules for the rtorrent stack on vmubttorrent01, evaluated by the
-# `ext` Prometheus (ruleSelector matchLabels prometheus: ext). Metrics come
-# from the rtorrent-exporter scrape added in the companion ScrapeConfig PR;
-# without it these rules fire as absent/unknown until that job exists.
+# Alert rules for the rtorrent stack, evaluated by the `ext` Prometheus
+# (ruleSelector matchLabels prometheus: ext) against the VM until cutover.
+#
+# This branch merges while vmubttorrent01 is still live, so the rules keep
+# matching the VM's rtorrent-exporter ScrapeConfig job. The cutover commit
+# switches this PrometheusRule to label release: prom (the in-cluster
+# kube-prometheus, which scrapes svc/rtorrent-metrics in media via the
+# ServiceMonitor in torrent.yaml), changes the job matcher below to
+# job="rtorrent-metrics", and deletes scrapeconfig-rtorrent-exporter.yaml.
+# (The node_exporter target and the vmubttorrent01.rules group retire with
+# the VM at decom.)
 #
 # 2026-08-15 incident context: rtorrent's event loop wedged between 02:02
 # (last successful RPC2 response) and 02:04 UTC (first 504). The process
 # kept listening on its SCGI socket but never accept()ed, so the exporter's
 # /metrics hung too — surfacing as up == 0 rather than any rtorrent_* gauge
-# going stale. A container restart recovered it.
+# going stale. A container restart recovered it. In-pod, the equivalent is
+# 'kubectl rollout restart deploy/torrent -n media'.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -21,16 +29,17 @@ spec:
     rules:
     - alert: RtorrentExporterScrapeFailing
       annotations:
-        summary: rtorrent-exporter on vmubttorrent01 is not scrapeable.
+        summary: rtorrent-exporter is not scrapeable.
         description: >-
           The rtorrent-exporter scrape has failed for 10m. When rtorrent's
           SCGI event loop wedges (2026-08-15: frozen 02:02-14:40 UTC) the
           exporter's /metrics hangs with it and reads as down; the same alert
-          covers exporter crashes and credential expiry. Check RPC2 health
-          from the box: docker exec rtorrent curl -s -o /dev/null -w '%{http_code}'
+          covers exporter crashes and credential expiry. Pre-cutover, check
+          RPC2 health from the VM: docker exec rtorrent curl -s -o /dev/null -w '%{http_code}'
           -u admin:$PW http://127.0.0.1:5000/RPC2 --d '<methodCall><methodName>system.client_version</methodName></methodCall>'.
           A 504 means rtorrent itself is wedged; restart with
-          'cd /mnt/docker && docker compose restart rtorrent'.
+          'cd /mnt/docker && docker compose restart rtorrent' on the VM or
+          'kubectl rollout restart deploy/torrent -n media' post-cutover.
       # The operator renders ScrapeConfig jobs as
       # "scrapeConfig/<namespace>/<name>", so match on a regex rather than
       # the bare CR name.

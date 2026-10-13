@@ -1,0 +1,55 @@
+# Pod-level guardrail for the torrent stack in media, evaluated by the
+# internal kube-prometheus rule set (label release: prom — this is where
+# kube-state-metrics series live; the ext Prometheus only scrapes VM
+# targets, see prometheus-ext.yaml).
+#
+# In-pod replacement for the host-level VPN-wedge probe in the
+# vmubttorrent01.rules group (application.kube-prometheus.yaml): a wedged
+# gluetun tunnel fails the sidecar's readinessProbe on the health server
+# (:9999), which takes the pod NotReady and fires here. Quiet while the
+# Deployments sit at replicas: 0 pre-cutover.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rtorrent-guardrails
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: rtorrent
+    rules:
+    - alert: rTorrentPodUnavailable
+      annotations:
+        summary: The torrent stack has no ready pods.
+        description: >-
+          deploy/rtorrent -n media has fewer ready replicas than desired.
+          Most likely the gluetun sidecar's readinessProbe on the health
+          server is failing (WireGuard tunnel down/wedged) or nginx's RPC
+          listener isn't serving. Check 'kubectl describe pod -l
+          app.kubernetes.io/name=rtorrent -n media' and gluetun logs before
+          restarting with 'kubectl rollout restart deploy/torrent -n
+          media'. A restart re-dials the VPN tunnel; peers reconnect on
+          their own.
+      expr: |
+        kube_deployment_status_replicas_ready{namespace="media",deployment="rtorrent"}
+          < kube_deployment_spec_replicas{namespace="media",deployment="rtorrent"}
+      for: 10m
+      labels:
+        severity: warning
+    - alert: CrossSeedPodUnavailable
+      annotations:
+        summary: The cross-seed daemon has no ready pods.
+        description: >-
+          deploy/cross-seed -n media has fewer ready replicas than desired.
+          No VPN involved (it only talks to prowlarr and rtorrent
+          in-cluster), so most likely config.js is failing at startup or
+          the rTorrent RPC endpoint is unreachable. Check 'kubectl describe
+          pod -l app.kubernetes.io/component=cross-seed -n media' and
+          restart with 'kubectl rollout restart deploy/cross-seed -n media'.
+      expr: |
+        kube_deployment_status_replicas_ready{namespace="media",deployment="cross-seed"}
+          < kube_deployment_spec_replicas{namespace="media",deployment="cross-seed"}
+      for: 10m
+      labels:
+        severity: warning
