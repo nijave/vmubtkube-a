@@ -21,7 +21,7 @@
   "kubernetes": {
     "managerFilePatterns": [
       "/^(fluentbit|immich|operators|thanos|woodpecker)/.+\\.yaml$/",
-      "/^(cloudflared|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|sabnzbd|searxng|selfoss|snmp-exporter|sonarr|vpa)\\.yaml$/",
+      "/^(cloudflared|cross-seed|deluge|external-dns|fluentbit-syslog|hyperdx-clickhouse|hyperdx-mongo|jellyfin|kubernetes-event-exporter|mumble|prowlarr|python-envoy-authz|radarr|reloader|rtorrent|sabnzbd|searxng|selfoss|snmp-exporter|sonarr|unpackerr|vpa)\\.yaml$/",
       "/^application\\.hyperdx\\.yaml$/",
       "/^vendored/contour/patch-.+\\.yaml$/"
     ]
@@ -221,6 +221,11 @@
       "description": "selfoss uses monotonic date-based tags (YYYYMMDD-githash); docker versioning treats the hash as a compatibility suffix and filters out every other tag, so parse the date as a single integer instead",
       "matchPackageNames": ["ghcr.io/nijave/selfoss"],
       "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
+    },
+    {
+      "description": "hotio/rflood version tags are release-X.Y.Z (the rTorrent version); docker versioning cannot parse the release- prefix, and the repo also carries release-<githash> tags that must not count as versions",
+      "matchPackageNames": ["ghcr.io/hotio/rflood"],
+      "versioning": "regex:^release-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     },
     {
       "description": "searxng uses date-based tags (YYYY.M.D-githash); same compatibility-suffix trap as selfoss — parse the date components and ignore the hash. Wildcard because the mirror-registry depName keeps its registry.apps.nickv.me prefix (registryAliases only rewrites packageName).",
