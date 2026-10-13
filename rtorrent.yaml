@@ -572,7 +572,7 @@ spec:
             memory: 4Gi
             cpu: 2000m
       - name: rtorrent-exporter
-        image: docker.io/aauren/rtorrent-exporter:v1.6.0@sha256:ba4d7f86969219eb90713e41d6c0b7014e2c494add498fbc28a10a5f3f5c7afd
+        image: docker.io/aauren/rtorrent-exporter:v1.10.0@sha256:88df1a718b7672f9c47a0e60261bdd1801ed4c904f9f7397b8c8f3730bc41eac
         command: ["/rtorrent-exporter"]
         args:
         - --rtorrent.addr=http://127.0.0.1:5000/RPC2
