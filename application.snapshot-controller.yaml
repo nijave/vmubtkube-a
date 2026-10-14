@@ -37,4 +37,4 @@ spec:
             repository: registry.k8s.io/sig-storage/snapshot-controller
             # chart 0.3.0 appVersion is 8.2.1; keep this matched with the
             # csi-snapshotter sidecar in application.democratic-csi.yaml
-            tag: v8.6.0
+            tag: v8.7.0
