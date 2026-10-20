@@ -121,8 +121,13 @@ spec:
             # near 40%.
             WOODPECKER_MAX_WORKFLOWS: "4"
             WOODPECKER_BACKEND_K8S_NAMESPACE: woodpecker
-            # Workspace PVCs come from the only StorageClass we have,
-            # zfs-generic-iscsi-csi (democratic-csi iSCSI), which is
+            # Workspace PVCs are throwaway, so they use the ephemeral class: it
+            # sets homelab:sanoid-skip + syncoid:sync=false on the zvol.  On the
+            # default class the recursive midline syncoid job hit fresh,
+            # snapshot-less workspaces and failed with "no snapshots exist on
+            # source ... --no-sync-snap".
+            WOODPECKER_BACKEND_K8S_STORAGE_CLASS: zfs-generic-iscsi-csi-ephemeral
+            # Both classes are democratic-csi iSCSI and therefore
             # ReadWriteOnce.  RWX=false makes Woodpecker request RWO PVCs to
             # match.  All step pods of a workflow share that single workspace
             # PVC, so with RWO they MUST land on one node -- otherwise the
