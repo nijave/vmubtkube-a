@@ -384,7 +384,7 @@ spec:
             memory: 4Gi
             cpu: 2000m
       - name: deluge-exporter
-        image: docker.io/tobbez/deluge_exporter:latest@sha256:0a7895be56c950f43cf0bea5093fa12571846d99b7a1d789626719d621e31837
+        image: docker.io/tobbez/deluge_exporter:latest@sha256:7d7f2b37e654c7ee5b568ee9070e7bc226478bb699d3a0581fe62708c74f26e8
         ports:
         - containerPort: 9354
           name: metrics
