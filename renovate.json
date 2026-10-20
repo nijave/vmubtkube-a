@@ -268,6 +268,12 @@
       "versioning": "regex:^(?<major>\\d{8})-[a-f0-9]+$"
     },
     {
+      "description": "otel-agent-trace-connector: self-built; track pre-releases (v0.X.Y-beta.N, -rc.N) too. Docker versioning reads anything after the first '-' as a compatibility suffix, so v0.6.0 would never move to a beta; semver treats it as a pre-release, and ignoreUnstable lets those through.",
+      "matchPackageNames": ["ghcr.io/nijave/otel-agent-trace-connector"],
+      "versioning": "semver",
+      "ignoreUnstable": false
+    },
+    {
       "description": "cpu-benchmark: self-built, rebuilt by hand rarely; latest is the only tag, tracked by digest",
       "matchPackageNames": ["registry.apps.nickv.me/cpu-benchmark"],
       "pinDigests": true,
