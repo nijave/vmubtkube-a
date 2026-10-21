@@ -215,7 +215,7 @@ spec:
             # runs the backup schedule; the other serves the API for
             # restores.
             - name: clickhouse-backup
-              image: altinity/clickhouse-backup:2.8.1
+              image: altinity/clickhouse-backup:2.8.2
               imagePullPolicy: IfNotPresent
               command:
                 - bash
