@@ -28,10 +28,10 @@ directories:
   path: vendored/contour/base
 - contents:
   - git:
-      commitTitle: 'chore: update docs for next release (#7128)...'
-      sha: a82d14894fbca270a5e87610fa1efd907dbae341
+      commitTitle: 'chore: update docs for next release (#7177)...'
+      sha: e932f3a3f6f274e8e269c01aa1f5fb3d1322e3c9
       tags:
-      - v2.13.0
+      - v2.14.0
     path: .
   path: vendored/external-secrets-crds/base
 - contents:
