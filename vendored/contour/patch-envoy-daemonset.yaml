@@ -23,7 +23,7 @@ spec:
             cpu: 100m
             memory: 64Mi
       - name: envoy
-        image: registry.apps.nickv.me/envoyproxy/envoy:v1.40.0
+        image: registry.apps.nickv.me/envoyproxy/envoy:v1.40.1
         resources:
           requests:
             cpu: 50m
