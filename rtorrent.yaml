@@ -300,7 +300,10 @@ data:
     session.path.set = /config/session/
     import = /config/vpn.rc
     log.open_file = "rtorrent.log", (cat, "/dev/stdout")
-    log.add_output = "debug", "rtorrent.log"
+    # 0.16.26 dropped the cascading severity groups (critical..debug);
+    # errors/events/debug_trace replace them and do not cascade.
+    log.add_output = "errors", "rtorrent.log"
+    log.add_output = "events", "rtorrent.log"
     protocol.encryption.set = allow_incoming,try_outgoing,enable_retry
     network.tos.set = throughput
     pieces.hash.on_completion.set = no
