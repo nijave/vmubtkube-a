@@ -117,7 +117,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
       - name: unpackerr
-        image: docker.io/golift/unpackerr:latest@sha256:244fc45cb207308f60e8f52dd703c2b3463385752de0f9517c58ff9d331ed15e
+        image: docker.io/golift/unpackerr:latest@sha256:95ed846fb79cc870c7d745acaebf7e49883a29c5625e4679f9a1aded6f283304
         env:
         - name: TZ
           value: Etc/UTC
