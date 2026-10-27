@@ -53,7 +53,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
       - name: cloudflared
-        image: registry.apps.nickv.me/cloudflare/cloudflared:2026.10.4
+        image: registry.apps.nickv.me/cloudflare/cloudflared:2026.10.5
         command:
         - cloudflared
         - tunnel
