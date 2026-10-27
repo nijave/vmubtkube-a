@@ -331,7 +331,7 @@ spec:
             cpu: 500m
       containers:
       - name: deluge
-        image: lscr.io/linuxserver/deluge:latest@sha256:bf306ddd5e6d4a85d3d05ce1b947ab6e344e7fca1b7740b77c58ce170118c7ff
+        image: lscr.io/linuxserver/deluge:latest@sha256:1dbf9663387f85bb5805fcb1418a246f877e01374bb2a6cd9e632c72fb2e1ebc
         env:
         - name: TZ
           value: Etc/UTC
