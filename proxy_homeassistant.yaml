@@ -26,8 +26,8 @@ spec:
   externalName: hassio.homelab.somemissing.info
   ports:
     - name: frigate
-      port: 8081
-      targetPort: 8081
+      port: 8971
+      targetPort: 8971
       protocol: TCP
     - name: homeassistant
       port: 8123
