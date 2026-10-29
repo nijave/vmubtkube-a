@@ -40,7 +40,7 @@ spec:
           value: admin
       services:
         - name: hassio-homelab-somemissing-info
-          port: 8081
+          port: 8971
       timeoutPolicy:
         response: 24h
       enableWebsockets: true
