@@ -58,8 +58,9 @@ steps:
     image: alpine/k8s:1.37.1
     when:
       - event: pull_request
+        # Any manifest can hold a Helm-source Application.
         path:
-          - "application.*.yaml"
+          - "**/*.yaml"
           - ".ci/validate-helm.sh"
     environment:
       # renovate: datasource=github-releases depName=yannh/kubeconform

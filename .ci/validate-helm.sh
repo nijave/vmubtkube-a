@@ -92,10 +92,18 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 APP_Q='select(.kind=="Application")'
 rendered=0
-for f in application.*.yaml; do
+# Applications live anywhere ArgoCD reads (subdirectories, files not named
+# application.*.yaml), so scan every tracked manifest. One per file: the
+# per-field yq queries below assume a single-doc app.yaml.
+for f in $(git ls-files '*.yaml' | grep -vE '^(vendored/|docs/)'); do
   # Extract the Application doc first: applying `// {}` fallbacks directly to
   # a multi-doc file emits one fallback per filtered-out document.
   yq "$APP_Q" "$f" > "$WORKDIR/app.yaml"
+  [ -s "$WORKDIR/app.yaml" ] || continue
+  if [ "$(yq ea '[select(.kind=="Application")] | length' "$f")" -ne 1 ]; then
+    echo "ERROR: $f holds more than one Application; split it" >&2
+    exit 1
+  fi
   chart=$(yq '.spec.source.chart // ""' "$WORKDIR/app.yaml")
   if [ -z "$chart" ]; then
     # git-source app. If its path is a vendored Helm chart (local Chart.yaml
