@@ -61,6 +61,9 @@ fi
 # -ignore-missing-schemas: charts ship CRs of their own CRDs (rendered in the
 # same release) that the CRDs-catalog may not carry; missing-schema kinds are
 # reported in the summary as skipped, not failed.
+# helm template runs without --include-crds: CRDs are skipped below anyway,
+# and some charts' crds/ (altinity-clickhouse-operator) carry duplicate YAML
+# keys that kubeconform can't even parse.
 KUBECONFORM="kubeconform
   -strict -summary
   -ignore-missing-schemas
@@ -89,10 +92,18 @@ trap 'rm -rf "$WORKDIR"' EXIT
 
 APP_Q='select(.kind=="Application")'
 rendered=0
-for f in application.*.yaml; do
+# Applications live anywhere ArgoCD reads (subdirectories, files not named
+# application.*.yaml), so scan every tracked manifest. One per file: the
+# per-field yq queries below assume a single-doc app.yaml.
+for f in $(git ls-files '*.yaml' | grep -vE '^(vendored/|docs/)'); do
   # Extract the Application doc first: applying `// {}` fallbacks directly to
   # a multi-doc file emits one fallback per filtered-out document.
   yq "$APP_Q" "$f" > "$WORKDIR/app.yaml"
+  [ -s "$WORKDIR/app.yaml" ] || continue
+  if [ "$(yq ea '[select(.kind=="Application")] | length' "$f")" -ne 1 ]; then
+    echo "ERROR: $f holds more than one Application; split it" >&2
+    exit 1
+  fi
   chart=$(yq '.spec.source.chart // ""' "$WORKDIR/app.yaml")
   if [ -z "$chart" ]; then
     # git-source app. If its path is a vendored Helm chart (local Chart.yaml
@@ -106,7 +117,7 @@ for f in application.*.yaml; do
       echo "--- $f (local chart $path)"
       # shellcheck disable=SC2086
       helm template "$release" "$path" --namespace "$namespace" \
-        --values "$WORKDIR/values.yaml" --include-crds \
+        --values "$WORKDIR/values.yaml" \
         --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
       $KUBECONFORM "$WORKDIR/rendered.yaml"
       [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
@@ -135,7 +146,7 @@ for f in application.*.yaml; do
   # shellcheck disable=SC2086
   helm template "$release" "$chart_ref" $repo_flag \
     --version "$version" --namespace "$namespace" \
-    --values "$WORKDIR/values.yaml" --include-crds \
+    --values "$WORKDIR/values.yaml" \
     --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
   $KUBECONFORM "$WORKDIR/rendered.yaml"
   [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
