@@ -161,31 +161,34 @@ spec:
                 end
               end
               return hs
+            # VolSync ReplicationSources run recurring backups, so they always
+            # report Healthy. The sync operation waits for applied resources to
+            # become healthy, so a hung backup (e.g. a clone PVC stuck Pending)
+            # returning Progressing wedged the root-app sync indefinitely, and
+            # Degraded would fail it. The message still carries the sync state;
+            # backup staleness belongs in Prometheus alerting on VolSync's
+            # volsync_volume_out_of_sync metric, not in ArgoCD health.
             resource.customizations.health.volsync.backube_ReplicationSource: |
               hs = {}
+              hs.status = "Healthy"
+              hs.message = "Waiting for first synchronization"
               if obj.status ~= nil then
                 if obj.status.conditions ~= nil then
                   for i, condition in ipairs(obj.status.conditions) do
                     if condition.type == "Synchronizing" and condition.status == "True" then
-                      hs.status = "Progressing"
                       hs.message = condition.message or "Synchronization in progress"
                       return hs
                     end
                     if condition.type == "Synchronizing" and condition.status == "False" and condition.reason == "Error" then
-                      hs.status = "Degraded"
-                      hs.message = condition.message or "Synchronization error"
+                      hs.message = "Last sync errored: " .. (condition.message or "unknown error")
                       return hs
                     end
                   end
                 end
                 if obj.status.lastSyncTime ~= nil then
-                  hs.status = "Healthy"
                   hs.message = "Last sync: " .. obj.status.lastSyncTime
-                  return hs
                 end
               end
-              hs.status = "Progressing"
-              hs.message = "Waiting for first synchronization"
               return hs
           params:
             otlp.address: otel-collector.k8s.somemissing.info:4317
