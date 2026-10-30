@@ -70,6 +70,14 @@ spec:
           persistence:
             library:
               existingClaim: immich
+        server:
+          serviceMonitor:
+            main:
+              labels:
+                release: prom
+              # chart default (app.kubernetes.io/name) would rename the job
+              # from immich-server to server
+              jobLabel: app.kubernetes.io/service
         machine-learning:
           enabled: true
           controllers:
@@ -123,26 +131,3 @@ spec:
                     repository: docker.io/valkey/valkey
                     tag: 9.2-alpine@sha256:cdcb7b1c7b6f1c9cb9442c71ac6275e78184657448407b2c1fdde7ee8024f4fb
                     pullPolicy: IfNotPresent
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: immich
-  namespace: immich
-  labels:
-    release: prom
-spec:
-  jobLabel: immich-server
-  namespaceSelector:
-    matchNames:
-      - immich
-  selector:
-    matchLabels:
-      app.kubernetes.io/instance: immich
-      app.kubernetes.io/name: server
-      app.kubernetes.io/service: immich-server
-  endpoints:
-    - port: metrics-api
-      scheme: http
-    - port: metrics-ms
-      scheme: http
