@@ -1,0 +1,91 @@
+# Alerts for VolSync ReplicationSource/ReplicationDestination syncs
+# (application.volsync.yaml), evaluated by the kube-prometheus-stack
+# Prometheus (ruleSelector matchLabels release: prom).
+#
+# 2026-10 incident context: four restic ReplicationSources (schedule every
+# 30m) hung for 2.5 days. Each mover Job waited on a clone PVC stuck Pending,
+# and nothing alerted. The volsync chart (0.17.0) ships a ServiceMonitor, but
+# it has no labels value and no bearer token, so this Prometheus never
+# selected it and no volsync_* series existed. The ServiceMonitor below
+# replaces it for this Prometheus; the chart one stays unselected.
+#
+# Metric semantics (backube/volsync internal/controller/statemachine):
+#   - volsync_volume_out_of_sync{obj_namespace, obj_name, role, method} is set
+#     to 1 when a scheduled sync has not completed before the deadline
+#     next(next(lastSyncTime)), or when the object has never synced. It goes
+#     back to 0 only when a sync completes. With a 30m schedule it reaches 1
+#     about 30-60m after the last completed sync.
+#   - The controller creates the series on the first reconcile of each
+#     object after it starts.
+#
+# Both Prometheus replicas evaluate the rules; the max-by aggregation
+# collapses duplicate series.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: volsync-prom
+  namespace: volsync-system
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: volsync
+      control-plane: volsync-controller
+  endpoints:
+  - port: https
+    path: /metrics
+    scheme: https
+    interval: 30s
+    tlsConfig:
+      # The controller serves metrics with a self-signed certificate.
+      insecureSkipVerify: true
+    # The metrics endpoint requires authentication and authorization
+    # (metrics.disableAuth: false in the chart). The controller does a
+    # TokenReview and a SubjectAccessReview for GET /metrics. The
+    # prom-kp-prometheus ClusterRole already allows that nonResourceURL, so
+    # the Prometheus service account token is sufficient.
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: volsync-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: volsync
+    rules:
+    - alert: VolSyncVolumeOutOfSync
+      annotations:
+        summary: "VolSync {{ $labels.role }} {{ $labels.obj_namespace }}/{{ $labels.obj_name }} out of sync."
+        description: >-
+          VolSync {{ $labels.role }} {{ $labels.obj_namespace }}/{{
+          $labels.obj_name }} ({{ $labels.method }}) has missed its sync
+          deadline for over 1h: no sync completed within a full schedule
+          interval after the previous one. Check the object status and its
+          mover Job and PVCs:
+          kubectl -n {{ $labels.obj_namespace }} describe replicationsource
+          {{ $labels.obj_name }}, then kubectl -n {{ $labels.obj_namespace }}
+          get jobs,pods,pvc | grep volsync. A clone or snapshot PVC stuck
+          Pending blocks the mover.
+      expr: max by (obj_namespace, obj_name, role, method) (volsync_volume_out_of_sync) == 1
+      for: 1h
+      labels:
+        severity: warning
+    - alert: VolSyncMetricsAbsent
+      annotations:
+        summary: VolSync controller metrics are absent.
+        description: >-
+          Prometheus has had no volsync_volume_out_of_sync series for 30m, so
+          VolSyncVolumeOutOfSync cannot fire. Either the volsync-metrics target
+          in volsync-system is gone (controller pod not running, or the
+          volsync-prom ServiceMonitor no longer matches), the scrape fails
+          authentication (check the target in the Prometheus UI), or no
+          ReplicationSource or ReplicationDestination exists any more.
+      expr: absent(volsync_volume_out_of_sync)
+      for: 30m
+      labels:
+        severity: warning
