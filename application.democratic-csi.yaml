@@ -138,6 +138,7 @@ metadata:
   namespace: kube-system
   labels:
     app.kubernetes.io/name: democratic-csi
+    release: prom
 spec:
   selector:
     matchLabels:
