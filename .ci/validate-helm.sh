@@ -61,6 +61,9 @@ fi
 # -ignore-missing-schemas: charts ship CRs of their own CRDs (rendered in the
 # same release) that the CRDs-catalog may not carry; missing-schema kinds are
 # reported in the summary as skipped, not failed.
+# helm template runs without --include-crds: CRDs are skipped below anyway,
+# and some charts' crds/ (altinity-clickhouse-operator) carry duplicate YAML
+# keys that kubeconform can't even parse.
 KUBECONFORM="kubeconform
   -strict -summary
   -ignore-missing-schemas
@@ -106,7 +109,7 @@ for f in application.*.yaml; do
       echo "--- $f (local chart $path)"
       # shellcheck disable=SC2086
       helm template "$release" "$path" --namespace "$namespace" \
-        --values "$WORKDIR/values.yaml" --include-crds \
+        --values "$WORKDIR/values.yaml" \
         --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
       $KUBECONFORM "$WORKDIR/rendered.yaml"
       [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
@@ -135,7 +138,7 @@ for f in application.*.yaml; do
   # shellcheck disable=SC2086
   helm template "$release" "$chart_ref" $repo_flag \
     --version "$version" --namespace "$namespace" \
-    --values "$WORKDIR/values.yaml" --include-crds \
+    --values "$WORKDIR/values.yaml" \
     --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
   $KUBECONFORM "$WORKDIR/rendered.yaml"
   [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
