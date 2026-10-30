@@ -238,6 +238,19 @@ spec:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
               tag: latest@sha256:86085238feac4b5c5da19c1c8ca4537e38483cd8369ed97524d4b76c710ab709
+            # on-demand V8 heap snapshot without restart: the app's own handlers
+            # treat SIGINT/SIGUSR1/SIGUSR2 as shutdown, so use SIGWINCH (the
+            # container's tini forwards it to node) to dump a .heapsnapshot to
+            # /tmp and keep running:
+            #   kubectl -n kube-system exec <pod> -c csi-driver -- kill -WINCH 1
+            #   kubectl cp kube-system/<pod>:/tmp/<file>.heapsnapshot -c csi-driver ./
+            # then open it in Chrome DevTools Memory tab. The snapshot pauses
+            # the process for a few seconds and the file contains in-memory
+            # secrets (e.g. the SSH private key): handle it carefully and
+            # delete it from /tmp afterwards.
+            extraEnv:
+              - name: NODE_OPTIONS
+                value: "--heapsnapshot-signal=SIGWINCH --diagnostic-dir=/tmp"
         node:
           cleanup:
             image:
@@ -249,6 +262,15 @@ spec:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
               tag: latest@sha256:86085238feac4b5c5da19c1c8ca4537e38483cd8369ed97524d4b76c710ab709
+            # same on-demand heap-snapshot hook as the controller driver (the
+            # node driver has wedged in the past); usage: kill -WINCH 1 in the
+            # csi-driver container (tini forwards to node), kubectl cp the
+            # .heapsnapshot out of /tmp, open in Chrome DevTools Memory tab.
+            # Snapshot pauses the process briefly and the file contains
+            # in-memory secrets: handle carefully and delete afterwards.
+            extraEnv:
+              - name: NODE_OPTIONS
+                value: "--heapsnapshot-signal=SIGWINCH --diagnostic-dir=/tmp"
           driverRegistrar:
             image:
               # renovate: datasource=docker depName=registry.k8s.io/sig-storage/csi-node-driver-registrar
