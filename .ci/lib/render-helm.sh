@@ -21,7 +21,8 @@
 #   Renders one Application doc (a single-doc file; YAML or JSON — yq reads
 #   both) to stdout the way ArgoCD does: helm template with the app's
 #   valuesObject, release name, and destination namespace, plus the
-#   discovered capabilities. Return codes:
+#   discovered capabilities, or the app's spec.source.helm.apiVersions when
+#   set (ArgoCD then uses that list instead of the cluster's). Return codes:
 #     0  rendered (stdout carries the manifest stream)
 #     1  not a Helm-source Application (git source without a local Chart.yaml
 #        — plain manifests, kustomize, or no doc at all)
@@ -78,6 +79,9 @@ render_helm_app() {
     echo "render_helm_app: RENDER_TMPDIR is not set to an existing directory" >&2
     return 2
   }
+  caps=$(yq '.spec.source.helm.apiVersions // [] | .[]' "$app_doc" \
+    | sed 's/^/--api-versions /' | tr '\n' ' ')
+  caps=${caps:-$API_VERSIONS}
 
   chart=$(yq '.spec.source.chart // ""' "$app_doc")
   if [ -z "$chart" ]; then
@@ -92,7 +96,7 @@ render_helm_app() {
     # shellcheck disable=SC2086
     helm template "$release" "$path" --namespace "$namespace" \
       --values "$RENDER_TMPDIR/values.yaml" \
-      --kube-version "$KUBE_VERSION" $API_VERSIONS || return 2
+      --kube-version "$KUBE_VERSION" $caps || return 2
     return 0
   fi
 
@@ -115,5 +119,5 @@ render_helm_app() {
   helm template "$release" "$chart_ref" $repo_flag \
     --version "$version" --namespace "$namespace" \
     --values "$RENDER_TMPDIR/values.yaml" \
-    --kube-version "$KUBE_VERSION" $API_VERSIONS || return 2
+    --kube-version "$KUBE_VERSION" $caps || return 2
 }
