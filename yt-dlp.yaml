@@ -133,7 +133,7 @@ spec:
           - name: yt-dlp
             # Built by github.com/nijave/yt-dlp-Docker (Woodpecker)
             # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/nijave/yt-dlp
-            image: registry.apps.nickv.me/nijave/yt-dlp:20261027-36c800a@sha256:cc04cce0a57f9fac860c192252adea6b8af8fea82f46985c246db15b433f3f67
+            image: registry.apps.nickv.me/nijave/yt-dlp:20261030-a2ee9e9@sha256:1388a2e12caf5a871bbfa866afdc3e1dab4366ab310be63e64c516b1d96362bf
             imagePullPolicy: IfNotPresent
             env:
             - name: TZ
