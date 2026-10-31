@@ -273,6 +273,229 @@ metadata:
 data:
   FIREWALL_VPN_INPUT_PORTS: "16312"
 ---
+# Least-loaded AirVPN server picker, run as the gluetun sidecar's command
+# before gluetun starts (gluetun itself picks uniformly at random). Queries
+# the public AirVPN status API, ranks Canada's healthy servers by load and
+# exports SERVER_NAMES for the real gluetun entrypoint; any failure falls
+# back to gluetun's random pick so the pod always gets a VPN. Testable
+# outside the cluster via the AIRVPN_STATUS_URL/GLUETUN_SERVERS_JSON/
+# GLUETUN_ENTRYPOINT overrides documented in the script header.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gluetun-airvpn-picker
+  namespace: media
+data:
+  pick-airvpn-server.sh: |
+    #!/bin/sh
+    # airvpn-picker: pick the least-loaded healthy AirVPN server before gluetun
+    # starts, then hand off to gluetun's real entrypoint.
+    #
+    # Runs as the gluetun container's command (native sidecar). Queries the
+    # public AirVPN status API, ranks the servers matching COUNTRY by load, and
+    # exports SERVER_NAMES=<winner> before exec'ing $GLUETUN_ENTRYPOINT. On any
+    # failure it starts gluetun WITHOUT SERVER_NAMES so gluetun's own random
+    # pick applies - this script must never leave the container without a VPN.
+    #
+    # Env vars (all optional):
+    #   COUNTRY              country_name to match, case-insensitive (Canada)
+    #   FORCED_SERVER        skip all logic, export SERVER_NAMES=$FORCED_SERVER
+    #   MAX_LOAD             skip servers with currentload > MAX_LOAD (100)
+    #   TOR_CHECK            skip Tor exit-node IPs (false)
+    #   DNSBL_CHECK          skip DNSBL-listed exit IPs (false)
+    #   MAX_ATTEMPTS         max candidates to run reputation checks on (10)
+    #   AIRVPN_STATUS_URL    status API URL (https://airvpn.org/api/status/)
+    #   GLUETUN_SERVERS_JSON gluetun server list (/gluetun/servers.json)
+    #   GLUETUN_ENTRYPOINT   gluetun entrypoint (/gluetun-entrypoint)
+    #
+    # Approach adapted from shamalaya83/airvpn_gluetun
+    # (pick_best_airvpn.sh @ 8e6427e).
+
+    set -u
+
+    COUNTRY=${COUNTRY:-Canada}
+    FORCED_SERVER=${FORCED_SERVER:-}
+    MAX_LOAD=${MAX_LOAD:-100}
+    TOR_CHECK=${TOR_CHECK:-false}
+    DNSBL_CHECK=${DNSBL_CHECK:-false}
+    MAX_ATTEMPTS=${MAX_ATTEMPTS:-10}
+    AIRVPN_STATUS_URL=${AIRVPN_STATUS_URL:-https://airvpn.org/api/status/}
+    GLUETUN_SERVERS_JSON=${GLUETUN_SERVERS_JSON:-/gluetun/servers.json}
+    GLUETUN_ENTRYPOINT=${GLUETUN_ENTRYPOINT:-/gluetun-entrypoint}
+    TOR_EXIT_URL=https://check.torproject.org/exit-addresses
+
+    log() {
+        printf 'airvpn-picker: %s\n' "$*" >&2
+    }
+
+    # The container command passes no arguments, so the entrypoint is exec'd
+    # bare ("$@" is reused below to build jq's argument list).
+    exec_entrypoint() {
+        exec "$GLUETUN_ENTRYPOINT"
+    }
+
+    # The only exit from this script is exec'ing the entrypoint; never exit
+    # non-zero, and never leave a SERVER_NAMES behind on the fallback path.
+    fallback() {
+        log "WARNING: $1"
+        log 'WARNING: falling back to gluetun'"'"'s own random pick (SERVER_NAMES unset)'
+        unset SERVER_NAMES
+        exec_entrypoint
+    }
+
+    apk_add() {
+        pkg=$1
+        log "installing $pkg via apk"
+        apk add --no-cache "$pkg" >/dev/null 2>&1
+    }
+
+    # $1: IPv4 address. Return 0 when listed on any DNSBL.
+    is_dnsbl_listed() {
+        ip=$1
+        rev=$(printf '%s' "$ip" | awk -F. '{print $4"."$3"."$2"."$1}')
+        for bl in dnsbl.dronebl.org rbl.efnetrbl.org dnsbl.swiftbl.net combined.abuse.ch; do
+            for resolver in 1.1.1.1 8.8.8.8; do
+                answer=$(dig +short +time=3 +tries=1 "$rev.$bl" "@$resolver" 2>/dev/null | head -n 1)
+                case $answer in
+                    [0-9]*)
+                        log "$ip is listed on $bl ($answer)"
+                        return 0
+                        ;;
+                esac
+            done
+        done
+        return 1
+    }
+
+    if [ -n "$FORCED_SERVER" ]; then
+        log "FORCED_SERVER=$FORCED_SERVER is set - skipping all selection logic"
+        export SERVER_NAMES="$FORCED_SERVER"
+        log "exported SERVER_NAMES=$SERVER_NAMES; exec $GLUETUN_ENTRYPOINT"
+        exec_entrypoint
+    fi
+
+    if ! command -v jq >/dev/null 2>&1; then
+        apk_add jq || fallback 'could not install jq via apk'
+    fi
+
+    # Reputation checks need dig; install bind-tools only when they are enabled.
+    if [ "$TOR_CHECK" = true ] || [ "$DNSBL_CHECK" = true ]; then
+        if ! command -v dig >/dev/null 2>&1; then
+            apk_add bind-tools || fallback 'could not install bind-tools via apk'
+        fi
+    fi
+
+    # Tor exit list: fetched once up front; a failed fetch fails open (checks
+    # pass) with a warning rather than blocking the VPN.
+    TOR_NODES=''
+    if [ "$TOR_CHECK" = true ]; then
+        TOR_NODES=$(wget -q -T 15 -O - "$TOR_EXIT_URL" 2>/dev/null | grep '^ExitAddress ' | awk '{print $2}')
+        if [ -n "$TOR_NODES" ]; then
+            log "fetched $(printf '%s\n' "$TOR_NODES" | grep -c .) Tor exit addresses"
+        else
+            log 'WARNING: could not fetch the Tor exit list - Tor check will pass trivially this run'
+        fi
+    fi
+
+    log "fetching AirVPN status from $AIRVPN_STATUS_URL"
+    STATUS=$(wget -q -T 15 -O - "$AIRVPN_STATUS_URL" 2>/dev/null)
+    if [ -z "$STATUS" ]; then
+        fallback "AirVPN status API at $AIRVPN_STATUS_URL returned nothing"
+    fi
+    if ! printf '%s' "$STATUS" | jq -e '.servers | type == "array"' >/dev/null 2>&1; then
+        fallback 'AirVPN status API returned empty or invalid JSON'
+    fi
+
+    # Filter and rank in a single jq program: keep servers matching the country
+    # (case-insensitive), healthy, with capacity, a routable IPv4 exit and load
+    # within MAX_LOAD; when gluetun's server list exists also require the name
+    # to be a wireguard AirVPN server gluetun knows. Rank ascending by
+    # currentload, then bw/bw_max utilization, then user count.
+    COUNTRY_LC=$(printf '%s' "$COUNTRY" | tr '[:upper:]' '[:lower:]')
+    JQ_FILTER='true'
+    set -- --arg country "$COUNTRY_LC" --argjson max_load "$MAX_LOAD"
+    if [ -f "$GLUETUN_SERVERS_JSON" ]; then
+        # shellcheck disable=SC2016  # single-quoted jq expression, expanded by jq
+        JQ_FILTER='any($gluetun[0].airvpn.servers[]; .vpn == "wireguard" and .server_name == $s.public_name)'
+        set -- --slurpfile gluetun "$GLUETUN_SERVERS_JSON" "$@"
+    else
+        log "gluetun server list $GLUETUN_SERVERS_JSON not found (first boot?) - skipping the gluetun-known-server filter"
+    fi
+
+    CANDIDATES=$(printf '%s' "$STATUS" | jq -c "$@" '
+        [ .servers[]
+          | . as $s
+          | select(
+              (.country_name | strings | ascii_downcase) == $country
+              and .health == "ok"
+              and .currentload != null
+              and .currentload <= $max_load
+              and ((.bw_max // 0) | numbers) > 0
+              and .ip_v4_in1 != null
+              and '"$JQ_FILTER"'
+            )
+          | { name: .public_name, load: .currentload, bw: (.bw // 0),
+              bw_max: .bw_max, bw_ratio: ((.bw // 0) / .bw_max), users: .users }
+        ]
+        | sort_by(.load, .bw_ratio, .users)
+    ' 2>/dev/null) || CANDIDATES=''
+    if [ -z "$CANDIDATES" ]; then
+        fallback 'AirVPN status API query failed (invalid data or jq error)'
+    fi
+
+    COUNT=$(printf '%s' "$CANDIDATES" | jq 'length')
+    if [ "$COUNT" -eq 0 ]; then
+        fallback "no AirVPN servers in $COUNTRY match the criteria (health ok, bw_max>0, ip_v4_in1 set, load<=$MAX_LOAD)"
+    fi
+    log "$COUNT candidate(s) in $COUNTRY; top candidates (name: load%, bw/bw_max Mbit/s, users):"
+    printf '%s' "$CANDIDATES" | jq -r '.[:5][] | "airvpn-picker:   \(.name): load \(.load)%, bw \(.bw)/\(.bw_max) Mbit/s, users \(.users)"'
+
+    if [ "$TOR_CHECK" != true ] && [ "$DNSBL_CHECK" != true ]; then
+        NAME=$(printf '%s' "$CANDIDATES" | jq -r '.[0].name')
+        LOAD=$(printf '%s' "$CANDIDATES" | jq -r '.[0].load')
+        log "reputation checks disabled - taking the first-ranked candidate $NAME (load $LOAD%)"
+        export SERVER_NAMES="$NAME"
+        log "exported SERVER_NAMES=$SERVER_NAMES; exec $GLUETUN_ENTRYPOINT"
+        exec_entrypoint
+    fi
+
+    # Walk the ranked list, running the enabled reputation checks on each exit
+    # IP until one passes (bounded by MAX_ATTEMPTS).
+    ATTEMPT=0
+    INDEX=0
+    while [ "$INDEX" -lt "$COUNT" ]; do
+        NAME=$(printf '%s' "$CANDIDATES" | jq -r ".[$INDEX].name")
+        LOAD=$(printf '%s' "$CANDIDATES" | jq -r ".[$INDEX].load")
+        INDEX=$((INDEX + 1))
+        if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+            log "reached MAX_ATTEMPTS=$MAX_ATTEMPTS reputation checks without a pass"
+            break
+        fi
+        ATTEMPT=$((ATTEMPT + 1))
+
+        IP=$(dig +short +time=3 +tries=1 "${NAME}_exit.airservers.org" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+        if [ -z "$IP" ]; then
+            log "$NAME: could not resolve <name>_exit.airservers.org - skipping"
+            continue
+        fi
+        log "$NAME: exit IP $IP (load $LOAD%)"
+
+        if [ "$TOR_CHECK" = true ] && printf '%s\n' "$TOR_NODES" | grep -qxF "$IP"; then
+            log "$NAME: $IP is a Tor exit node - skipping"
+            continue
+        fi
+        if [ "$DNSBL_CHECK" = true ] && is_dnsbl_listed "$IP"; then
+            log "$NAME: $IP is DNSBL-listed - skipping"
+            continue
+        fi
+
+        export SERVER_NAMES="$NAME"
+        log "exported SERVER_NAMES=$SERVER_NAMES; exec $GLUETUN_ENTRYPOINT"
+        exec_entrypoint
+    done
+
+    fallback "none of the $ATTEMPT checked candidate(s) passed the enabled reputation checks"
+---
 # rTorrent's config, mounted read-only into /config/rtorrent.rc (rflood
 # only writes a default rtorrent.rc when the file is missing, so this
 # mount wins). Copy of the VM's rtorrent.rc with deltas commented inline;
@@ -446,9 +669,15 @@ spec:
       - name: gluetun
         image: ghcr.io/qdm12/gluetun:v3.41.3@sha256:fa19cc76b2af13d57a8d3dc3066f2ada061b1c761b8aecf989b3877c0486e027
         restartPolicy: Always
+        # Pick the least-loaded healthy AirVPN server (see the
+        # gluetun-airvpn-picker ConfigMap) before gluetun runs; the script
+        # always execs gluetun's real entrypoint, SERVER_NAMES set or not.
+        command: ["/bin/sh", "/airvpn-picker/pick-airvpn-server.sh"]
         env:
         - name: LOG_LEVEL
           value: info
+        - name: COUNTRY
+          value: Canada
         - name: WIREGUARD_MTU
           value: "1320"
         - name: HEALTH_SERVER_ADDRESS
@@ -467,6 +696,15 @@ spec:
             name: gluetun-rtorrent
         - configMapRef:
             name: rtorrent-vpn
+        volumeMounts:
+        - name: gluetun-airvpn-picker
+          mountPath: /airvpn-picker
+          readOnly: true
+        # gluetun writes its server list to /gluetun/servers.json on
+        # startup; an emptyDir keeps it across sidecar restarts so the
+        # picker's gluetun-known-server filter works from the second boot on.
+        - name: gluetun-data
+          mountPath: /gluetun
         securityContext:
           capabilities:
             add:
@@ -478,7 +716,10 @@ spec:
             port: 9999
           initialDelaySeconds: 5
           periodSeconds: 3
-          failureThreshold: 20
+          # 40 (2min) rather than 20: the airvpn-picker command runs an apk
+          # install + AirVPN API call + reputation checks before gluetun
+          # starts, so the health server comes up later on first boot.
+          failureThreshold: 40
         livenessProbe:
           httpGet:
             path: /
@@ -605,3 +846,8 @@ spec:
       - name: rtorrent-rc
         configMap:
           name: rtorrent-rc
+      - name: gluetun-airvpn-picker
+        configMap:
+          name: gluetun-airvpn-picker
+      - name: gluetun-data
+        emptyDir: {}
