@@ -9,27 +9,18 @@ set -euo pipefail
 # --kube-version / --api-versions approximate the live cluster so charts that
 # gate on .Capabilities (e.g. VPA templates) render the same objects ArgoCD
 # applies. Bump KUBE_VERSION when the cluster upgrades.
-# Match the live cluster version (cukk auto-upgrades it); CI step pods can
-# GET /version via the default SA (system:public-info-viewer), local runs use
-# kubeconfig. Falls back to a pinned floor when no cluster is reachable.
-if [ -z "${KUBE_VERSION:-}" ]; then
-  KUBE_VERSION=$(kubectl version -o json 2>/dev/null | yq '.serverVersion.gitVersion // ""' || true)
-  KUBE_VERSION=${KUBE_VERSION#v}
+# Chart rendering lives in .ci/lib/render-helm.sh (shared with
+# .ci/validate-prom-selectors.sh); this script keeps discovery, validation,
+# and deprecation checks.
+# shellcheck disable=SC1091
+. "$(dirname "$0")/lib/render-helm.sh"
+helm_init_caps
+if [ -n "${HELM_KUBE_FALLBACK:-}" ]; then
+  echo "WARNING: cluster version undetectable; using fallback"
 fi
-[ -n "$KUBE_VERSION" ] || { echo "WARNING: cluster version undetectable; using fallback"; KUBE_VERSION="1.35.0"; }
 echo "rendering against Kubernetes $KUBE_VERSION"
-
-# Discover the cluster's API versions (group/version plus group/version/Kind,
-# matching what ArgoCD passes) so .Capabilities-gated templates render exactly
-# what the cluster gets. Needs only the discovery endpoints, which
-# system:discovery grants to every authenticated principal — no extra RBAC.
-API_VERSIONS=$( {
-  kubectl api-versions 2>/dev/null
-  kubectl api-resources --no-headers 2>/dev/null | awk '{print $(NF-2)"/"$NF}'
-} | sort -u | sed 's/^/--api-versions /' | tr '\n' ' ' ) || true
-if [ -z "$API_VERSIONS" ]; then
+if [ -n "${HELM_API_FALLBACK:-}" ]; then
   echo "WARNING: API discovery unavailable; using fallback capability list"
-  API_VERSIONS="--api-versions autoscaling.k8s.io/v1 --api-versions monitoring.coreos.com/v1"
 fi
 
 # Prefer local schema mirrors when usable, exclusively — same rationale as
@@ -61,7 +52,7 @@ fi
 # -ignore-missing-schemas: charts ship CRs of their own CRDs (rendered in the
 # same release) that the CRDs-catalog may not carry; missing-schema kinds are
 # reported in the summary as skipped, not failed.
-# helm template runs without --include-crds: CRDs are skipped below anyway,
+# lib/render-helm.sh renders without --include-crds: CRDs are skipped anyway,
 # and some charts' crds/ (altinity-clickhouse-operator) carry duplicate YAML
 # keys that kubeconform can't even parse.
 KUBECONFORM="kubeconform
@@ -89,68 +80,30 @@ fi
 
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
+RENDER_TMPDIR="$WORKDIR"  # scratch dir for lib/render-helm.sh
+# shellcheck disable=SC2034  # consumed by the sourced helper
+export RENDER_TMPDIR
 
-APP_Q='select(.kind=="Application")'
+# Every Application doc in the repo, one per file (see extract_apps).
+extract_apps "$WORKDIR/apps" > "$WORKDIR/apps.txt"
+
 rendered=0
-# Applications live anywhere ArgoCD reads (subdirectories, files not named
-# application.*.yaml), so scan every tracked manifest. One per file: the
-# per-field yq queries below assume a single-doc app.yaml.
-for f in $(git ls-files '*.yaml' | grep -vE '^(vendored/|docs/)'); do
-  # Extract the Application doc first: applying `// {}` fallbacks directly to
-  # a multi-doc file emits one fallback per filtered-out document.
-  yq "$APP_Q" "$f" > "$WORKDIR/app.yaml"
-  [ -s "$WORKDIR/app.yaml" ] || continue
-  if [ "$(yq ea '[select(.kind=="Application")] | length' "$f")" -ne 1 ]; then
-    echo "ERROR: $f holds more than one Application; split it" >&2
-    exit 1
+while read -r f app <&3; do
+  chart=$(yq '.spec.source.chart // ""' "$app")
+  if [ -n "$chart" ]; then
+    header="$chart@$(yq '.spec.source.targetRevision' "$app")"
+  else
+    # git-source app: only a local vendored chart (Chart.yaml with its deps
+    # built into charts/) is Helm; plain manifests are covered by validate.sh.
+    path=$(yq '.spec.source.path // ""' "$app")
+    [ -n "$path" ] && [ -f "$path/Chart.yaml" ] || continue
+    header="local chart $path"
   fi
-  chart=$(yq '.spec.source.chart // ""' "$WORKDIR/app.yaml")
-  if [ -z "$chart" ]; then
-    # git-source app. If its path is a vendored Helm chart (local Chart.yaml
-    # with its deps built into charts/), render it from disk the way ArgoCD
-    # does; otherwise it's plain manifests, covered by validate.sh.
-    path=$(yq '.spec.source.path // ""' "$WORKDIR/app.yaml")
-    if [ -n "$path" ] && [ -f "$path/Chart.yaml" ]; then
-      release=$(yq '.spec.source.helm.releaseName // .metadata.name' "$WORKDIR/app.yaml")
-      namespace=$(yq '.spec.destination.namespace // "default"' "$WORKDIR/app.yaml")
-      yq '.spec.source.helm.valuesObject // {}' "$WORKDIR/app.yaml" > "$WORKDIR/values.yaml"
-      echo "--- $f (local chart $path)"
-      # shellcheck disable=SC2086
-      helm template "$release" "$path" --namespace "$namespace" \
-        --values "$WORKDIR/values.yaml" \
-        --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
-      $KUBECONFORM "$WORKDIR/rendered.yaml"
-      [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
-      rendered=$((rendered + 1))
-    fi
-    continue
-  fi
-
-  repo=$(yq '.spec.source.repoURL' "$WORKDIR/app.yaml")
-  version=$(yq '.spec.source.targetRevision' "$WORKDIR/app.yaml")
-  release=$(yq '.spec.source.helm.releaseName // .metadata.name' "$WORKDIR/app.yaml")
-  namespace=$(yq '.spec.destination.namespace // "default"' "$WORKDIR/app.yaml")
-  yq '.spec.source.helm.valuesObject // {}' "$WORKDIR/app.yaml" > "$WORKDIR/values.yaml"
-
-  echo "--- $f ($chart@$version)"
-  case "$repo" in
-    http*) chart_ref="$chart"; repo_flag="--repo $repo" ;;
-    *)
-      # Pull OCI charts first and template the local tarball: some helm
-      # versions print registry pull chatter (Pulled:/Digest:) to stdout,
-      # which corrupts the piped manifest stream.
-      helm pull "oci://$repo/$chart" --version "$version" -d "$WORKDIR" >/dev/null
-      chart_ref="$WORKDIR/$chart-$version.tgz"; repo_flag=""
-      ;;
-  esac
-  # shellcheck disable=SC2086
-  helm template "$release" "$chart_ref" $repo_flag \
-    --version "$version" --namespace "$namespace" \
-    --values "$WORKDIR/values.yaml" \
-    --kube-version "$KUBE_VERSION" $API_VERSIONS > "$WORKDIR/rendered.yaml"
+  echo "--- $f ($header)"
+  render_helm_app "$app" > "$WORKDIR/rendered.yaml"
   $KUBECONFORM "$WORKDIR/rendered.yaml"
   [ -n "$PLUTO" ] && $PLUTO < "$WORKDIR/rendered.yaml"
   rendered=$((rendered + 1))
-done
+done 3< "$WORKDIR/apps.txt"
 
 echo "All $rendered Helm applications rendered and validated."
