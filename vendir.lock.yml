@@ -20,10 +20,10 @@ directories:
   path: vendored/cert-manager/base
 - contents:
   - git:
-      commitTitle: Update Contour Docker image to v1.33.7....
-      sha: 81c4e28c38177ed1f3a3265389a86f8926c332cb
+      commitTitle: Update Contour Docker image to v1.33.8....
+      sha: 4de356a66eb923ba5f09fa7986cb5673eabb3b76
       tags:
-      - v1.33.7
+      - v1.33.8
     path: .
   path: vendored/contour/base
 - contents:
