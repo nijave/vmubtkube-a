@@ -1,0 +1,108 @@
+# Replication health alerts for the hyperdx ClickHouse cluster
+# (hyperdx-clickhouse.yaml: 1 shard, 2 replicas, 3-node Keeper). Evaluated by
+# the kube-prometheus-stack Prometheus (ruleSelector matchLabels release: prom).
+# Inputs: the ClickHouse built-in Prometheus endpoint (:9363), scraped per
+# pod by the clickhouse-hyperdx ServiceMonitor. Metric names use the native
+# ClickHouseMetrics_/ClickHouseAsyncMetrics_/ClickHouseProfileEvents_
+# prefixes. The Altinity operator's reference rules
+# (deploy/prometheus/prometheus-alert-rules-clickhouse.yaml) use the
+# operator exporter's chi_clickhouse_* names, which are not scraped here.
+#
+# 2026-11 incident context: a node reset on 2026-08-07 lost unsynced parts
+# on replica 0-1. At its next start, otel.otel_traces_trace_id_ts failed the
+# unexpected-parts sanity check and stayed read-only for 85 days. Every
+# otel_traces insert routed to 0-1 failed through the materialized view.
+# Replica 0-0 meanwhile queued fetches for lost merge results that no replica
+# had, which blocked TTL. ReadonlyReplica showed 1 and ReplicasMaxAbsoluteDelay
+# showed 6.8M seconds the whole time, but no rule watched them.
+#
+# Note: a read-only table reports delay 0 on its own replica, so
+# ClickHouseReadonlyReplica is the only rule that catches that case.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: clickhouse-replication-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: clickhouse-replication
+    rules:
+    - alert: ClickHouseReadonlyReplica
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} has {{ $value }} read-only replicated table(s)."
+        description: >-
+          Inserts into a read-only ReplicatedMergeTree table, and into any
+          table whose materialized view writes to it, fail with
+          TABLE_IS_READ_ONLY. A short read-only period after a Keeper session
+          loss clears by itself; this has lasted 10m. Find the table with
+          SELECT database, table, zookeeper_exception FROM system.replicas
+          WHERE is_readonly, then search the pod log for "Initialization
+          failed, table will remain readonly". TOO_MANY_UNEXPECTED_DATA_PARTS
+          means local parts were lost; see the 2026-11 recovery in this file's
+          header.
+      expr: max by (namespace, pod) (ClickHouseMetrics_ReadonlyReplica{namespace="hyperdx"}) > 0
+      for: 10m
+      labels:
+        severity: critical
+    - alert: ClickHouseKeeperSessionLost
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} has no Keeper session."
+        description: >-
+          Without a Keeper session, every replicated table on this server is
+          read-only. Check the keeper-hyperdx pods (chk-hyperdx-keeper-*) and
+          SELECT * FROM system.zookeeper_connection on the server.
+      expr: max by (namespace, pod) (ClickHouseMetrics_ZooKeeperSession{namespace="hyperdx"}) < 1
+      for: 5m
+      labels:
+        severity: critical
+    - alert: ClickHouseReplicationLag
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} replication delay is {{ $value | humanizeDuration }}."
+        description: >-
+          At least one replicated table on this server is behind its peer.
+          Check SELECT table, type, new_part_name, num_tries, last_exception
+          FROM system.replication_queue and active_replicas in
+          system.replicas. Entries that fail with "No active replica has
+          part" never resolve on their own.
+      expr: max by (namespace, pod) (ClickHouseAsyncMetrics_ReplicasMaxAbsoluteDelay{namespace="hyperdx"}) > 900
+      for: 15m
+      labels:
+        severity: warning
+    - alert: ClickHouseReplicatedFetchesFailing
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} part fetches have kept failing for 1h."
+        description: >-
+          The server keeps failing to fetch parts from its peer. Fetches fail
+          briefly while a peer restarts; failures for 1h mean a fetch can
+          never succeed (NO_REPLICA_HAS_PART) or the peer is unreachable.
+          Check last_exception in system.replication_queue.
+      expr: max by (namespace, pod) (rate(ClickHouseProfileEvents_ReplicatedPartFailedFetches{namespace="hyperdx"}[15m])) > 0
+      for: 1h
+      labels:
+        severity: warning
+    - alert: ClickHouseReplicatedDataLoss
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} declared {{ $value }} replicated part(s) lost."
+        description: >-
+          The server gave up on a part that no replica has. That data is gone
+          from this table. This is expected once while a broken replica is
+          rebuilt from its peer; otherwise both replicas lost the same part,
+          usually after a crash with unsynced writes. Check broken-on-start
+          parts in system.detached_parts.
+      expr: max by (namespace, pod) (increase(ClickHouseProfileEvents_ReplicatedDataLoss{namespace="hyperdx"}[15m])) > 0
+      labels:
+        severity: critical
+    - alert: ClickHouseFailedInserts
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} has rejected inserts for 15m."
+        description: >-
+          Find the cause with SELECT event_time, tables, exception FROM
+          system.query_log WHERE query_kind = 'Insert' AND type LIKE
+          'Exception%' ORDER BY event_time DESC. TABLE_IS_READ_ONLY points to
+          ClickHouseReadonlyReplica.
+      expr: max by (namespace, pod) (increase(ClickHouseProfileEvents_FailedInsertQuery{namespace="hyperdx"}[15m])) > 0
+      for: 15m
+      labels:
+        severity: warning
