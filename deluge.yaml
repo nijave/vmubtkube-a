@@ -331,6 +331,9 @@ spec:
             cpu: 500m
       containers:
       - name: deluge
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
         image: lscr.io/linuxserver/deluge:latest@sha256:1dbf9663387f85bb5805fcb1418a246f877e01374bb2a6cd9e632c72fb2e1ebc
         env:
         - name: TZ
@@ -384,6 +387,9 @@ spec:
             memory: 4Gi
             cpu: 2000m
       - name: deluge-exporter
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
         image: docker.io/tobbez/deluge_exporter:latest@sha256:648d63148c42cad5b35c22aa3f9c34b7fa3df8410ce82ed1c4c4a8ae2a3a6290
         ports:
         - containerPort: 9354

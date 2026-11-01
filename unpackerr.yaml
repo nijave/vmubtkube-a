@@ -110,6 +110,8 @@ spec:
         app.kubernetes.io/name: arr
     spec:
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         runAsUser: 1002
         runAsGroup: 1001
         runAsNonRoot: true
