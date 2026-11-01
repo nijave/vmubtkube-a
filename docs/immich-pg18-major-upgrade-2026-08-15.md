@@ -108,8 +108,8 @@ in sync with the imageName PG major on any future major bump.
     the `vector` extension's `halfvec[]` type in `pg_type`.
   - Immich's schema reader (`@immich/sql-tools` 0.6.6,
     `function.reader.ts`) excludes extension-owned functions by joining
-    `pg_depend` on `objid` with `deptype = 'e'` but no `classid` filter.
-    So the `pg_type` dependency row hides the function, and the
+    `pg_depend` on `objid` with `deptype = 'e'` but no `classid` filter,
+    so the `pg_type` dependency row hides the function, and the
     reader reports it as missing. Upstream:
     immich-app/immich#31257 (diagnosis and one-line fix, closed as a
     duplicate of #30696); still unpatched as of 2026-11-01.
