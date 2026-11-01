@@ -65,6 +65,9 @@ spec:
             CLICKHOUSE_APP_PASSWORD: "placeholder"
             MONGODB_PASSWORD: "placeholder"
           deployment:
+            podSecurityContext:
+              seccompProfile:
+                type: RuntimeDefault
             useExistingConfigSecret: true
             existingConfigSecret: hyperdx-clickstack-config
             existingConfigConnectionsKey: connections.json
@@ -80,6 +83,9 @@ spec:
           ingress:
             enabled: false
         otel-collector:
+          podSecurityContext:
+            seccompProfile:
+              type: RuntimeDefault
           extraEnvs:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:

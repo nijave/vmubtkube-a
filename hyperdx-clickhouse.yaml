@@ -66,6 +66,9 @@ spec:
           labels:
             app: clickhouse-keeper
         spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           affinity:
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:
@@ -191,6 +194,9 @@ spec:
     podTemplates:
       - name: clickhouse
         spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           affinity:
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:
