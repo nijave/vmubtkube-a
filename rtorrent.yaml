@@ -470,6 +470,8 @@ spec:
         - configMapRef:
             name: rtorrent-vpn
         securityContext:
+          seccompProfile:
+            type: RuntimeDefault
           capabilities:
             add:
               - NET_ADMIN
