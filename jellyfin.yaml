@@ -163,6 +163,8 @@ spec:
     spec:
       hostNetwork: true  # required for DLNA
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         runAsUser: 1009
         runAsGroup: 1001
         supplementalGroups: [992]  # render group on the Intel iGPU nodes (a20-a23)
