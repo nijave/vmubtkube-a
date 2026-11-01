@@ -127,6 +127,8 @@ spec:
         spec:
           restartPolicy: Never
           securityContext:
+            seccompProfile:
+              type: RuntimeDefault
             runAsUser: 1002
             runAsGroup: 1001
           containers:
