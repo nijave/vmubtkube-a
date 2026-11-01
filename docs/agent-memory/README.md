@@ -30,5 +30,6 @@ against the current code and environment.
 - [project woodpecker vendir push credentials.md](project_woodpecker_vendir_push_credentials.md)
 - [project zfs zil metrics wanted.md](project_zfs_zil_metrics_wanted.md)
 - [reference cc auto mode vs codex autoreview.md](reference_cc_auto_mode_vs_codex_autoreview.md)
+- [reference pod logs clickhouse.md](reference_pod_logs_clickhouse.md)
 - [reference private registry.md](reference_private_registry.md)
 - [reference rustfs s3 server.md](reference_rustfs_s3_server.md)
