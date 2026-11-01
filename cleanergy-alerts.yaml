@@ -1,0 +1,53 @@
+# Alerts for the OUPES power station that piups serves to Home Assistant as
+# a NUT UPS, evaluated by the `ext` Prometheus (ruleSelector matchLabels
+# prometheus: ext). The cleanergy job in prometheus-ext.yaml scrapes the
+# exporter.
+#
+# - When the BLE link fails, NUT's dummy-ups keeps serving the last values
+#   it read (OL, 100%), so Home Assistant shows stale data as current. In
+#   2026 that went unnoticed from March to November.
+# - CleanergyStationUnreachable fires when no poll succeeded for 10 minutes.
+#   It covers two shapes: the exporter stays up and reports
+#   cleanergy_scrape_success 0, or it crash-loops and the series is missing
+#   or only appears briefly. `up` flaps in a crash loop, so ScrapeFailed
+#   (up == 0 for 10m) does not cover that case.
+# - CleanergyTargetAbsent covers the gap scrape-failure-alerts.yaml
+#   documents: up == 0 cannot fire for a target that left the scrape config.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cleanergy-alerts
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+  - name: cleanergy
+    rules:
+    - alert: CleanergyStationUnreachable
+      annotations:
+        summary: No successful poll of the OUPES power station in 10 minutes.
+        description: >-
+          cleanergy-exporter on piups has not read the station over BLE for
+          10 minutes, so NUT and Home Assistant show stale values. Check
+          'journalctl -u cleanergy-exporter' on piups. Common causes: the
+          phone app holds the BLE connection, or the station needs to go
+          back into pairing mode.
+      expr: |-
+        max_over_time(cleanergy_scrape_success{job="cleanergy"}[10m]) == 0
+        or
+        absent_over_time(cleanergy_scrape_success{job="cleanergy"}[10m])
+      for: 5m
+      labels:
+        severity: warning
+    - alert: CleanergyTargetAbsent
+      annotations:
+        summary: The cleanergy scrape target is missing.
+        description: >-
+          Prometheus-ext has no up series for job cleanergy, so it is not
+          scraping piups:9743 at all. Check the cleanergy job in
+          prometheus-ext.yaml.
+      expr: absent(up{job="cleanergy"})
+      for: 10m
+      labels:
+        severity: warning
