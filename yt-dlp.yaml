@@ -68,6 +68,9 @@ spec:
         app.kubernetes.io/component: bgutil-provider
         app.kubernetes.io/name: yt-dlp
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: bgutil-provider
         # renovate: datasource=docker depName=brainicism/bgutil-ytdlp-pot-provider
