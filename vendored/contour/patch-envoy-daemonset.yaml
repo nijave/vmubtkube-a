@@ -13,6 +13,9 @@ spec:
       maxSurge: 2
   template:
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: shutdown-manager
         resources:
