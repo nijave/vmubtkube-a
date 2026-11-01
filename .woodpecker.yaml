@@ -32,7 +32,7 @@ when:
 steps:
   validate:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     environment:
       # renovate: datasource=github-releases depName=yannh/kubeconform
       KUBECONFORM_VERSION: v0.8.0
@@ -45,7 +45,7 @@ steps:
 
   validate-pluto:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     environment:
       # renovate: datasource=github-releases depName=FairwindsOps/pluto
       PLUTO_VERSION: v5.24.0
@@ -55,7 +55,7 @@ steps:
 
   validate-helm:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     when:
       - event: pull_request
         # Any manifest can hold a Helm-source Application.
@@ -76,7 +76,7 @@ steps:
 
   validate-prom-selectors:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     # No `when:` path filter: any manifest can add, fix, or orphan a
     # monitoring resource (and the rendered Helm Applications feed the check).
     commands:
@@ -84,7 +84,7 @@ steps:
 
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     # No `when:` filter: mirror-images depends_on this step, and Woodpecker
     # rejects a DAG whose dependency is filtered out by conditions. The
     # equivalent gating (PR event + vendir file changes) lives in the script.
@@ -102,7 +102,7 @@ steps:
 
   vendir-push:
     # renovate: datasource=docker depName=alpine/k8s
-    image: alpine/k8s:1.37.1
+    image: alpine/k8s:1.37.2
     # Gated to pull_request so the PR-only deploy-key secret is never evaluated
     # on push events. Nothing depends_on this step, so filtering it out on push
     # keeps the DAG valid. vendir-sync signals it via .tmp/vendir-push-needed.
