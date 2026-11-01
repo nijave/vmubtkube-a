@@ -261,6 +261,9 @@ spec:
         app.kubernetes.io/name: searxng
         app.kubernetes.io/component: searxng
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: inject-metrics-password
           image: registry.apps.nickv.me/library/busybox:1.38.0

@@ -129,6 +129,9 @@ spec:
       labels:
         app: python-envoy-authz
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

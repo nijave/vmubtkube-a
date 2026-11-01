@@ -144,6 +144,8 @@ spec:
         app.kubernetes.io/name: mumble
     spec:
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         runAsUser: 10000
         runAsGroup: 10000
         runAsNonRoot: true

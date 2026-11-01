@@ -126,6 +126,8 @@ spec:
         app.kubernetes.io/name: selfoss
     spec:
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         fsGroup: 33
         fsGroupChangePolicy: OnRootMismatch
       containers:
