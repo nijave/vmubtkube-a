@@ -438,6 +438,8 @@ spec:
               name: gluetun-rtorrent
               key: WIREGUARD_ADDRESSES
         securityContext:
+          seccompProfile:
+            type: RuntimeDefault
           runAsUser: 1002
           runAsGroup: 1001
         volumeMounts:
@@ -502,6 +504,9 @@ spec:
             cpu: 500m
       containers:
       - name: rtorrent
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
         # Public hotio/rflood image (replaces the custom Arch build from
         # images/rtorrent/): rTorrent 0.16.20 built from source — the same
         # version the VM runs — with Flood bundled and nginx serving
@@ -585,6 +590,8 @@ spec:
           name: metrics
           protocol: TCP
         securityContext:
+          seccompProfile:
+            type: RuntimeDefault
           runAsNonRoot: true
           runAsUser: 65534
         resources:

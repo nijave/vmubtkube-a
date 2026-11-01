@@ -145,6 +145,8 @@ spec:
         app.kubernetes.io/name: cross-seed
     spec:
       securityContext:
+        seccompProfile:
+          type: RuntimeDefault
         fsGroup: 1001
         fsGroupChangePolicy: OnRootMismatch
       containers:
