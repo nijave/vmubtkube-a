@@ -1,0 +1,51 @@
+# Woodpecker's k8s backend has no agent-wide seccomp setting, and kubelet
+# seccompDefault is off, so pipeline step pods would run Unconfined.  Default
+# them to RuntimeDefault, which blocks unprivileged user-namespace creation.
+# Steps that set a pod-level seccompProfile via backend_options keep theirs.
+# buildkitd is not a step pod (no woodpecker-ci.org/step label) and stays
+# Unconfined.
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: woodpecker-step-seccomp
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: woodpecker
+    objectSelector:
+      matchExpressions:
+        - key: woodpecker-ci.org/step
+          operator: Exists
+  matchConditions:
+    - name: no-pod-seccomp-profile
+      expression: >-
+        !has(object.spec.securityContext) ||
+        !has(object.spec.securityContext.seccompProfile)
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{
+            spec: Object.spec{
+              securityContext: Object.spec.securityContext{
+                seccompProfile: Object.spec.securityContext.seccompProfile{
+                  type: "RuntimeDefault"
+                }
+              }
+            }
+          }
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: woodpecker-step-seccomp
+spec:
+  policyName: woodpecker-step-seccomp
