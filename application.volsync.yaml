@@ -30,4 +30,11 @@ spec:
     targetRevision: 0.17.0
     helm:
       releaseName: volsync
+      # Replaces the cluster's API list for this render, which drops the
+      # chart's ServiceMonitor (gated only on .Capabilities; no values knob,
+      # no release: prom, no bearer token). volsync-alerts.yaml ships the
+      # working volsync-prom SM. The chart's only other .Capabilities check
+      # (OpenShift SCC) is false either way.
+      apiVersions:
+        - v1/Service
       valuesObject: {}

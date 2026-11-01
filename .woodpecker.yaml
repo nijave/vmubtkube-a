@@ -6,12 +6,12 @@
 # Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
 #
-# Step DAG (depends_on): validate, validate-pluto, and validate-helm run in
-# parallel from the start; vendir-sync waits for the steps that read
-# vendored/ (it rewrites those files in the shared workspace); mirror-images
-# and vendir-push both wait for vendir-sync (mirror-images git-diffs the same
-# workspace; vendir-push, PR-only, pushes vendir-sync's commit back to the PR
-# branch with the deploy key).
+# Step DAG (depends_on): validate, validate-pluto, validate-helm, and
+# validate-prom-selectors run in parallel from the start; vendir-sync waits for
+# the steps that read vendored/ (it rewrites those files in the shared
+# workspace); mirror-images and vendir-push both wait for vendir-sync
+# (mirror-images git-diffs the same workspace; vendir-push, PR-only, pushes
+# vendir-sync's commit back to the PR branch with the deploy key).
 clone:
   git:
     # renovate: datasource=docker depName=woodpeckerci/plugin-git
@@ -73,6 +73,14 @@ steps:
       - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-helm.sh
+
+  validate-prom-selectors:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.37.1
+    # No `when:` path filter: any manifest can add, fix, or orphan a
+    # monitoring resource (and the rendered Helm Applications feed the check).
+    commands:
+      - sh .ci/validate-prom-selectors.sh
 
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s
