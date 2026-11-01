@@ -23,6 +23,7 @@ against the current code and environment.
 - [project device udev link info join metric.md](project_device_udev_link_info_join_metric.md)
 - [project gluetun fork.md](project_gluetun_fork.md)
 - [project grafana dashboard delivery.md](project_grafana_dashboard_delivery.md)
+- [project immich schema drift false positive.md](project_immich_schema_drift_false_positive.md)
 - [project renovate custom version api.md](project_renovate_custom_version_api.md)
 - [project searxng stack.md](project_searxng_stack.md)
 - [project serviceip routable.md](project_serviceip_routable.md)

@@ -95,11 +95,28 @@ in sync with the imageName PG major on any future major bump.
   exercised a barman restore, not volsync.
 - **Immich schema-check false positive**: v3.1.0's
   `immich-admin schema-check` reports `FunctionCreate: user_delete_audit
-  is missing` on every startup. Benign and unrelated to this upgrade:
-  the function exists in `public` with the exact body the tool generates,
-  its trigger exists, owner matches the unflagged sibling audit
-  functions, migrations are up to date, and reapplying the generated SQL
-  does not clear the warning. It predates the upgrade (pg_upgrade
-  preserves `pg_proc`/`pg_trigger`, and the server had not cold-started
-  since v3.1.0 deployed ~6 days earlier). Re-check after the next Immich
-  upgrade; report upstream if it persists.
+  is missing` on every startup. Benign: the function exists in `public`
+  with the exact body the tool generates, its trigger exists, owner
+  matches the unflagged sibling audit functions, migrations are up to
+  date, and reapplying the generated SQL does not clear the warning.
+  - *Corrected 2026-11-01:* this upgrade most likely caused it. The
+    earlier claim that pg_upgrade preserves `pg_proc` OIDs is wrong:
+    `pg_dump --binary-upgrade` preserves type, class and enum OIDs, not
+    function OIDs. The restored functions received new low OIDs
+    (16565–16728, in pg_dump's alphabetical order), and
+    `user_delete_audit` landed on OID 16727. That OID is also used by
+    the `vector` extension's `halfvec[]` type in `pg_type`.
+  - Immich's schema reader (`@immich/sql-tools` 0.6.6,
+    `function.reader.ts`) excludes extension-owned functions by joining
+    `pg_depend` on `objid` with `deptype = 'e'` but no `classid` filter,
+    so the `pg_type` dependency row hides the function, and the
+    reader reports it as missing. Upstream:
+    immich-app/immich#31257 (diagnosis and one-line fix, closed as a
+    duplicate of #30696); still unpatched as of 2026-11-01.
+  - To clear it locally, drop and recreate the trigger and function in
+    one transaction as the `immich` role, which assigns a fresh OID.
+    Keep the body byte-identical to the generated SQL. Take a barman
+    backup first. Otherwise, ignore it, but run `schema-check` after
+    each upgrade, because a new drift item can hide behind this one.
+  - For future PG major upgrades: pg_upgrade can create OID collisions
+    between restored functions and preserved extension types.
