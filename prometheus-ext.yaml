@@ -131,6 +131,14 @@ stringData:
       static_configs:
       - targets:
         - ubthv01.homelab.somemissing.info:9177
+    # cleanergy-exporter on piups (Raspberry Pi): reads the OUPES power
+    # station over BLE and feeds NUT's dummy-ups. Deployed by the ansible
+    # repo's piups.yml; alerts in cleanergy-alerts.yaml.
+    - job_name: cleanergy
+      scrape_interval: 15s
+      static_configs:
+      - targets:
+        - piups.homelab.somemissing.info:9743
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
