@@ -162,8 +162,9 @@ spec:
   podMetricsEndpoints:
   - port: metrics
 ---
-# Renders the postgres DSN (and any future forge OAuth env vars) into a single
-# Secret consumed by the server StatefulSet via extraSecretNamesForEnvFrom.
+# Renders the postgres DSN, the gRPC signing key, and any future forge OAuth
+# env vars into a single Secret consumed by the server StatefulSet via
+# extraSecretNamesForEnvFrom.
 # Populate forge credentials by extending this ExternalSecret once Forgejo /
 # GitHub OAuth apps exist (e.g. WOODPECKER_GITHUB_CLIENT, WOODPECKER_GITHUB_SECRET).
 apiVersion: external-secrets.io/v1
@@ -184,6 +185,7 @@ spec:
       data:
         WOODPECKER_DATABASE_DRIVER: postgres
         WOODPECKER_DATABASE_DATASOURCE: "postgres://woodpecker:{{ .pgPassword }}@woodpecker-rw.woodpecker.svc.cluster.local:5432/woodpecker?sslmode=require"
+        WOODPECKER_GRPC_SECRET: "{{ .grpcSecret }}"
   data:
   - secretKey: pgPassword
     remoteRef:
@@ -192,6 +194,32 @@ spec:
       conversionStrategy: Default
       decodingStrategy: None
       metadataPolicy: None
+  - secretKey: grpcSecret
+    remoteRef:
+      key: woodpecker-grpc-secret
+      property: grpcSecret
+      conversionStrategy: Default
+      decodingStrategy: None
+      metadataPolicy: None
+---
+# Signing key for the JWTs that authenticate agent gRPC connections. Unset, the
+# server generates a throwaway secret at every start: it logs
+# "WOODPECKER_GRPC_SECRET is not set; generated a temporary random secret",
+# every agent has to reauthenticate on restart, and two server replicas could
+# never share one queue. Generated once by secret-generator and read back
+# through the in-namespace `k8s` SecretStore, like postgres-woodpecker-user.
+# Hex rather than base64 so the value can never carry a character that needs
+# escaping wherever it is consumed; it is only ever passed as a plain env value.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: woodpecker-grpc-secret
+  namespace: woodpecker
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: grpcSecret
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "48"
+type: Opaque
 ---
 # GitHub OAuth credentials pulled from Bitwarden Secrets Manager.
 # Create two secrets in the bitwarden project referenced by the `default`
