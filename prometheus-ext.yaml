@@ -114,6 +114,16 @@ stringData:
         # piiot: Pine A64+ (Fedora) Podman host, WiFi DHCP reservation
         # 172.16.1.132; node-exporter from the ansible repo's pine64.yml.
         - piiot.homelab.somemissing.info:9100
+    # prometheus-podman-exporter on piiot, run as the rootless `apps` user
+    # against its podman.socket (user unit podman-exporter.service from the
+    # ansible repo's piiot.yml): container state, exit code, health, CPU and
+    # memory of the quadlets. Quadlet unit states come through node-exporter's
+    # textfile collector (systemd_user_unit_state) on :9100 above.
+    - job_name: podman-exporter
+      scrape_interval: 15s
+      static_configs:
+      - targets:
+        - piiot.homelab.somemissing.info:9882
     # mysqld_exporter 0.20.0 on the same host (manual binary + systemd; see
     # the infra workspace's vmubtmysql01.md). UFW admits 9104 from this
     # cluster's subnet only.
