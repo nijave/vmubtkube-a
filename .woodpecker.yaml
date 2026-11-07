@@ -40,7 +40,7 @@ steps:
       # flaky raw.githubusercontent.com CDN (see .ci/sync-schemas.sh)
       SCHEMA_MIRROR: .tmp/schemas
     commands:
-      - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - wget -q -t 3 -T 30 -O- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - sh .ci/validate.sh
 
   validate-pluto:
@@ -50,7 +50,7 @@ steps:
       # renovate: datasource=github-releases depName=FairwindsOps/pluto
       PLUTO_VERSION: v5.24.0
     commands:
-      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
+      - wget -q -t 3 -T 30 -O- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-pluto.sh
 
   validate-helm:
@@ -70,8 +70,8 @@ steps:
       # see validate step
       SCHEMA_MIRROR: .tmp/schemas
     commands:
-      - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
-      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
+      - wget -q -t 3 -T 30 -O- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - wget -q -t 3 -T 30 -O- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-helm.sh
 
   validate-prom-selectors:
@@ -96,7 +96,7 @@ steps:
       # renovate: datasource=github-releases depName=carvel-dev/vendir
       VENDIR_VERSION: v0.46.0
     commands:
-      - wget -qO /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
+      - wget -q -t 3 -T 30 -O /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
       - chmod +x /usr/local/bin/vendir
       - sh .ci/vendir-sync.sh
 
@@ -129,5 +129,7 @@ steps:
           runAsUser: 0
           runAsGroup: 0
     commands:
-      - apk add --no-cache yq jq git
+      # dl-cdn.alpinelinux.org is a third-party service on the critical path of
+      # every run; one retry is enough to absorb its transient failures.
+      - apk add --no-cache yq jq git || (sleep 10 && apk add --no-cache yq jq git)
       - sh .ci/mirror-images.sh
