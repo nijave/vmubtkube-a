@@ -18,6 +18,16 @@
 #
 # Note: a read-only table reports delay 0 on its own replica, so
 # ClickHouseReadonlyReplica is the only rule that catches that case.
+#
+# Also covers capacity/pressure rules adapted from
+# https://samber.github.io/awesome-prometheus-alerts/rules/databases/clickhouse/
+# (memory usage, parts per partition). The awesome list's node-down,
+# readonly-replica, keeper, replication-lag and data-loss rules duplicate
+# what is here or in scrape-failure-alerts.yaml; its disk rules name
+# per-disk metric suffixes that the exporter here does not emit (it uses
+# a disk="default" label instead). ErrorMetric-based replica rules were
+# skipped: they only fire when a failing query happens to run, which the
+# state-based rules below catch regardless.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -104,5 +114,49 @@ spec:
           ClickHouseReadonlyReplica.
       expr: max by (namespace, pod) (increase(ClickHouseProfileEvents_FailedInsertQuery{namespace="hyperdx"}[15m])) > 0
       for: 15m
+      labels:
+        severity: warning
+    - alert: ClickHouseMemoryWarning
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} cgroup memory at {{ $value | humanizePercentage }} of limit."
+        description: >-
+          The container is using over 80% of its cgroup memory limit for 10m.
+          At 100% the kernel OOM-killer terminates the container, restarting
+          the pod; if this replica restarts with unsynced parts it can stay
+          read-only (see the 2026-11 incident in this file's header).
+          Find the top consumers with SELECT query_id, memory_usage FROM
+          system.processes ORDER BY memory_usage DESC LIMIT 10. Keepers
+          (chk-hyperdx-keeper-*) are monitored by the same rule.
+      expr: max by (namespace, pod) (ClickHouseAsyncMetrics_CGroupMemoryUsed{namespace="hyperdx"} / ClickHouseAsyncMetrics_CGroupMemoryTotal{namespace="hyperdx"}) > 0.8
+      for: 10m
+      labels:
+        severity: warning
+    - alert: ClickHouseMemoryCritical
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} cgroup memory at {{ $value | humanizePercentage }} of limit."
+        description: >-
+          The container is using over 90% of its cgroup memory limit for 10m
+          and is at risk of OOM kill. See ClickHouseMemoryWarning for how to
+          find the top consumers; also judge real usage against page cache
+          with ClickHouseAsyncMetrics_CGroupMemoryUsedWithoutPageCache.
+      expr: max by (namespace, pod) (ClickHouseAsyncMetrics_CGroupMemoryUsed{namespace="hyperdx"} / ClickHouseAsyncMetrics_CGroupMemoryTotal{namespace="hyperdx"}) > 0.9
+      for: 10m
+      labels:
+        severity: critical
+    - alert: ClickHouseTooManyPartsPerPartition
+      annotations:
+        summary: "ClickHouse {{ $labels.pod }} has {{ $value }} parts in its busiest partition."
+        description: >-
+          The largest per-partition active part count has exceeded 50 for 5m,
+          an early warning of merge pressure before ClickHouse starts
+          delaying or rejecting inserts (see ClickHouseFailedInserts). The
+          steady otel ingest here holds about 10, so sustained 50+ is
+          unusual. Find the hot partition with SELECT database, table,
+          partition, count() FROM system.parts WHERE active GROUP BY ALL
+          HAVING count() > 50 ORDER BY count() DESC, then check the merge
+          backlog in system.merges and reduce insert batch frequency into
+          that table.
+      expr: max by (namespace, pod) (ClickHouseAsyncMetrics_MaxPartCountForPartition{namespace="hyperdx"}) > 50
+      for: 5m
       labels:
         severity: warning
