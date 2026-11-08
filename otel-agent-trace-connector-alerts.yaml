@@ -45,7 +45,7 @@ spec:
       annotations:
         summary: "Coding-agent trace connector is failing to send metrics to Thanos Receive."
         description: >-
-          The prometheusremotewrite exporter is failing to deliver metric
+          The prometheus_remote_write exporter is failing to deliver metric
           points to thanos-receive-router. Retries absorb transient errors,
           but once the sending queue fills the points are dropped for good,
           and non-retryable 4xx rejections drop immediately. Check the pod
