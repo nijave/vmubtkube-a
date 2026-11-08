@@ -38,10 +38,15 @@ network — the same shape as the existing `buildkitd` service.
   `monitoring`, `release: prom`, like `argocd-alerts.yaml`): not ready, restart
   looping, volume nearly full, metrics missing.
 - Credentials: `secret-generator.v1.mittwald.de/autogenerate: access-key,secret-key`
-  with hex encoding, mirroring `postgres-woodpecker-user`. The pipeline gets a
-  copy through Woodpecker repo secrets (`cache_access_key`, `cache_secret_key`)
-  rather than `WOODPECKER_BACKEND_K8S_ALLOW_NATIVE_SECRETS`, so no agent-wide
-  permission is widened.
+  with hex encoding, mirroring `postgres-woodpecker-user`. The pipeline reads
+  them as Woodpecker repo secrets (`cache_access_key`, `cache_secret_key`), kept
+  in sync with that Secret by a CronJob that upserts the rows directly in
+  Woodpecker's `secrets` table — no hand-registered copy to go stale, and no
+  agent-wide permission widened (the alternative,
+  `WOODPECKER_BACKEND_K8S_ALLOW_NATIVE_SECRETS`, was rejected: it would let any
+  pipeline reference any Secret in the namespace). Direct SQL couples us to
+  Woodpecker's schema, which is accepted: a schema change fails the Job loudly
+  (`KubeJobFailed`) instead of silently serving stale credentials.
 - Client: `rclone` (S3-provider-agnostic, documented copy/sync/delete semantics,
   and it works against any S3, so the cache is not tied to rustfs).
 - Buckets: one bucket `ci-cache`, remote alias `cicache`. Layout:
