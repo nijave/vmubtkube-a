@@ -1,0 +1,263 @@
+# CI artifact cache: a single-node S3 endpoint for everything the pipeline
+# re-downloads on every run. Only this pod mounts the RWO zvol, and step pods
+# reach it over ClusterIP from whichever node they land on, which is why object
+# storage sidesteps the missing RWX StorageClass. Design:
+# docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md
+#
+# The data is a cache: not backed up, not snapshotted, no PodDisruptionBudget
+# (a single-replica PDB would block kured drains forever). Losing it costs one
+# cold CI run.
+---
+# rustfs only pushes telemetry, so this sidecar is its OTLP sink and re-exposes
+# what it receives as Prometheus text on :8889. Scraping (rather than
+# remote-writing to Thanos directly) is what makes the series alertable: see the
+# reasoning in docs/superpowers/plans/2026-11-06-ci-cache-rustfs.md, Task 2.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rustfs-metrics
+  namespace: woodpecker
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 127.0.0.1:4318
+    processors:
+      batch: {}
+    exporters:
+      prometheus:
+        endpoint: 0.0.0.0:8889
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rustfs-ci-cache
+  namespace: woodpecker
+  annotations:
+    # Hex so the values can never carry a character that needs URL escaping:
+    # .ci steps build a S3 endpoint URL out of them.
+    secret-generator.v1.mittwald.de/autogenerate: access-key,secret-key
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "32"
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-ci-cache
+  namespace: woodpecker
+  annotations:
+    # Cache data: keep it out of NAS snapshots/replication, it is rebuildable.
+    democratic-csi.org/config: |
+      zfs:
+        datasetProperties:
+          homelab:sanoid-skip: "true"
+          syncoid:sync: "false"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    app: rustfs
+spec:
+  replicas: 1
+  # RWO volume + Recreate: a rolling update would mount the same zvol in two
+  # pods and wedge on Multi-Attach.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      securityContext:
+        # The image runs as uid/gid 10001 (docs.rustfs.com, Docker page).
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: rustfs
+          # renovate: datasource=docker depName=rustfs/rustfs
+          image: rustfs/rustfs:1.0.4
+          args:
+            - /data
+          env:
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            - name: RUSTFS_OBS_LOGGER_LEVEL
+              value: error
+            # Push metrics at the sidecar. Traces and logs stay on stdout so
+            # they are not duplicated into OTLP (the cluster collects them from
+            # the container log).
+            - name: RUSTFS_OBS_ENDPOINT
+              value: http://127.0.0.1:4318
+            - name: RUSTFS_OBS_METRICS_EXPORT_ENABLED
+              value: "true"
+            - name: RUSTFS_OBS_TRACES_EXPORT_ENABLED
+              value: "false"
+            - name: RUSTFS_OBS_LOGS_EXPORT_ENABLED
+              value: "false"
+            - name: RUSTFS_OBS_METER_INTERVAL
+              value: 30s
+            - name: RUSTFS_OBS_SERVICE_NAME
+              value: rustfs-ci-cache
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-ci-cache
+                  key: access-key
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-ci-cache
+                  key: secret-key
+          ports:
+            - name: s3
+              containerPort: 9000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+        - name: otel-collector
+          # renovate: datasource=docker depName=otel/opentelemetry-collector-contrib
+          image: otel/opentelemetry-collector-contrib:0.163.2
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: metrics
+              containerPort: 8889
+          volumeMounts:
+            - name: metrics-config
+              mountPath: /etc/otelcol
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-ci-cache
+        - name: metrics-config
+          configMap:
+            name: rustfs-metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    app: rustfs
+spec:
+  type: ClusterIP
+  selector:
+    app: rustfs
+  ports:
+    - name: s3
+      # Port 80 on the Service only: the container keeps listening on 9000,
+      # because it runs as uid 10001 and cannot bind a privileged port. With 80
+      # here, step configuration never carries a port number.
+      port: 80
+      targetPort: s3
+---
+# Same shape as the buildkitd policy: anything in this namespace may read and
+# write the cache, nothing outside it can reach the API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rustfs
+  namespace: woodpecker
+spec:
+  podSelector:
+    matchLabels:
+      app: rustfs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: woodpecker
+      ports:
+        # NetworkPolicy ports are the pod's, not the Service's: this stays 9000
+        # even though clients reach the API on the Service's port 80.
+        - protocol: TCP
+          port: 9000
+    # The OTLP sidecar's Prometheus endpoint, scraped by prom-kp-prometheus in
+    # the monitoring namespace. Without this rule the PodMonitor reaches a pod
+    # that denies it, every rustfs_* series stays absent, and
+    # CICacheMetricsMissing fires forever.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8889
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    # prom-kp-prometheus selects PodMonitors by release=prom across all
+    # namespaces; .ci/validate-prom-selectors.sh fails the PR if a monitor is
+    # selected by no instance.
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app: rustfs
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

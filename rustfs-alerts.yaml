@@ -1,0 +1,58 @@
+# Alerts for the CI artifact cache (rustfs in namespace woodpecker). The cache
+# is fail-open by design, so these are warnings: the failure mode is silent CI
+# slowdown, not a failed build. Metrics arrive through the OTLP sidecar in
+# woodpecker/rustfs.woodpecker.yaml and are relayed to Thanos by
+# kube-prometheus-stack's remote-write, like every other scraped series.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rustfs-ci-cache
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+    - name: rustfs-ci-cache
+      rules:
+        - alert: CICacheMetricsMissing
+          # Name-agnostic on purpose: absent() on one guessed metric fires
+          # forever if rustfs renames it, and the real breakage then hides.
+          expr: absent({__name__=~"rustfs_.*"})
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache metrics have been missing for an hour
+            description: >-
+              No rustfs_* series. Either the rustfs pod, its OTLP sidecar, or
+              the scrape is broken; CI still passes but every pipeline pays the
+              full download cost again.
+        - alert: CICacheNotReady
+          expr: rustfs_runtime_readiness_ready == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache has been unready for 30 minutes
+            description: >-
+              rustfs reports itself not ready, so pipelines run cold. Check the
+              pod and its iSCSI volume.
+        - alert: CICacheRestartLooping
+          expr: increase(rustfs_start_total[30m]) > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache is restarting repeatedly
+        - alert: CICacheVolumeNearlyFull
+          # The capacity gauge ships as rustfs_capacity_current_bytes upstream
+          # but as rustfs_capacity_current in some builds; take whichever is
+          # present (Step 10 confirms the live name).
+          expr: (rustfs_capacity_current_bytes or rustfs_capacity_current) > 8.6e9
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache volume is over 80% of its 10Gi PVC
+            description: >-
+              Old chart and tool versions accumulate; prune them or grow the PVC
+              before writes start failing.
