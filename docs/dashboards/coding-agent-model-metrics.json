@@ -22,7 +22,7 @@
       }
     },
     {
-      "id": "kpi-retry",
+      "id": "kpi-err",
       "x": 3,
       "y": 0,
       "w": 3,
@@ -31,13 +31,13 @@
         "displayType": "number",
         "numberFormat": {
           "output": "number",
-          "mantissa": 1
+          "mantissa": 2
         },
         "configType": "sql",
-        "sqlTemplate": "SELECT round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "sqlTemplate": "SELECT round(countIf(StatusCode = 'Error') * 100.0 / count(), 2) AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
-        "name": "Retry rate %"
+        "name": "Error rate %"
       }
     },
     {
@@ -53,7 +53,7 @@
           "mantissa": 0
         },
         "configType": "sql",
-        "sqlTemplate": "SELECT round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "sqlTemplate": "SELECT round(quantileIf(0.95)(toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']) * 1000, SpanAttributes['gen_ai.response.time_to_first_chunk'] != ''), 0) AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "TTFT p95 (ms)"
@@ -87,7 +87,7 @@
       "config": {
         "displayType": "table",
         "configType": "sql",
-        "sqlTemplate": "SELECT SpanAttributes['gen_ai.request.model'] AS model, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(SpanAttributes['success'] = 'false') * 100.0 / count(), 2) AS err_pct, round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS retry_pct, round(quantile(0.5)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p50_ms, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p95_ms, round(quantile(0.5)(Duration) / 1e6, 0) AS lat_p50_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms, round(quantile(0.99)(Duration) / 1e6, 0) AS lat_p99_ms, round(if(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])) > 0, (sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']))) / greatest(sum(toFloat64OrZero(SpanAttributes['duration_ms'])) - sum(toFloat64OrZero(SpanAttributes['ttft_ms'])), 1) * 1000, 0), 1) AS gen_toks, round(sum(toFloat64OrZero(SpanAttributes['input_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in, round(sum(toFloat64OrZero(SpanAttributes['cache_read_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS tok_cache, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, agent ORDER BY requests DESC",
+        "sqlTemplate": "SELECT SpanAttributes['gen_ai.request.model'] AS model, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(StatusCode = 'Error') * 100.0 / count(), 2) AS err_pct, round(quantileIf(0.5)(toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']) * 1000, SpanAttributes['gen_ai.response.time_to_first_chunk'] != ''), 0) AS ttft_p50_ms, round(quantileIf(0.95)(toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']) * 1000, SpanAttributes['gen_ai.response.time_to_first_chunk'] != ''), 0) AS ttft_p95_ms, round(quantile(0.5)(Duration) / 1e6, 0) AS lat_p50_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms, round(quantile(0.99)(Duration) / 1e6, 0) AS lat_p99_ms, round(if(sumIf(Duration / 1e9 - toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']), SpanAttributes['gen_ai.response.time_to_first_chunk'] != '' AND Duration / 1e9 > toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk'])) > 0, sumIf(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']), SpanAttributes['gen_ai.response.time_to_first_chunk'] != '' AND Duration / 1e9 > toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk'])) / greatest(sumIf(Duration / 1e9 - toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']), SpanAttributes['gen_ai.response.time_to_first_chunk'] != '' AND Duration / 1e9 > toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk'])), 1e-9), 0), 1) AS gen_toks, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS tok_cache, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens'])), 0) AS tok_cache_write, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY model, agent ORDER BY requests DESC",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Per-model metrics"
@@ -102,7 +102,7 @@
       "config": {
         "displayType": "table",
         "configType": "sql",
-        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(SpanAttributes['success'] = 'false') * 100.0 / count(), 2) AS err_pct, round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS retry_pct, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p95_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms, round(sum(toFloat64OrZero(SpanAttributes['input_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in, round(sum(toFloat64OrZero(SpanAttributes['cache_read_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS tok_cache, round(sum(toFloat64OrZero(SpanAttributes['output_tokens'])) + sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent ORDER BY requests DESC",
+        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(StatusCode = 'Error') * 100.0 / count(), 2) AS err_pct, round(quantileIf(0.95)(toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']) * 1000, SpanAttributes['gen_ai.response.time_to_first_chunk'] != ''), 0) AS ttft_p95_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens'])), 0) AS tok_in, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS tok_cache, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens'])), 0) AS tok_cache_write, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS tok_out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent ORDER BY requests DESC",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Per-agent metrics"
@@ -117,7 +117,7 @@
       "config": {
         "displayType": "table",
         "configType": "sql",
-        "sqlTemplate": "SELECT toDate(Timestamp) AS day, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(SpanAttributes['success'] = 'false') * 100.0 / count(), 2) AS err_pct, round(countIf(toUInt8OrZero(SpanAttributes['attempt']) > 1) * 100.0 / count(), 1) AS retry_pct, round(quantile(0.95)(toFloat64OrZero(SpanAttributes['ttft_ms'])), 0) AS ttft_p95_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY day, agent ORDER BY day, requests DESC",
+        "sqlTemplate": "SELECT toDate(Timestamp) AS day, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, count() AS requests, round(countIf(StatusCode = 'Error') * 100.0 / count(), 2) AS err_pct, round(quantileIf(0.95)(toFloat64OrZero(SpanAttributes['gen_ai.response.time_to_first_chunk']) * 1000, SpanAttributes['gen_ai.response.time_to_first_chunk'] != ''), 0) AS ttft_p95_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS lat_p95_ms FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY day, agent ORDER BY day, requests DESC",
         "connection": "69d6f9db842db143c17e0540",
         "source": "69d6f9dc842db143c17e0546",
         "name": "Daily trend"
@@ -133,6 +133,6 @@
   "updatedBy": "69d6f9db842db143c17e0537",
   "provisioned": false,
   "createdAt": "2026-08-23T20:52:11.679Z",
-  "updatedAt": "2026-08-23T20:52:11.690Z",
+  "updatedAt": "2026-11-08T00:46:21.888Z",
   "__v": 0
 }
