@@ -6,8 +6,10 @@
 # Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
 #
-# Step DAG (depends_on): validate, validate-pluto, validate-helm, and
-# validate-prom-selectors run in parallel from the start; vendir-sync waits for
+# Step DAG (depends_on): prepare builds the two caches (.tmp/schemas,
+# .tmp/charts) in the workspace; validate, validate-helm, and
+# validate-prom-selectors wait for it and then read them. validate-pluto is
+# independent (it shells out to kubectl only, no schemas). vendir-sync waits for
 # the steps that read vendored/ (it rewrites those files in the shared
 # workspace); mirror-images and vendir-push both wait for vendir-sync
 # (mirror-images git-diffs the same workspace; vendir-push, PR-only, pushes
@@ -15,7 +17,7 @@
 clone:
   git:
     # renovate: datasource=docker depName=woodpeckerci/plugin-git
-    image: woodpeckerci/plugin-git:2.12.0
+    image: woodpeckerci/plugin-git:2.12.1
     settings:
       partial: false
       # Shallow clone of HEAD's recent history. mirror-images.sh fetches the
@@ -30,9 +32,25 @@ when:
 #    branch: main
 
 steps:
+  prepare:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.37.2
+    # Single writer for the caches the validating steps read, so neither of them
+    # pays for a 734 MB schema clone or ~27 chart downloads, and neither races
+    # the other into the same git repositories or tarball paths (see
+    # .ci/prepare-cache.sh).
+    environment:
+      # git-mirror the schema repos instead of per-URL downloads from the
+      # flaky raw.githubusercontent.com CDN (see .ci/sync-schemas.sh)
+      SCHEMA_MIRROR: .tmp/schemas
+      HELM_CHART_CACHE: .tmp/charts
+    commands:
+      - sh .ci/prepare-cache.sh
+
   validate:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.37.2
+    depends_on: [prepare]
     environment:
       # renovate: datasource=github-releases depName=yannh/kubeconform
       KUBECONFORM_VERSION: v0.8.0
@@ -40,7 +58,7 @@ steps:
       # flaky raw.githubusercontent.com CDN (see .ci/sync-schemas.sh)
       SCHEMA_MIRROR: .tmp/schemas
     commands:
-      - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - wget -q -t 3 -T 30 -O- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
       - sh .ci/validate.sh
 
   validate-pluto:
@@ -50,12 +68,13 @@ steps:
       # renovate: datasource=github-releases depName=FairwindsOps/pluto
       PLUTO_VERSION: v5.24.0
     commands:
-      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
+      - wget -q -t 3 -T 30 -O- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-pluto.sh
 
   validate-helm:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.37.2
+    depends_on: [prepare]
     when:
       - event: pull_request
         # Any manifest can hold a Helm-source Application.
@@ -69,16 +88,21 @@ steps:
       PLUTO_VERSION: v5.24.0
       # see validate step
       SCHEMA_MIRROR: .tmp/schemas
+      HELM_CHART_CACHE: .tmp/charts
     commands:
-      - wget -qO- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
-      - wget -qO- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
+      - wget -q -t 3 -T 30 -O- "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz" | tar xz -C /usr/local/bin kubeconform
+      - wget -q -t 3 -T 30 -O- "https://github.com/FairwindsOps/pluto/releases/download/$PLUTO_VERSION/pluto_$${PLUTO_VERSION#v}_linux_amd64.tar.gz" | tar xz -C /usr/local/bin pluto
       - sh .ci/validate-helm.sh
 
   validate-prom-selectors:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.37.2
+    depends_on: [prepare]
     # No `when:` path filter: any manifest can add, fix, or orphan a
     # monitoring resource (and the rendered Helm Applications feed the check).
+    environment:
+      # renders every Helm Application, like validate-helm
+      HELM_CHART_CACHE: .tmp/charts
     commands:
       - sh .ci/validate-prom-selectors.sh
 
@@ -96,7 +120,7 @@ steps:
       # renovate: datasource=github-releases depName=carvel-dev/vendir
       VENDIR_VERSION: v0.46.0
     commands:
-      - wget -qO /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
+      - wget -q -t 3 -T 30 -O /usr/local/bin/vendir "https://github.com/carvel-dev/vendir/releases/download/$VENDIR_VERSION/vendir-linux-amd64"
       - chmod +x /usr/local/bin/vendir
       - sh .ci/vendir-sync.sh
 
@@ -129,5 +153,7 @@ steps:
           runAsUser: 0
           runAsGroup: 0
     commands:
-      - apk add --no-cache yq jq git
+      # dl-cdn.alpinelinux.org is a third-party service on the critical path of
+      # every run; one retry is enough to absorb its transient failures.
+      - apk add --no-cache yq jq git || (sleep 10 && apk add --no-cache yq jq git)
       - sh .ci/mirror-images.sh

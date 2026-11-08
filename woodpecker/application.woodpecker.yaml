@@ -182,6 +182,17 @@ spec:
                         - woodpecker-ci.org/repo-id
                       topologyKey: kubernetes.io/hostname
             WOODPECKER_CONNECT_RETRY_COUNT: "5"
+            # Keep retrying the gRPC connection to the server forever (0) instead
+            # of the 2m default.  A server rollout or node reboot otherwise makes
+            # the agent log "connection lost, giving up" and exit, and every
+            # workflow it was running then fails with "queue: task not found"
+            # once the server drops the dead lease.  Retrying indefinitely lets
+            # the agent rejoin and resume as long as the server comes back.
+            WOODPECKER_RETRY_TIMEOUT: "0"
+            # Ping after 30s of inactivity so a half-open connection (server pod
+            # replaced, connection left dangling) is noticed well inside the
+            # workflow lease instead of waiting for the transport to time out.
+            WOODPECKER_KEEPALIVE_TIME: 30s
           persistence:
             enabled: true
             size: 1Gi
