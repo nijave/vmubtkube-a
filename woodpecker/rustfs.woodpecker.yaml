@@ -165,7 +165,7 @@ spec:
               memory: 512Mi
         - name: otel-collector
           # renovate: datasource=docker depName=otel/opentelemetry-collector-contrib
-          image: otel/opentelemetry-collector-contrib:0.163.2
+          image: otel/opentelemetry-collector-contrib:0.165.0
           args:
             - --config=/etc/otelcol/collector.yaml
           ports:
