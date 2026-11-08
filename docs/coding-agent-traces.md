@@ -67,6 +67,15 @@ Claude Code's *logs* carry prompt/tool content when you enable the
 `OTEL_LOG_*` content gates; leave them unset. Its traces are what the
 connector normalizes.
 
+> **Agent metrics do not reach Thanos yet.** Claude Code exports delta
+> temporality, and the remote-write exporter drops delta sums and histograms,
+> so only `target_info` arrives. The fix is a `deltatocumulative` processor,
+> which the connector image does not include yet (tracked upstream in
+> nijave/otel-agent-trace-connector,
+> `docs/superpowers/plans/2026-11-08-telemetry-gaps.md`, Task 8). Until then,
+> set `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative` for
+> Claude Code.
+
 Codex reads **user-level** `~/.codex/config.toml` only — it ignores
 project-local `[otel]` blocks (it warns and drops an `otel` key found in a
 project `.codex/config.toml`).
@@ -76,18 +85,22 @@ project `.codex/config.toml`).
 environment = "production"
 log_user_prompt = false
 exporter       = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
-trace_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
 metrics_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
 ```
 
 `otel.exporter` is the **logs** exporter and defaults to `"none"`. Codex emits
-its `codex.*` events as OTLP *logs*, not traces, so **this is the one the
-connector needs** — `trace_exporter` alone produces no canonical Codex traces.
+its `codex.*` events as OTLP *logs*, and the connector builds its canonical
+Codex traces from those, so **this is the one the connector needs**.
 
-`trace_exporter` is optional here. Codex's native spans are not normalized (the
-Claude edge drops any resource that has no `claude_code.`-prefixed span, so
-there is no duplication), but pointing it at this collector still gets those
-spans the 100% sampling exemption.
+Leave `trace_exporter` **unset** with this deployment. Since connector v0.8 the
+traces router also normalizes Codex's native spans (the `codextraces` edge), so
+with both `exporter` and `trace_exporter` set every Codex turn is emitted twice:
+once from the logs (`coding_agent.source=normalized`) and once from the native
+spans (`native`), with the same `gen_ai.conversation.id`. The logs-derived
+trace is the more complete one: for the same turns it produced 94 `chat` spans
+with time to first chunk, against 13 without it from the native spans. Leaving
+`trace_exporter` unset also stops about 2.5k spans/day of Codex app-server idle
+work (`auth`, `list_models`, `fs.read_file`).
 
 `metrics_exporter` defaults to Statsig rather than OTLP; set it like
 `exporter` above to route Codex metrics through this collector into Thanos.
