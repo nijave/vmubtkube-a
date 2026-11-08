@@ -32,16 +32,15 @@ series-name column, value column).
 
 ## Formula notes
 
-Token sums combine both attribute families, matching the sibling dashboards:
+Token sums read the GenAI-semconv `gen_ai.usage.*` family only, matching the
+sibling dashboards (the legacy `input_tokens` / `output_tokens` /
+`cache_read_tokens` / `cache_creation_tokens` attributes are no longer
+emitted by the connector):
 
-- **Input:** `sum(input_tokens) + sum(gen_ai.usage.input_tokens)`
-- **Output:** `sum(output_tokens) + sum(gen_ai.usage.output_tokens)`
-- **Cache read:** `sum(cache_read_tokens) +
-  sum(gen_ai.usage.cache_read.input_tokens)`
-- **Cache write:** `sum(cache_creation_tokens)` only — claude_code is the
-  only harness that emits cache-creation counts; codex has no semconv
-  equivalent and opencode emits no token attributes at all, so both render as
-  flat zero on that tile.
+- **Input:** `sum(gen_ai.usage.input_tokens)`
+- **Output:** `sum(gen_ai.usage.output_tokens)`
+- **Cache read:** `sum(gen_ai.usage.cache_read.input_tokens)`
+- **Cache write:** `sum(gen_ai.usage.cache_write.input_tokens)`
 
 Agent normalization is identical to the metrics dashboard:
 `if(coding_agent.client.name != '', coding_agent.client.name,
@@ -68,10 +67,12 @@ listed all services in tracing.
 
 ## Known limitations
 
-- **opencode rows are flat zero on all four tiles** — it emits no token
-  attributes today; its request volume is visible on the model trends
-  dashboards' error/latency tiles instead.
-- **Cache write is claude_code-only** by data availability.
+- **opencode rows are flat zero on all four tiles** — it emits no
+  `gen_ai.usage.*` attributes today; its request volume is visible on the
+  model trends dashboards' error/latency tiles instead.
+- **Cache write volume comes from claude_code:** pi reports small
+  cache-write counts, and codex sends
+  `gen_ai.usage.cache_write.input_tokens` as 0.
 - Sparse buckets render as gaps, not zero-filled lines.
 
 ## Applying / re-exporting

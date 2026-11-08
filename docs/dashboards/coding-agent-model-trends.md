@@ -37,17 +37,17 @@ All six tiles are raw-SQL line charts (`displayType: "line"`,
 The tile SQL follows the coding-agent model metrics dashboard's conventions,
 not the claude-code ones:
 
-- **Error rate counts explicit failures only:** `success = 'false'`, not
-  `!= 'true'` — sources that don't emit `success` would otherwise read as 100%
-  errors.
+- **Error rate uses span `StatusCode = 'Error'`** — the connector no longer
+  emits a `success` attribute.
 - **Latency uses span `Duration`** (nanoseconds, present on every span):
   `quantiles(0.5, 0.9, 0.99)(Duration)` divided by `1e6`. The
   `duration_ms` attribute only exists on claude_code spans.
-- **`gen_toks` is guarded** — it returns 0 unless
-  `sum(duration_ms) - sum(ttft_ms) > 0`, so harnesses without TTFT attributes
-  (codex, opencode) don't produce an inflated tokens/sec value; output tokens
-  sum both attribute families (`output_tokens` +
-  `gen_ai.usage.output_tokens`).
+- **`gen_toks` counts only the generation window** — it sums
+  `gen_ai.usage.output_tokens` over spans where
+  `gen_ai.response.time_to_first_chunk` is set and `Duration` exceeds it,
+  divided by the summed `Duration - TTFC` (seconds); it returns 0 when no
+  qualifying span contributes. Tokens read `gen_ai.usage.*` only (the legacy
+  `output_tokens` family is no longer emitted by the connector).
 - **Model column:** `gen_ai.request.model`; series dimension is model only
   (no agent split — that would multiply the line count by harness).
 - Line-chart result shape matches ClickStack's documented contract:
@@ -59,8 +59,8 @@ not the claude-code ones:
 - **Known limitations:** no percentile dropdown (percentile is baked into the
   series construction); series count grows with models used (×3 on latency
   tiles); sparse buckets render as gaps, not zero-filled lines; gen_toks lines
-  are flat-zero for models whose harnesses never set TTFT / `duration_ms`
-  attributes (e.g. codex-only models).
+  are flat-zero for models whose spans never set
+  `gen_ai.response.time_to_first_chunk` or never exceed it (e.g. opencode).
 
 ## Dashboard filter dropdowns
 
