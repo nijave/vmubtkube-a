@@ -85,29 +85,18 @@ project `.codex/config.toml`).
 environment = "production"
 log_user_prompt = false
 exporter       = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
+trace_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
 metrics_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissing.info:4317" } }
 ```
 
 `otel.exporter` is the **logs** exporter and defaults to `"none"`. Codex emits
-its `codex.*` events as OTLP *logs*, and the connector builds its canonical
-Codex traces from those, so **this is the one the connector needs**.
+its `codex.*` events as OTLP *logs*, not traces, so **this is the one the
+connector needs** — `trace_exporter` alone produces no canonical Codex traces.
 
-`trace_exporter`:
-
-- **Today (connector v0.8.0): leave it unset.** The traces router also
-  normalizes Codex's native spans (the `codextraces` edge), so with both
-  `exporter` and `trace_exporter` set every Codex turn is emitted twice: once
-  from the logs (`coding_agent.source=normalized`) and once from the native
-  spans (`native`), with the same `gen_ai.conversation.id`. The logs-derived
-  trace is the more complete one: for the same turns it produced 94 `chat`
-  spans with time to first chunk, against 13 without it from the native spans.
-  Leaving it unset also stops about 2.5k spans/day of Codex app-server idle
-  work (`auth`, `list_models`, `fs.read_file`).
-- **After the connector release with per-harness `signals`** (default
-  `codex: [logs]`): it may be set again. The native-traces edge is then not
-  built, so Codex's native spans reach HyperDX raw only, with MCP server
-  identity and per-turn totals, and no duplicate canonical turns. The idle
-  app-server spans come back as raw volume, so leaving it unset is still fine.
+`trace_exporter` is optional here. Codex's native spans are not normalized (the
+Claude edge drops any resource that has no `claude_code.`-prefixed span, so
+there is no duplication), but pointing it at this collector still gets those
+spans the 100% sampling exemption.
 
 `metrics_exporter` defaults to Statsig rather than OTLP; set it like
 `exporter` above to route Codex metrics through this collector into Thanos.
