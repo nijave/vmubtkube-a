@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the Woodpecker pipeline a persistent, fail-open S3 cache so tools, Helm chart tarballs and kubeconform schema mirrors survive between runs instead of being re-downloaded (69 MB + 734 MB of PVC writes + ~90 s of chart-index latency per pipeline).
+**Goal:** Give the Woodpecker pipeline a persistent, fail-open S3 cache so tools, Helm chart tarballs and kubeconform schema mirrors survive between runs instead of being re-downloaded (69 MB + 734 MB of PVC writes + ~90 s of chart-index latency per pipeline), and make that cache observable so its silent failure mode (cold pipelines) shows up as a metric and an alert.
 
-**Architecture:** A dedicated single-node rustfs pod in the `woodpecker` namespace owns an RWO iSCSI PVC; step pods reach it over ClusterIP, which sidesteps the missing RWX StorageClass (only one pod ever mounts the volume, exactly like `buildkitd`). One bucket `ci-cache` with three prefixes (`charts/`, `tools/`, `schemas/`) is restored into the shared workspace by an rclone step before `prepare`, and uploaded afterwards by a second rclone step. Every cache path is fail-open: misses and corrupt entries only cost time.
+**Architecture:** A dedicated single-node rustfs pod in the `woodpecker` namespace owns an RWO iSCSI PVC; step pods reach it over ClusterIP on Service port 80, which sidesteps the missing RWX StorageClass (only one pod ever mounts the volume, exactly like `buildkitd`). One bucket `ci-cache` with three prefixes (`charts/`, `tools/`, `schemas/`) is restored into the shared workspace by an rclone step before `prepare`, and uploaded afterwards by a second rclone step. Every cache path is fail-open: misses and corrupt entries only cost time. rustfs pushes telemetry over OTLP only, so a collector sidecar re-exposes its metrics for scrape; Prometheus alerts on cache health and relays the series to Thanos through its existing remote-write.
 
-**Tech Stack:** Kubernetes (ArgoCD dir app `woodpecker`), rustfs 1.0.4 (S3), rclone 1.76, Woodpecker 3.x pipeline syntax, POSIX sh helpers under `.ci/`.
+**Tech Stack:** Kubernetes (ArgoCD dir app `woodpecker`), rustfs 1.0.4 (S3), rclone 1.76, `otel/opentelemetry-collector-contrib` 0.163.2 (OTLP → Prometheus), kube-prometheus-stack (PodMonitor + PrometheusRule, remote-write to Thanos), Woodpecker 3.x pipeline syntax, POSIX sh helpers under `.ci/`.
 
 **Spec:** `docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`
 

@@ -31,8 +31,12 @@ mounts the volume, and any step pod on any node reaches the API over the
 network — the same shape as the existing `buildkitd` service.
 
 - `woodpecker/rustfs.woodpecker.yaml` — Secret (seed), PVC, Deployment
-  (`replicas: 1`, `strategy: Recreate`), Service, NetworkPolicy. Deployed by the
-  existing ArgoCD app `woodpecker` (`path: woodpecker/`, non-recursive).
+  (`replicas: 1`, `strategy: Recreate`) with the OTLP metrics sidecar, Service
+  (port 80 → container 9000), NetworkPolicy, PodMonitor. Deployed by the existing
+  ArgoCD app `woodpecker` (`path: woodpecker/`, non-recursive).
+- `rustfs-alerts.yaml` — PrometheusRule at the repo root (namespace
+  `monitoring`, `release: prom`, like `argocd-alerts.yaml`): not ready, restart
+  looping, volume nearly full, metrics missing.
 - Credentials: `secret-generator.v1.mittwald.de/autogenerate: access-key,secret-key`
   with hex encoding, mirroring `postgres-woodpecker-user`. The pipeline gets a
   copy through Woodpecker repo secrets (`cache_access_key`, `cache_secret_key`)
