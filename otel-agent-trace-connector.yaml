@@ -106,13 +106,15 @@ data:
       # to otel-collector (which keeps `metrics: null`), remote-write straight
       # to Thanos Receive -- the same URL kube-prometheus-stack and
       # prometheus-ext use; the receive router has no auth.
-      prometheusremotewrite:
+      prometheus_remote_write:
         endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
         # Resource attrs as labels: without this, claude-code/codex series are
         # indistinguishable in Thanos (service.name) and the coding-agent tag
-        # (telemetry.source) never arrives.
-        resource_to_telemetry_conversion:
-          enabled: true
+        # (telemetry.source) never arrives. included: ["*"] is the documented
+        # replacement for the deprecated resource_to_telemetry_conversion
+        # enabled: true and copies every resource attribute the same way.
+        resource_constant_labels:
+          included: ["*"]
 
     service:
       extensions: [health_check]
@@ -150,7 +152,7 @@ data:
         metrics/agents:
           receivers: [otlp]
           processors: [resource/coding_agent, batch]
-          exporters: [prometheusremotewrite]
+          exporters: [prometheus_remote_write]
 ---
 apiVersion: apps/v1
 kind: Deployment
