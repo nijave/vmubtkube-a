@@ -12,7 +12,9 @@ set -euo pipefail
 #      a separate, reliable endpoint and picks up your gh/ssh credentials.
 #
 # Usage: SCHEMA_MIRROR=.tmp/schemas [KUBE_VERSION=1.35.6] sh .ci/sync-schemas.sh
-# Idempotent; no-ops in a few ms once synced. kubernetes-json-schema is a
+# Idempotent; no-ops in a few ms once synced, and safe to run concurrently —
+# callers (validate.sh, validate-helm.sh) race each other for the mirror, so
+# the whole sync is serialized behind a lock. kubernetes-json-schema is a
 # blob-less sparse clone holding only the requested version's strict schemas;
 # a cluster upgrade just sparse-checkout-adds the new directory.
 
@@ -47,11 +49,44 @@ MDIR="master-standalone-strict"
 
 mkdir -p "$MIRROR"
 
+# Serialize concurrent callers. All step pods of a workflow share one workspace
+# PVC (WOODPECKER_BACKEND_K8S_STORAGE_RWX=false + hard pod affinity in
+# woodpecker/application.woodpecker.yaml), and validate.sh / validate-helm.sh
+# call this script within the same second of the pipeline starting. Without the
+# lock the loser dies with "fatal: no sparse-checkout to add to" or
+# "Unable to create '.git/index.lock': File exists" and then validates against
+# the remote schema CDN instead — the flaky path this mirror exists to avoid.
+# mkdir is atomic on every filesystem we run on, including the iSCSI PVC.
+LOCK="$MIRROR/.sync.lock"
+waited=0
+while ! mkdir "$LOCK" 2>/dev/null; do
+  # A holder that was killed must not wedge CI forever. Every file under the
+  # mirror is rebuildable, so taking over a stale lock is always safe.
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +5 2>/dev/null)" ]; then
+    echo "sync-schemas: taking over stale lock $LOCK" >&2
+    rm -rf "$LOCK"
+    continue
+  fi
+  waited=$((waited + 2))
+  if [ "$waited" -ge "${SYNC_LOCK_TIMEOUT:-300}" ]; then
+    echo "sync-schemas: timed out after ${SYNC_LOCK_TIMEOUT:-300}s waiting for $LOCK" >&2
+    exit 1
+  fi
+  sleep 2
+done
+trap 'rm -rf "$LOCK"' EXIT
+
 if [ ! -d "$KJS/.git" ]; then
+  # Clone beside the destination and rename into place: if the clone or the
+  # sparse checkout is interrupted, $KJS must never look initialized, or a
+  # later run takes the elif branch and never materializes the schemas.
+  KJS_TMP="$MIRROR/.kubernetes-json-schema.tmp"
+  rm -rf "$KJS_TMP" "$KJS"
   git clone --quiet --depth 1 --filter=blob:none --no-checkout \
-    https://github.com/yannh/kubernetes-json-schema "$KJS"
-  git -C "$KJS" sparse-checkout set --no-cone "/$VDIR/*" "/$MDIR/*"
-  git -C "$KJS" checkout --quiet master
+    https://github.com/yannh/kubernetes-json-schema "$KJS_TMP"
+  git -C "$KJS_TMP" sparse-checkout set --no-cone "/$VDIR/*" "/$MDIR/*"
+  git -C "$KJS_TMP" checkout --quiet master
+  mv "$KJS_TMP" "$KJS"
 elif [ ! -d "$KJS/$VDIR" ]; then
   # 'add' accepts no mode flag ('set'/'init' only) and inherits the
   # non-cone mode already persisted by 'set --no-cone' at clone time
@@ -79,7 +114,10 @@ fi
 CRDS_REF=${CRDS_REF:-f1e7f6bc0537bf0622ffe6e47dbaa85914fabbec}
 
 if [ ! -d "$CRDS/.git" ]; then
-  git clone --quiet --depth 1 https://github.com/datreeio/CRDs-catalog "$CRDS"
+  CRDS_TMP="$MIRROR/.CRDs-catalog.tmp"
+  rm -rf "$CRDS_TMP" "$CRDS"
+  git clone --quiet --depth 1 https://github.com/datreeio/CRDs-catalog "$CRDS_TMP"
+  mv "$CRDS_TMP" "$CRDS"
 fi
 if [ "$CRDS_REF" != main ]; then
   if [ "$(git -C "$CRDS" rev-parse HEAD)" != "$CRDS_REF" ]; then
