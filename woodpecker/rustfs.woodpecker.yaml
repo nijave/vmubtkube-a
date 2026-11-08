@@ -1,0 +1,166 @@
+# CI artifact cache: a single-node S3 endpoint for everything the pipeline
+# re-downloads on every run. Only this pod mounts the RWO zvol, and step pods
+# reach it over ClusterIP from whichever node they land on, which is why object
+# storage sidesteps the missing RWX StorageClass. Design:
+# docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md
+#
+# The data is a cache: not backed up, not snapshotted, no PodDisruptionBudget
+# (a single-replica PDB would block kured drains forever). Losing it costs one
+# cold CI run.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rustfs-ci-cache
+  namespace: woodpecker
+  annotations:
+    # Hex so the values can never carry a character that needs URL escaping:
+    # .ci steps build a S3 endpoint URL out of them.
+    secret-generator.v1.mittwald.de/autogenerate: access-key,secret-key
+    secret-generator.v1.mittwald.de/encoding: hex
+    secret-generator.v1.mittwald.de/length: "32"
+type: Opaque
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustfs-ci-cache
+  namespace: woodpecker
+  annotations:
+    # Cache data: keep it out of NAS snapshots/replication, it is rebuildable.
+    democratic-csi.org/config: |
+      zfs:
+        datasetProperties:
+          homelab:sanoid-skip: "true"
+          syncoid:sync: "false"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    app: rustfs
+spec:
+  replicas: 1
+  # RWO volume + Recreate: a rolling update would mount the same zvol in two
+  # pods and wedge on Multi-Attach.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rustfs
+  template:
+    metadata:
+      labels:
+        app: rustfs
+    spec:
+      securityContext:
+        # The image runs as uid/gid 10001 (docs.rustfs.com, Docker page).
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: rustfs
+          # renovate: datasource=docker depName=rustfs/rustfs
+          image: rustfs/rustfs:1.0.4
+          args:
+            - /data
+          env:
+            - name: RUSTFS_ADDRESS
+              value: ":9000"
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "false"
+            - name: RUSTFS_OBS_LOGGER_LEVEL
+              value: error
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-ci-cache
+                  key: access-key
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-ci-cache
+                  key: secret-key
+          ports:
+            - name: s3
+              containerPort: 9000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          startupProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: s3
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-ci-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    app: rustfs
+spec:
+  type: ClusterIP
+  selector:
+    app: rustfs
+  ports:
+    - name: s3
+      # Port 80 on the Service only: the container keeps listening on 9000,
+      # because it runs as uid 10001 and cannot bind a privileged port. With 80
+      # here, step configuration never carries a port number.
+      port: 80
+      targetPort: s3
+---
+# Same shape as the buildkitd policy: anything in this namespace may read and
+# write the cache, nothing outside it can reach the API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rustfs
+  namespace: woodpecker
+spec:
+  podSelector:
+    matchLabels:
+      app: rustfs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: woodpecker
+      ports:
+        # NetworkPolicy ports are the pod's, not the Service's: this stays 9000
+        # even though clients reach the API on the Service's port 80.
+        - protocol: TCP
+          port: 9000
