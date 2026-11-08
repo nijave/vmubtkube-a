@@ -1,0 +1,281 @@
+{
+  "_id": "6aefc65df403d377a532a03c",
+  "name": "coding-agent usage insights",
+  "tiles": [
+    {
+      "id": "kpi-cost",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Reported cost $ (claude_code + pi)",
+        "sqlTemplate": "SELECT round(sum(cost), 2) AS value FROM (SELECT Timestamp AS t, 'pi' AS agent, SpanAttributes['gen_ai.request.model'] AS model, toFloat64OrZero(SpanAttributes['coding_agent.usage.cost']) AS cost FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND SpanAttributes['coding_agent.client.name'] = 'pi' UNION ALL SELECT Timestamp AS t, 'claude_code' AS agent, LogAttributes['model'] AS model, toFloat64OrZero(LogAttributes['cost_usd']) AS cost FROM otel.otel_logs WHERE ServiceName = 'claude-code' AND LogAttributes['event.name'] = 'api_request' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}))",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 2
+        }
+      }
+    },
+    {
+      "id": "kpi-turns",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Agent turns",
+        "sqlTemplate": "SELECT count() AS value FROM otel.otel_traces WHERE SpanName LIKE 'invoke_agent %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        }
+      }
+    },
+    {
+      "id": "kpi-tools",
+      "x": 8,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Tool calls",
+        "sqlTemplate": "SELECT count() AS value FROM otel.otel_traces WHERE SpanName LIKE 'execute_tool %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        }
+      }
+    },
+    {
+      "id": "kpi-tool-err",
+      "x": 12,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Tool error % (pi, codex)",
+        "sqlTemplate": "SELECT round(countIf(StatusCode = 'Error') * 100.0 / greatest(count(), 1), 2) AS value FROM otel.otel_traces WHERE SpanName LIKE 'execute_tool %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 2
+        }
+      }
+    },
+    {
+      "id": "kpi-cache-hit",
+      "x": 16,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Prompt cache hit %",
+        "sqlTemplate": "SELECT round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])) * 100.0 / greatest(sum(if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']))), 1), 1) AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "kpi-llm-err",
+      "x": 20,
+      "y": 0,
+      "w": 4,
+      "h": 3,
+      "config": {
+        "displayType": "number",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Failed LLM requests",
+        "sqlTemplate": "SELECT countIf(StatusCode = 'Error') AS value FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0
+        }
+      }
+    },
+    {
+      "id": "ln-cost-day",
+      "x": 0,
+      "y": 3,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Reported cost $ per day by agent",
+        "sqlTemplate": "SELECT toStartOfDay(t) AS ts, agent, round(sum(cost), 2) AS cost FROM (SELECT Timestamp AS t, 'pi' AS agent, SpanAttributes['gen_ai.request.model'] AS model, toFloat64OrZero(SpanAttributes['coding_agent.usage.cost']) AS cost FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND SpanAttributes['coding_agent.client.name'] = 'pi' UNION ALL SELECT Timestamp AS t, 'claude_code' AS agent, LogAttributes['model'] AS model, toFloat64OrZero(LogAttributes['cost_usd']) AS cost FROM otel.otel_logs WHERE ServiceName = 'claude-code' AND LogAttributes['event.name'] = 'api_request' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})) GROUP BY agent, ts ORDER BY ts"
+      }
+    },
+    {
+      "id": "tbl-cost-model",
+      "x": 12,
+      "y": 3,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Reported cost by model",
+        "sqlTemplate": "SELECT agent, model, count() AS requests, round(sum(cost), 2) AS cost_usd, round(sum(cost) / count(), 4) AS usd_per_request FROM (SELECT Timestamp AS t, 'pi' AS agent, SpanAttributes['gen_ai.request.model'] AS model, toFloat64OrZero(SpanAttributes['coding_agent.usage.cost']) AS cost FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND SpanAttributes['coding_agent.client.name'] = 'pi' UNION ALL SELECT Timestamp AS t, 'claude_code' AS agent, LogAttributes['model'] AS model, toFloat64OrZero(LogAttributes['cost_usd']) AS cost FROM otel.otel_logs WHERE ServiceName = 'claude-code' AND LogAttributes['event.name'] = 'api_request' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})) GROUP BY agent, model ORDER BY cost_usd DESC"
+      }
+    },
+    {
+      "id": "tbl-turns",
+      "x": 0,
+      "y": 11,
+      "w": 24,
+      "h": 6,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Turns per agent",
+        "sqlTemplate": "SELECT agent, count() AS turns, uniqExact(conv) AS conversations, round(quantile(0.5)(dur) / 1e9, 1) AS turn_p50_s, round(quantile(0.95)(dur) / 1e9, 1) AS turn_p95_s, round(avg(chats), 1) AS llm_calls_per_turn, round(avg(tools), 1) AS tools_per_turn, max(tools) AS max_tools_in_turn FROM (SELECT TraceId, anyIf(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)), SpanName LIKE 'invoke_agent %') AS agent, anyIf(SpanAttributes['gen_ai.conversation.id'], SpanName LIKE 'invoke_agent %') AS conv, maxIf(Duration, SpanName LIKE 'invoke_agent %') AS dur, countIf(SpanName LIKE 'chat %') AS chats, countIf(SpanName LIKE 'execute_tool %') AS tools FROM otel.otel_traces WHERE ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND (SpanName LIKE 'invoke_agent %' OR SpanName LIKE 'chat %' OR SpanName LIKE 'execute_tool %') GROUP BY TraceId HAVING countIf(SpanName LIKE 'invoke_agent %') > 0) GROUP BY agent ORDER BY turns DESC"
+      }
+    },
+    {
+      "id": "tbl-tools",
+      "x": 0,
+      "y": 17,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Top tools",
+        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, SpanAttributes['gen_ai.tool.name'] AS tool, count() AS calls, round(countIf(StatusCode = 'Error') * 100.0 / count(), 1) AS err_pct, round(quantile(0.5)(Duration) / 1e6, 0) AS p50_ms, round(quantile(0.95)(Duration) / 1e6, 0) AS p95_ms, round(sum(Duration) / 1e9, 0) AS total_s FROM otel.otel_traces WHERE SpanName LIKE 'execute_tool %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent, tool ORDER BY calls DESC LIMIT 50"
+      }
+    },
+    {
+      "id": "tbl-errors",
+      "x": 12,
+      "y": 17,
+      "w": 12,
+      "h": 10,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Failed LLM requests",
+        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, SpanAttributes['gen_ai.request.model'] AS model, SpanAttributes['gen_ai.provider.name'] AS provider, substring(StatusMessage, 1, 160) AS message, count() AS n, max(Timestamp) AS last_seen FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND StatusCode = 'Error' GROUP BY agent, model, provider, message ORDER BY n DESC LIMIT 50"
+      }
+    },
+    {
+      "id": "ln-cache-hit",
+      "x": 0,
+      "y": 27,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "line",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Prompt cache hit % by agent (hourly)",
+        "sqlTemplate": "SELECT toStartOfHour(Timestamp) AS ts, if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])) * 100.0 / greatest(sum(if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']))), 1), 1) AS cache_hit_pct FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent, ts ORDER BY ts"
+      }
+    },
+    {
+      "id": "tbl-cache",
+      "x": 12,
+      "y": 27,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Prompt cache by model",
+        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, SpanAttributes['gen_ai.request.model'] AS model, count() AS requests, round(sum(if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']))), 0) AS prompt_tok, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])), 0) AS cache_read, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens'])), 0) AS cache_write, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens'])) * 100.0 / greatest(sum(if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']))), 1), 1) AS hit_pct, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens'])) * 100.0 / greatest(sum(if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']))), 1), 1) AS write_pct FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent, model ORDER BY prompt_tok DESC"
+      }
+    },
+    {
+      "id": "tbl-reasoning",
+      "x": 0,
+      "y": 35,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Reasoning effort and tokens",
+        "sqlTemplate": "SELECT if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) AS agent, SpanAttributes['gen_ai.request.model'] AS model, if(SpanAttributes['gen_ai.request.reasoning.level'] = '', '(unset)', SpanAttributes['gen_ai.request.reasoning.level']) AS level, count() AS requests, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 0) AS output_tok, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.reasoning.output_tokens'])), 0) AS reasoning_tok, round(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.reasoning.output_tokens'])) * 100.0 / greatest(sum(toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens'])), 1), 1) AS reasoning_pct_of_output FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY agent, model, level ORDER BY requests DESC"
+      }
+    },
+    {
+      "id": "tbl-delegation",
+      "x": 12,
+      "y": 35,
+      "w": 12,
+      "h": 8,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Main agent vs subagents",
+        "sqlTemplate": "SELECT agent, role, count() AS requests, round(sum(prompt), 0) AS prompt_tok, round(sum(out), 0) AS output_tok FROM (SELECT 'claude_code' AS agent, if(SpanAttributes['gen_ai.agent.id'] != '', 'subagent', 'main') AS role, if(if(SpanAttributes['coding_agent.client.name'] != '', SpanAttributes['coding_agent.client.name'], if(ServiceName LIKE 'codex%', 'codex', ServiceName)) = 'codex', toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']), toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens'])) AS prompt, toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND SpanAttributes['coding_agent.client.name'] = 'claude_code' UNION ALL SELECT 'pi' AS agent, g.role AS role, c.prompt AS prompt, c.out AS out FROM (SELECT SpanAttributes['responseId'] AS rid, if(SpanName LIKE '%[subagent]%', 'subagent', 'main') AS role FROM otel.otel_traces WHERE ServiceName = 'pi' AND SpanName LIKE 'llm-generation%' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64})) AS g INNER JOIN (SELECT SpanAttributes['gen_ai.response.id'] AS rid, toFloat64OrZero(SpanAttributes['gen_ai.usage.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_read.input_tokens']) + toFloat64OrZero(SpanAttributes['gen_ai.usage.cache_write.input_tokens']) AS prompt, toFloat64OrZero(SpanAttributes['gen_ai.usage.output_tokens']) AS out FROM otel.otel_traces WHERE SpanName LIKE 'chat %' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) AND SpanAttributes['coding_agent.client.name'] = 'pi') AS c ON c.rid = g.rid) GROUP BY agent, role ORDER BY agent, role"
+      }
+    },
+    {
+      "id": "tbl-repo",
+      "x": 0,
+      "y": 43,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "displayType": "table",
+        "configType": "sql",
+        "connection": "69d6f9db842db143c17e0540",
+        "source": "69d6f9dc842db143c17e0546",
+        "name": "Claude Code usage by repository",
+        "sqlTemplate": "SELECT if(LogAttributes['vcs.repository.name'] = '', '(none)', LogAttributes['vcs.repository.name']) AS repo, count() AS requests, uniqExact(LogAttributes['session.id']) AS sessions, round(sum(toFloat64OrZero(LogAttributes['input_tokens'])) + sum(toFloat64OrZero(LogAttributes['cache_read_tokens'])) + sum(toFloat64OrZero(LogAttributes['cache_creation_tokens'])), 0) AS prompt_tok, round(sum(toFloat64OrZero(LogAttributes['output_tokens'])), 0) AS output_tok, round(sum(toFloat64OrZero(LogAttributes['cost_usd'])), 2) AS cost_usd FROM otel.otel_logs WHERE ServiceName = 'claude-code' AND LogAttributes['event.name'] = 'api_request' AND ResourceAttributes['telemetry.source'] = 'coding-agent' AND Timestamp >= fromUnixTimestamp64Milli({startDateMilliseconds:Int64}) AND Timestamp < fromUnixTimestamp64Milli({endDateMilliseconds:Int64}) GROUP BY repo ORDER BY cost_usd DESC"
+      }
+    }
+  ],
+  "filters": [],
+  "tags": [],
+  "containers": [],
+  "savedFilterValues": [],
+  "provisioned": false,
+  "team": "69d6f9db842db143c17e053b",
+  "createdBy": "69d6f9db842db143c17e0537",
+  "updatedBy": "69d6f9db842db143c17e0537",
+  "createdAt": "2026-11-08T00:46:21.888Z",
+  "updatedAt": "2026-11-08T00:46:21.888Z",
+  "__v": 0
+}

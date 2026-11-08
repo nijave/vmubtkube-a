@@ -118,3 +118,12 @@ If you add another hop between here and HyperDX, it needs the same exemption.
   attributes may change between releases.
 - Renovate tracks the pinned image tag. Tagging the upstream repo cuts each
   release and publishes `ghcr.io/nijave/otel-agent-trace-connector`.
+
+## Dashboards
+
+HyperDX dashboards built on the canonical traces:
+
+- [coding-agent model metrics](./dashboards/coding-agent-model-metrics.md)
+- [coding-agent model trends](./dashboards/coding-agent-model-trends.md)
+- [coding-agent agent token trends](./dashboards/coding-agent-agent-token-trends.md)
+- [coding-agent usage insights](./dashboards/coding-agent-usage-insights.md)

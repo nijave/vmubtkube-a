@@ -23,8 +23,8 @@ in the HyperDX/ClickStack instance in the `hyperdx` namespace.
 | id | type | what it shows |
 | --- | --- | --- |
 | `kpi-reqs` | number | total LLM requests |
-| `kpi-retry` | number | retry rate % (`attempt` > 1; only claude_code sets `attempt`) |
-| `kpi-ttft` | number | TTFT p95 (ms; only claude_code sets `ttft_ms`) |
+| `kpi-err` | number | error rate % (spans with `StatusCode = 'Error'`) |
+| `kpi-ttft` | number | TTFT p95 (ms; `gen_ai.response.time_to_first_chunk` × 1000) |
 | `kpi-lat` | number | latency p95 (ms, from span `Duration`) |
 | `tbl-models` | table | per-model × per-agent metrics |
 | `tbl-agents` | table | per-agent totals |
@@ -44,19 +44,27 @@ in the HyperDX/ClickStack instance in the `hyperdx` namespace.
   rather than the `duration_ms` attribute — opencode/codex chat spans don't
   set `duration_ms`, so attribute-based latency would silently cover only
   claude_code.
-- **Token sums combine two attribute families:** claude_code-style
-  (`input_tokens`, `cache_read_tokens`, `output_tokens`) plus GenAI-semconv
-  (`gen_ai.usage.input_tokens`, `gen_ai.usage.cache_read.input_tokens`,
-  `gen_ai.usage.output_tokens`). claude_code uses the first family; codex
-  emits only the second; opencode emits neither (its rows show 0 tokens).
-- **Error rate counts explicit failures only:** `success = 'false'`
-  (not `!= 'true'` as the claude-code dashboard does), because sources that
-  don't emit `success` would otherwise read as 100% errors.
-- **`gen_toks` is guarded:** it is 0 unless `duration_ms - ttft_ms > 0`, so
-  sources without TTFT attributes don't produce an inflated tokens/sec value.
-- **TTFT / retry metrics are claude_code-only today** — those attributes come
-  from Claude Code's native telemetry; other harnesses contribute requests,
-  latency, and (for codex) token totals only.
+- **Token sums read GenAI-semconv only:** `gen_ai.usage.input_tokens`,
+  `gen_ai.usage.cache_read.input_tokens`,
+  `gen_ai.usage.cache_write.input_tokens`, `gen_ai.usage.output_tokens`.
+  The legacy family (`input_tokens`, `cache_read_tokens`, `output_tokens`)
+  is no longer emitted by the connector and was dropped; the table tiles
+  gained a `tok_cache_write` column next to `tok_cache`. opencode emits no
+  token attributes (its rows show 0 tokens).
+- **Error rate uses span `StatusCode = 'Error'`** — the connector no longer
+  emits a `success` attribute.
+- **`gen_toks` counts only the generation window:** it sums
+  `gen_ai.usage.output_tokens` over spans where
+  `gen_ai.response.time_to_first_chunk` is set and `Duration` exceeds it,
+  divided by the summed `Duration - TTFC` (seconds); it returns 0 when no
+  qualifying span contributes, so spans without TTFC don't skew it.
+- **TTFT comes from `gen_ai.response.time_to_first_chunk`** (seconds, as a
+  float string) — set by claude_code, pi, and most codex spans. Quantiles use
+  `quantileIf` keyed on the attribute being non-empty so spans without it
+  don't drag percentiles toward 0.
+- **There is no retry dimension:** no harness emits an `attempt` attribute,
+  so the retry KPI became an error-rate KPI (`kpi-err`) and `retry_pct`
+  columns were removed.
 
 ## Applying / re-exporting
 
