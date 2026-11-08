@@ -13,12 +13,14 @@
 ## Global Constraints
 
 - rustfs image `rustfs/rustfs:1.0.4`, container listens on `:9000`, health endpoint `/health`, runs as uid/gid `10001`.
-- rclone image `rclone/rclone:1.76`; S3 remote alias `cicache`, bucket `ci-cache`, endpoint `http://rustfs.woodpecker.svc.cluster.local:9000`, path-style addressing, region `us-east-1`.
+- rclone image `rclone/rclone:1.76`; S3 remote alias `cicache`, bucket `ci-cache`, endpoint `http://rustfs.woodpecker.svc.cluster.local` (Service port 80 → container port 9000), path-style addressing, region `us-east-1`.
 - Existing pins that must not drift: `alpine/k8s:1.37.2`, kubeconform `v0.8.0`, pluto `v5.24.0`, vendir `v0.46.0`; every image and tool version keeps exactly one `# renovate:` annotation after the migration.
 - Namespace `woodpecker`; credentials come from the secret-generator-backed Secret `rustfs-ci-cache` (keys `access-key`, `secret-key`) and reach steps only as Woodpecker repo secrets `cache_access_key` / `cache_secret_key`.
 - ArgoCD app `woodpecker` deploys `path: woodpecker/` **non-recursively**, so new manifests must sit directly in `woodpecker/`.
 - The cache never gates correctness: `.ci/cache-restore.sh` and `.ci/cache-save.sh` run with `failure: ignore`, and no helper may exit non-zero because of a cache miss.
 - Saves are additive (`rclone copy`, never `rclone sync`/`delete`).
+- rustfs exposes **no** Prometheus endpoint: it only pushes OTLP. Metrics reach Thanos as `rustfs` (OTLP) → sidecar `otel/opentelemetry-collector-contrib:0.163.2` (`prometheus` exporter on `:8889`) → PodMonitor `release: prom` → `prom-kp-prometheus` → its existing remote-write → `thanos-receive-router`.
+- Monitoring resources must be selected or CI fails: the PodMonitor carries `release: prom` in namespace `woodpecker`; the PrometheusRule lives at the repo root in namespace `monitoring` with `release: prom`, matching `argocd-alerts.yaml`.
 - No backup, no snapshotting and no `PodDisruptionBudget` for the cache volume or pod.
 - Every script is POSIX sh, uses `set -euo pipefail` like its neighbours, and passes `shellcheck -s sh` with only the pre-existing SC3040 (`pipefail` in POSIX sh) warning.
 
@@ -29,6 +31,7 @@
 - **Head present, tarball missing:** the schema exporter must re-export, so an interrupted save self-heals instead of pinning a permanently unreachable entry.
 - **Restored mirror from another Kubernetes version:** the restore must not erase the sparse-checkout config that `sync-schemas.sh` uses to add a new version directory.
 - **Zero-length cached tool binary:** must be treated as a miss so `fetch_tool` re-downloads and re-stages it, never copied into `/usr/local/bin`.
+- **Metrics silently missing:** if the rustfs pod, its OTLP sidecar, or the scrape stops, no `rustfs_*` series exist and nothing else complains — the `absent()` rule is the only signal that CI has quietly gone cold.
 - **Credentials missing or rotated:** restore/save fail loudly in their own log, the run stays green, and the next run is simply cold.
 
 ---
@@ -37,7 +40,8 @@
 
 | File | Responsibility |
 |---|---|
-| `woodpecker/rustfs.woodpecker.yaml` (create) | S3 endpoint: Secret, PVC, Deployment, Service, NetworkPolicy |
+| `woodpecker/rustfs.woodpecker.yaml` (create) | S3 endpoint: Secret, PVC, Deployment (+ OTLP metrics sidecar), Service on port 80, NetworkPolicy, PodMonitor |
+| `rustfs-alerts.yaml` (create) | PrometheusRule: cache not ready, restart looping, volume nearly full, metrics missing |
 | `.ci/lib/cache.sh` (create) | Pure cache helpers: restore/export schemas, restore/export/fetch tools. No S3 calls |
 | `.ci/test/cache-test.sh` (create) | Hermetic tests for `.ci/lib/cache.sh` (temp dirs, real git, no network) |
 | `.ci/cache-restore.sh` (create) | rclone download into `.tmp/cache-in` + `.tmp/charts`; creates bucket |
@@ -60,7 +64,7 @@ Prerequisite: main is at or past `ca81d6c` (PRs #1139–#1142, #1141 merged), so
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: Service `rustfs` (port 9000) in namespace `woodpecker`; Secret `rustfs-ci-cache` with keys `access-key`, `secret-key`.
+- Produces: Service `rustfs` (port 80 → container port 9000) in namespace `woodpecker`; Secret `rustfs-ci-cache` with keys `access-key`, `secret-key`.
 
 - [ ] **Step 1: Create the manifest**
 
@@ -204,7 +208,10 @@ spec:
     app: rustfs
   ports:
     - name: s3
-      port: 9000
+      # Port 80 on the Service only: the container keeps listening on 9000,
+      # because it runs as uid 10001 and cannot bind a privileged port. With 80
+      # here, step configuration never carries a port number.
+      port: 80
       targetPort: s3
 ---
 # Same shape as the buildkitd policy: anything in this namespace may read and
@@ -226,6 +233,8 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: woodpecker
       ports:
+        # NetworkPolicy ports are the pod's, not the Service's: this stays 9000
+        # even though clients reach the API on the Service's port 80.
         - protocol: TCP
           port: 9000
 ```
@@ -278,7 +287,7 @@ Run:
 kubectl -n woodpecker rollout status deploy/rustfs --timeout=180s
 kubectl -n woodpecker get secret rustfs-ci-cache -o jsonpath='{.data}' | python3 -c 'import json,sys; print(sorted(json.load(sys.stdin)))'
 kubectl -n woodpecker logs deploy/rustfs --tail=20
-kubectl -n woodpecker port-forward svc/rustfs 9000:9000 &
+kubectl -n woodpecker port-forward svc/rustfs 9000:80 &
 sleep 2 && curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9000/health; kill %1
 ```
 
@@ -288,7 +297,278 @@ Do not print the secret values anywhere. If a manual check is needed, read them 
 
 ---
 
-### Task 2: cache helper library and hermetic tests
+### Task 2: cache metrics and alerting
+
+**Files:**
+- Modify: `woodpecker/rustfs.woodpecker.yaml` (collector ConfigMap, metrics sidecar, container port, PodMonitor)
+- Create: `rustfs-alerts.yaml`
+
+**Interfaces:**
+- Consumes: the `rustfs` Deployment from Task 1.
+- Produces: `rustfs_*` series scraped from the pod's `metrics` port (8889) and relayed to Thanos by `prom-kp-prometheus`; PrometheusRule `rustfs-ci-cache`.
+
+rustfs **pushes** telemetry over OTLP and has no Prometheus endpoint
+(`docs.rustfs.com/en/operations/observability`: "It does not expose a native
+Prometheus `/metrics` scrape endpoint"). The upstream topology is
+`rustfs --OTLP--> collector --> Prometheus`, so a collector runs as a sidecar in
+the same pod.
+
+Why the `prometheus` exporter and a scrape, rather than the
+`prometheusremotewrite` exporter straight to Thanos (the pattern
+`otel-agent-trace-connector.yaml` uses for coding-agent metrics):
+
+- `prom-kp-prometheus` already remote-writes everything it scrapes to
+  `thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive`, so
+  scraping puts these series in Thanos anyway, with Prometheus' external labels
+  (`cluster`, `tenant_id`) attached like every other series there.
+- There is no Thanos Ruler and no `remoteRead` on either Prometheus CR, so a
+  direct remote-write would leave the series invisible to *every*
+  `PrometheusRule` in this repo — the alerting half of this task could not work.
+- Cost is one extra scrape target with a few dozen series.
+
+A sidecar (not the shared `monitoring/otel-collector`) keeps the change local:
+no cross-namespace traffic, no edit to the shared pipeline whose `metrics:
+null` is a deliberate contract, and the image is already on every node because
+that collector runs the same tag.
+
+- [ ] **Step 1: Add the collector configuration**
+
+Append to `woodpecker/rustfs.woodpecker.yaml`, before the `Secret` document:
+
+```yaml
+---
+# rustfs only pushes telemetry, so this sidecar is its OTLP sink and re-exposes
+# what it receives as Prometheus text on :8889. Scraping (rather than
+# remote-writing to Thanos directly) is what makes the series alertable: see the
+# reasoning in docs/superpowers/plans/2026-11-06-ci-cache-rustfs.md, Task 2.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rustfs-metrics
+  namespace: woodpecker
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 127.0.0.1:4318
+    processors:
+      batch: {}
+    exporters:
+      prometheus:
+        endpoint: 0.0.0.0:8889
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [prometheus]
+```
+
+- [ ] **Step 2: Turn on rustfs metric export**
+
+In the `rustfs` container's `env` list, after `RUSTFS_OBS_LOGGER_LEVEL`, add:
+
+```yaml
+            # Push metrics at the sidecar. Traces and logs stay on stdout so
+            # they are not duplicated into OTLP (the cluster collects them from
+            # the container log).
+            - name: RUSTFS_OBS_ENDPOINT
+              value: http://127.0.0.1:4318
+            - name: RUSTFS_OBS_METRICS_EXPORT_ENABLED
+              value: "true"
+            - name: RUSTFS_OBS_TRACES_EXPORT_ENABLED
+              value: "false"
+            - name: RUSTFS_OBS_LOGS_EXPORT_ENABLED
+              value: "false"
+            - name: RUSTFS_OBS_METER_INTERVAL
+              value: 30s
+            - name: RUSTFS_OBS_SERVICE_NAME
+              value: rustfs-ci-cache
+```
+
+- [ ] **Step 3: Add the sidecar container and its volume**
+
+Immediately after the `rustfs` container block (before `volumes:`), add:
+
+```yaml
+        - name: otel-collector
+          # renovate: datasource=docker depName=otel/opentelemetry-collector-contrib
+          image: otel/opentelemetry-collector-contrib:0.163.2
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: metrics
+              containerPort: 8889
+          volumeMounts:
+            - name: metrics-config
+              mountPath: /etc/otelcol
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+```
+
+and extend the pod's `volumes` list:
+
+```yaml
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rustfs-ci-cache
+        - name: metrics-config
+          configMap:
+            name: rustfs-metrics
+```
+
+- [ ] **Step 4: Add the PodMonitor**
+
+Append after the `NetworkPolicy` document:
+
+```yaml
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: rustfs
+  namespace: woodpecker
+  labels:
+    # prom-kp-prometheus selects PodMonitors by release=prom across all
+    # namespaces; .ci/validate-prom-selectors.sh fails the PR if a monitor is
+    # selected by no instance.
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app: rustfs
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+```
+
+- [ ] **Step 5: Add the alert rules**
+
+Create `rustfs-alerts.yaml` at the repo root (deployed by the root app, which
+only picks up top-level files — same place and shape as `argocd-alerts.yaml`):
+
+```yaml
+# Alerts for the CI artifact cache (rustfs in namespace woodpecker). The cache
+# is fail-open by design, so these are warnings: the failure mode is silent CI
+# slowdown, not a failed build. Metrics arrive through the OTLP sidecar in
+# woodpecker/rustfs.woodpecker.yaml and are relayed to Thanos by
+# kube-prometheus-stack's remote-write, like every other scraped series.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rustfs-ci-cache
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+    - name: rustfs-ci-cache
+      rules:
+        - alert: CICacheMetricsMissing
+          expr: absent(rustfs_runtime_readiness_ready)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache metrics have been missing for an hour
+            description: >-
+              No rustfs_* series. Either the rustfs pod, its OTLP sidecar, or
+              the scrape is broken; CI still passes but every pipeline pays the
+              full download cost again.
+        - alert: CICacheNotReady
+          expr: rustfs_runtime_readiness_ready == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache has been unready for 30 minutes
+            description: >-
+              rustfs reports itself not ready, so pipelines run cold. Check the
+              pod and its iSCSI volume.
+        - alert: CICacheRestartLooping
+          expr: increase(rustfs_start_total[30m]) > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache is restarting repeatedly
+        - alert: CICacheVolumeNearlyFull
+          expr: rustfs_capacity_current_bytes > 8.6e9
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: CI cache volume is over 80% of its 10Gi PVC
+            description: >-
+              Old chart and tool versions accumulate; prune them or grow the PVC
+              before writes start failing.
+```
+
+- [ ] **Step 6: Validate**
+
+```bash
+cd /home/nick/Documents/workspace/infra/k8s-manifests/vmubtkube-a
+kubeconform -strict -summary woodpecker/rustfs.woodpecker.yaml rustfs-alerts.yaml
+SCHEMA_MIRROR=.tmp/schemas sh .ci/validate-prom-selectors.sh
+```
+
+Expected: seven resources valid (ConfigMap, Secret, PVC, Deployment, Service,
+NetworkPolicy, PodMonitor) plus the alert file, and
+`Every monitoring.coreos.com resource is selected by an instance.`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add woodpecker/rustfs.woodpecker.yaml rustfs-alerts.yaml
+git commit -m "feat(woodpecker): export rustfs cache metrics
+
+rustfs only pushes OTLP, so a collector sidecar re-exposes its metrics for
+scrape; kube-prometheus-stack relays them to Thanos and the new rules warn when
+the cache is down, restarting, full, or has silently stopped reporting."
+```
+
+- [ ] **Step 8: Verify the metrics reach Prometheus and Thanos**
+
+```bash
+kubectl -n woodpecker rollout status deploy/rustfs --timeout=180s
+kubectl -n woodpecker port-forward deploy/rustfs 8889:8889 &
+sleep 45 && curl -fsS http://127.0.0.1:8889/metrics | grep -c '^rustfs_'; kill %1
+kubectl -n thanos port-forward svc/thanos-query 9090:9090 &
+sleep 2
+curl -s 'http://127.0.0.1:9090/api/v1/query?query=rustfs_runtime_readiness_ready' | head -c 400; echo
+curl -s 'http://127.0.0.1:9090/api/v1/query?query=count(up{job=~".*rustfs.*"})' | head -c 300; echo
+kill %1
+```
+
+Expected: a non-zero `rustfs_` line count (one export interval of 30s must pass
+first), a Thanos result whose value is `1` for the readiness gauge, and a scrape
+target count of at least `1` — the latter is what proves the series will be
+remote-written into Thanos.
+
+- [ ] **Step 9: Verify the alerts are loaded**
+
+```bash
+kubectl -n monitoring get prometheusrule rustfs-ci-cache \
+  -o jsonpath='{range .spec.groups[0].rules[*]}{.alert}{"\n"}{end}'
+```
+
+Expected: `CICacheMetricsMissing`, `CICacheNotReady`, `CICacheRestartLooping`,
+`CICacheVolumeNearlyFull`.
+
+---
+
+### Task 3: cache helper library and hermetic tests
 
 **Files:**
 - Create: `.ci/lib/cache.sh`
@@ -297,7 +577,7 @@ Do not print the secret values anywhere. If a manual check is needed, read them 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces (used by Tasks 3–5):
+- Produces (used by Tasks 4–6):
   - `cache_restore_schemas <mirror-dir> <cache-in-dir>`
   - `cache_export_schemas <mirror-dir> <cache-in-dir> <cache-out-dir>`
   - `cache_restore_tools <cache-in-dir> <bin-dir>`
@@ -616,7 +896,7 @@ by tests so the pipeline steps can treat every miss as 'just do the work'."
 
 ---
 
-### Task 3: restore/save steps and chart cache migration
+### Task 4: restore/save steps and chart cache migration
 
 **Files:**
 - Create: `.ci/cache-restore.sh`
@@ -624,7 +904,7 @@ by tests so the pipeline steps can treat every miss as 'just do the work'."
 - Modify: `.woodpecker.yaml` (add `cache-restore`, `cache-save`; `prepare` gains `depends_on: [cache-restore]`)
 
 **Interfaces:**
-- Consumes: `rustfs` Service and Secret from Task 1; `.ci/lib/cache.sh` from Task 2 (not yet used here).
+- Consumes: `rustfs` Service and Secret from Task 1; `.ci/lib/cache.sh` from Task 3 (not yet used here).
 - Produces: `.tmp/cache-in/` (populated by restore) and `.tmp/cache-out/` (consumed by save); Woodpecker secrets `cache_access_key`, `cache_secret_key`.
 
 - [ ] **Step 1: Create the restore script**
@@ -714,7 +994,7 @@ steps:
     environment:
       RCLONE_CONFIG_CICACHE_TYPE: s3
       RCLONE_CONFIG_CICACHE_PROVIDER: Other
-      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local:9000
+      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local
       RCLONE_CONFIG_CICACHE_REGION: us-east-1
       RCLONE_CONFIG_CICACHE_FORCE_PATH_STYLE: "true"
       # Woodpecker repo secrets (values from the rustfs-ci-cache Secret; the
@@ -743,7 +1023,7 @@ and, after the `prepare` step (before `validate:`):
     environment:
       RCLONE_CONFIG_CICACHE_TYPE: s3
       RCLONE_CONFIG_CICACHE_PROVIDER: Other
-      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local:9000
+      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local
       RCLONE_CONFIG_CICACHE_REGION: us-east-1
       RCLONE_CONFIG_CICACHE_FORCE_PATH_STYLE: "true"
       RCLONE_CONFIG_CICACHE_ACCESS_KEY_ID:
@@ -832,15 +1112,15 @@ Expected: `rc=1` and an rclone error about a missing endpoint; no crash, no
 
 ---
 
-### Task 4: schema mirror migration
+### Task 5: schema mirror migration
 
 **Files:**
-- Modify: `.ci/lib/cache.sh` (schemas functions already added in Task 2 — this task only consumes them)
+- Modify: `.ci/lib/cache.sh` (schemas functions already added in Task 3 — this task only consumes them)
 - Modify: `.ci/prepare-cache.sh`
 - Modify: `.ci/test/cache-test.sh` (no change needed; confirms coverage stays green)
 
 **Interfaces:**
-- Consumes: `cache_restore_schemas`, `cache_export_schemas` (Task 2); `.tmp/cache-in`, `.tmp/cache-out` (Task 3).
+- Consumes: `cache_restore_schemas`, `cache_export_schemas` (Task 3); `.tmp/cache-in`, `.tmp/cache-out` (Task 4).
 - Produces: `.tmp/cache-out/schemas/<repo>.git.tar` and `<repo>.head` for `cache-save`.
 
 - [ ] **Step 1: Extend `prepare` with cache-in/out and the schema restore/export**
@@ -908,7 +1188,7 @@ echo "Caches ready."
 
 Run: `sh .ci/test/cache-test.sh`
 
-Expected: `all cache tests passed` (the schema cases from Task 2 are what this
+Expected: `all cache tests passed` (the schema cases from Task 3 are what this
 step exercises).
 
 - [ ] **Step 3: Run the pipeline locally without a cache**
@@ -958,7 +1238,7 @@ appears within a few seconds instead of after a clone).
 
 ---
 
-### Task 5: tool binary cache
+### Task 6: tool binary cache
 
 **Files:**
 - Modify: `.ci/prepare-cache.sh` (tool install + staging)
@@ -966,7 +1246,7 @@ appears within a few seconds instead of after a clone).
 - Modify: `.ci/test/cache-test.sh` (already covers the helpers; no change)
 
 **Interfaces:**
-- Consumes: `cache_restore_tools`, `cache_export_tool`, `fetch_tool` (Task 2); `.tmp/cache-in/tools`, `.tmp/cache-out/tools` (Tasks 3–4).
+- Consumes: `cache_restore_tools`, `cache_export_tool`, `fetch_tool` (Task 3); `.tmp/cache-in/tools`, `.tmp/cache-out/tools` (Tasks 4–5).
 - Produces: `.tmp/bin/{kubeconform,pluto,vendir}` in the workspace, read by every consumer step.
 
 - [ ] **Step 1: Add tool installation to `prepare-cache.sh`**
@@ -1133,7 +1413,7 @@ tools`, `prepare` downloads nothing, and each consumer step's log starts with
 
 ---
 
-### Task 6: documentation, follow-ups and one stale claim
+### Task 7: documentation, follow-ups and one stale claim
 
 **Files:**
 - Modify: `README.md` (the `## Manifest validation` section)
@@ -1254,18 +1534,20 @@ git commit -m "docs: document the CI cache and its follow-ups"
 
 ## Self-review
 
-- Spec coverage: rustfs endpoint (Task 1), fail-open semantics (Tasks 2–5 plus the
-  fail-open verification in Task 3), chart migration (Task 3), schema migration
-  (Task 4), tool cache (Task 5), out-of-scope repos recorded (Task 6). The
-  "no GC" and "no PDB" decisions are encoded in Task 1's manifest and comments.
+- Spec coverage: rustfs endpoint on Service port 80 (Task 1), metrics and
+  alerting (Task 2), fail-open semantics (Tasks 3–6 plus the fail-open
+  verification in Task 4), chart migration (Task 4), schema migration (Task 5),
+  tool cache (Task 6), out-of-scope repos recorded (Task 7). The "no GC" and
+  "no PDB" decisions are encoded in Task 1's manifest and comments.
 - Placeholder scan: no `TBD`/`TODO`/"similar to" left; every code step carries
   the full content.
 - Type consistency: `cache_restore_schemas(mirror, in)`,
   `cache_export_schemas(mirror, in, out)`, `cache_restore_tools(in, bin)`,
   `cache_export_tool(name, version, src, in, out)`, `fetch_tool(name, version,
-  url, dest)` are used with those signatures in Tasks 4 and 5.
+  url, dest)` are used with those signatures in Tasks 5 and 6.
 - Review Focus items each have a test: corrupt tarball and head-without-tarball
-  in Task 2 Step 1 (tests 4 and 7), sparse-config preservation (test 3), cold
+  in Task 3 Step 1 (tests 4 and 7), sparse-config preservation (test 3), cold
   cache (test 1), zero-length tool binary (tests 10 and 11), credentials missing
-  (Task 3 Step 9). rustfs-down is covered by `failure: ignore` on both cache
-  steps plus the fail-open verification in Task 3 Step 9.
+  (Task 4 Step 9), metrics silence (the `absent()` rule in Task 2).
+  rustfs-down is covered by `failure: ignore` on both cache steps plus the
+  fail-open verification in Task 4 Step 9.

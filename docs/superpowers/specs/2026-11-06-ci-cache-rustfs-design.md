@@ -63,6 +63,38 @@ The cache is an optimisation, never a dependency:
    `git reset --hard HEAD`, which honours the sparse-checkout config stored in
    the cached `.git`.
 
+## Metrics and alerting
+
+rustfs only *pushes* telemetry: it has no Prometheus scrape endpoint
+(`docs.rustfs.com/en/operations/observability`). Metrics therefore need a
+collector in the path, and that collector can either re-expose them for a scrape
+or remote-write them straight to Thanos.
+
+Chosen: **scrape**. An `otel/opentelemetry-collector-contrib` sidecar in the
+rustfs pod receives OTLP on `127.0.0.1:4318` and serves the `prometheus` exporter
+on `:8889`; a `PodMonitor` (`release: prom`) feeds `prom-kp-prometheus`, which
+remote-writes to `thanos-receive-router` exactly as it does for every other
+scraped series. So the metrics do land in Thanos — through the relay that already
+exists — and they keep the external labels (`cluster`, `tenant_id`) the rest of
+the data has.
+
+Rejected: the `prometheusremotewrite` exporter pointed directly at Thanos (the
+pattern `otel-agent-trace-connector.yaml` uses for coding-agent metrics). It is
+fine for dashboards, but this cluster runs no Thanos Ruler and configures no
+`remoteRead` on either Prometheus CR, so a series that never reaches a Prometheus
+TSDB is invisible to every `PrometheusRule` — the alerting side of the feature
+would be dead on arrival. It would also arrive in Thanos without the external
+labels every other series carries.
+
+The sidecar is preferred over reusing `monitoring/otel-collector` because that
+collector's `metrics: null` pipeline is a deliberate contract for the
+logs/traces path, the sidecar needs no cross-namespace traffic or Service, and
+the image is already cached on every node at the same tag.
+
+Alerts are warnings, not pages: the cache is fail-open, so the failure mode is
+quietly cold pipelines. The `absent()` rule is what catches a broken metrics
+path, which is otherwise indistinguishable from a healthy but unused cache.
+
 ### What is deliberately not cached
 
 - Repository clone (1.3 MB at `depth: 25`); `plugin-git` has no cache directory
