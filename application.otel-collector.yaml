@@ -34,6 +34,10 @@ spec:
         mode: deployment
         image:
           repository: docker.io/otel/opentelemetry-collector-contrib
+        # The collector reads /conf/relay.yaml once at startup and does not
+        # watch it, so a config change needs a pod restart. Reloader handles
+        # that (podAnnotations below); the chart checksum stays off so a
+        # change does not restart the pod twice.
         enableConfigChecksumAnnotation: false
 
         presets:
@@ -282,6 +286,8 @@ spec:
         podAnnotations:
           # Restart when the TLS secret rotates (cert-manager renews ~every 60d).
           secret.reloader.stakater.com/reload: otel-collector-tls
+          # Restart when the chart-rendered collector config changes.
+          configmap.reloader.stakater.com/reload: otel-collector-opentelemetry-collector
 
         extraVolumes:
           - name: tls
