@@ -237,7 +237,7 @@ spec:
             image:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: latest@sha256:86085238feac4b5c5da19c1c8ca4537e38483cd8369ed97524d4b76c710ab709
+              tag: latest@sha256:7ed6a9ea48d41574272e0a7944303e224e2b6c774af1fc15418cd2ebb2367f05
             # on-demand V8 heap snapshot without restart: the app's own handlers
             # treat SIGINT/SIGUSR1/SIGUSR2 as shutdown, so use SIGWINCH (the
             # container's tini forwards it to node) to dump a .heapsnapshot to
@@ -261,7 +261,7 @@ spec:
             image:
               # renovate: datasource=custom.private-registry depName=registry.apps.nickv.me/democratic-csi/democratic-csi
               registry: registry.apps.nickv.me/democratic-csi/democratic-csi
-              tag: latest@sha256:86085238feac4b5c5da19c1c8ca4537e38483cd8369ed97524d4b76c710ab709
+              tag: latest@sha256:7ed6a9ea48d41574272e0a7944303e224e2b6c774af1fc15418cd2ebb2367f05
             # same on-demand heap-snapshot hook as the controller driver (the
             # node driver has wedged in the past); usage: kill -WINCH 1 in the
             # csi-driver container (tini forwards to node), kubectl cp the
