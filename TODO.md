@@ -249,6 +249,24 @@ release by release. Add a matchString for `NAME: v1.2.3` env lines; a local
 replay of the current patterns against `.woodpecker.yaml` finds only the
 seven image references.
 
+## 12. Cross-repo dependency caches (from the 2026-11-06 CI flakiness review)
+
+The rustfs bucket `ci-cache` in namespace `woodpecker` now survives pipeline
+runs (`woodpecker/rustfs.woodpecker.yaml`, design in
+`docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`). Two sibling
+repos reinstall dependencies from scratch on every pipeline because their
+workspace PVC is ephemeral, and would benefit from the same bucket — out of
+scope here, follow-up PRs in those repos:
+
+- `nijave/python-envoy-authz`: each of lint/test/coverage recreates the venv and
+  runs `poetry install` (p50 lint 45s). The `test -x .poetry-venv/bin/poetry ||`
+  guard implies someone expected the venv to persist — it cannot, the workspace
+  is deleted after the workflow. Cheapest fixes, in order: one install step whose
+  venv the other steps reuse; dependencies baked into the image it already
+  builds; `POETRY_CACHE_DIR` on a cache volume.
+- `nijave/cukk`: `uv sync --frozen` in both lint and test with no `UV_CACHE_DIR`,
+  so uv's cache lives in the ephemeral container.
+
 ## Skipped (deliberately, 2026-07-05)
 
 - **Rendered-manifests pattern** (commit flat rendered YAML to a separate
