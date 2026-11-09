@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`
 
+- **Availability caveat that overrides "fail-open":** Woodpecker resolves `from_secret` at
+  compile time (`pipeline/frontend/yaml/compiler`, error `secret %q not found or not allowed to be used`),
+  so a missing `cache_access_key`/`cache_secret_key` fails the entire pipeline before any step runs.
+  Cache *contents* are fail-open; the credential reference is not. The `cache-secrets-sync` CronJob
+  is a prerequisite: deploy it, let it run once, verify the two rows, and only then enable the
+  cache steps. A design that keeps the credential out of the pipeline entirely (anonymous bucket,
+  or a secret extension whose availability we control) would remove this coupling — rustfs 1.0.4
+  documents no anonymous-access support, and the native-secret route is blocked by policy.
+
 ## Global Constraints
 
 - rustfs image `rustfs/rustfs:1.0.4`, container listens on `:9000`, health endpoint `/health`, runs as uid/gid `10001`.
