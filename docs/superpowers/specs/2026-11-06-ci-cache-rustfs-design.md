@@ -13,7 +13,7 @@ outside it persists. Measured per pipeline (~21 pipelines/day):
 | Artifact | Per run | Notes |
 |---|---|---|
 | kubeconform ×2, pluto ×2, vendir | 69 MB from github.com releases | no cache, no checksum |
-| k8s schema mirror | 19 MB git objects + **734 MB** written into the ephemeral PVC | `sync-schemas.sh` |
+| k8s schema mirror | 19 MB blobless clone + **734 MB** written into the ephemeral PVC (the cached object tarballs measure ~160 MB, see below) | `sync-schemas.sh` |
 | 23 Helm chart tarballs | 2.2 MB but ~60–90 s | 23 `index.yaml` round trips; the only reproducible red build (PRs #1140, #1141) |
 
 Woodpecker's k8s backend cannot mount an existing PVC into step pods unless it
@@ -68,9 +68,12 @@ The cache is an optimisation, never a dependency:
    tarball is absent, so an interrupted save degrades to a miss instead of a
    permanently unreachable entry.
 5. **Restores are materialised.** Only git object directories are cached for
-   schemas (19 MB), never the 734 MB checkout; the worktree is re-created with
+   schemas, never the 734 MB checkout; the worktree is re-created with
    `git reset --hard HEAD`, which honours the sparse-checkout config stored in
-   the cached `.git`.
+   the cached `.git`. Measured sizes are 144 MB (`kubernetes-json-schema`) and
+   16 MB (`CRDs-catalog`) once the sparse checkout has been materialised — far
+   more than the 19 MB clone they replace, so this cache trades bandwidth for
+   latency (~12 s/pipeline) rather than saving both.
 
 ## Metrics and alerting
 

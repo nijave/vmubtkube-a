@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the Woodpecker pipeline a persistent, fail-open S3 cache so tools, Helm chart tarballs and kubeconform schema mirrors survive between runs instead of being re-downloaded (69 MB + 734 MB of PVC writes + ~90 s of chart-index latency per pipeline), and make that cache observable so its silent failure mode (cold pipelines) shows up as a metric and an alert.
+**Goal:** Give the Woodpecker pipeline a persistent, fail-open S3 cache so Helm chart tarballs and kubeconform schema mirrors survive between runs instead of being re-downloaded (~90 s of chart-index latency plus a schema clone and 734 MB of PVC writes per pipeline), and make that cache observable so its silent failure mode (cold pipelines) shows up as a metric and an alert. The validation binaries were in scope initially and were dropped after measurement — see Task 6.
 
 **Architecture:** A dedicated single-node rustfs pod in the `woodpecker` namespace owns an RWO iSCSI PVC; step pods reach it over ClusterIP on Service port 80, which sidesteps the missing RWX StorageClass (only one pod ever mounts the volume, exactly like `buildkitd`). One bucket `ci-cache` with three prefixes (`charts/`, `tools/`, `schemas/`) is restored into the shared workspace by an rclone step before `prepare`, and uploaded afterwards by a second rclone step. Every cache path is fail-open: misses and corrupt entries only cost time. rustfs pushes telemetry over OTLP only, so a collector sidecar re-exposes its metrics for scrape; Prometheus alerts on cache health and relays the series to Thanos through its existing remote-write.
 
@@ -1453,10 +1453,20 @@ contains only the two `.head` files, and `sync-schemas.sh` prints
 git add .ci/prepare-cache.sh
 git commit -m "ci: restore schema mirrors from the cache
 
-The mirror is ~19 MB of git objects plus a 734 MB checkout that kubeconform
-needs on local disk anyway, so only the object database is cached and the
-worktree is rebuilt from its sparse-checkout config."
+Only the object database is cached and the worktree is rebuilt from its
+sparse-checkout config, because the 734 MB checkout has to exist on local disk
+for kubeconform either way. The objects are larger than the clone they come
+from: see the measurement in the task body."
 ```
+
+Measured after the fact, and worth knowing before touching this: the blobless
+clone is ~19 MB, but once `sync-schemas.sh` materialises the sparse checkout the
+packed blobs are in the object store, so the cached tarballs are **144 MB
+(`kubernetes-json-schema`) + 16 MB (`CRDs-catalog`) ≈ 160 MB per pipeline**. That
+buys ~12 s per run (13.7 s cold → 1.3 s warm) and removes a GitHub dependency
+from the critical path. It is kept on those grounds; if internal storage
+traffic ever matters more than 12 s, dropping this task is the lever (and the
+tools cache was already dropped for a worse ratio: 90 MB for 1.5 s).
 
 - [ ] **Step 6: Verify on the PR pipeline**
 

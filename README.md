@@ -60,8 +60,13 @@ CI itself caches two things across runs in a dedicated rustfs bucket
 - `charts/<chart>-<version>.tgz` — Helm chart tarballs (no more 23 `index.yaml`
   round trips per pipeline, ~90s)
 - `schemas/<repo>.git.tar` — git object databases for the kubeconform schema
-  mirrors (the 734 MB checkout is rebuilt locally from the cached
-  sparse-checkout config; the objects are what costs network)
+  mirrors. The 734 MB checkout is rebuilt locally from the cached
+  sparse-checkout config, but the cached objects are **not** small: measured
+  144 MB for `kubernetes-json-schema` + 16 MB for `CRDs-catalog`, i.e. ~160 MB
+  moved per pipeline (the bucket's own `rustfs_bucket_usage_usage_bytes` agrees
+  at 168 MB total). That buys ~12 s (13.7 s cold clone → 1.3 s warm) and removes
+  a GitHub dependency from the critical path, so it is kept deliberately — it is
+  cluster-local traffic, not internet traffic
 
 The validation binaries stay plain `wget`s: caching them saved ~1.5s while
 moving ~90 MB per pipeline into the bucket, so it was measured and dropped. The
