@@ -32,6 +32,13 @@ when:
 #    branch: main
 
 steps:
+  # NOTE on availability: the *cache contents* are fail-open (a miss only costs
+  # time, and both steps run with failure: ignore), but the credentials are not.
+  # Woodpecker resolves `from_secret` when it compiles the pipeline, so if
+  # cache_access_key / cache_secret_key are absent the whole pipeline fails
+  # before any step runs. Those rows are therefore a prerequisite maintained by
+  # woodpecker/cache-secrets.woodpecker.yaml, not an optimisation: deploy that
+  # CronJob and let it run once before or with this change.
   cache-restore:
     # renovate: datasource=docker depName=rclone/rclone
     image: rclone/rclone:1.76
