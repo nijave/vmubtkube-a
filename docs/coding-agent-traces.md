@@ -67,6 +67,15 @@ Claude Code's *logs* carry prompt/tool content when you enable the
 `OTEL_LOG_*` content gates; leave them unset. Its traces are what the
 connector normalizes.
 
+> **Agent metrics do not reach Thanos yet.** Claude Code exports delta
+> temporality, and the remote-write exporter drops delta sums and histograms,
+> so only `target_info` arrives. The fix is a `deltatocumulative` processor,
+> which the connector image does not include yet (tracked upstream in
+> nijave/otel-agent-trace-connector,
+> `docs/superpowers/plans/2026-11-08-telemetry-gaps.md`, Task 8). Until then,
+> set `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative` for
+> Claude Code.
+
 Codex reads **user-level** `~/.codex/config.toml` only — it ignores
 project-local `[otel]` blocks (it warns and drops an `otel` key found in a
 project `.codex/config.toml`).
