@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`
 
+- **Availability caveat that overrides "fail-open":** Woodpecker resolves `from_secret` at
+  compile time (`pipeline/frontend/yaml/compiler`, error `secret %q not found or not allowed to be used`),
+  so a missing `cache_access_key`/`cache_secret_key` fails the entire pipeline before any step runs.
+  Cache *contents* are fail-open; the credential reference is not. The `cache-secrets-sync` CronJob
+  is a prerequisite: deploy it, let it run once, verify the two rows, and only then enable the
+  cache steps. A design that keeps the credential out of the pipeline entirely (anonymous bucket,
+  or a secret extension whose availability we control) would remove this coupling — rustfs 1.0.4
+  documents no anonymous-access support, and the native-secret route is blocked by policy.
+
 ## Global Constraints
 
 - rustfs image `rustfs/rustfs:1.0.4`, container listens on `:9000`, health endpoint `/health`, runs as uid/gid `10001`.
@@ -31,6 +40,7 @@
 - **Head present, tarball missing:** the schema exporter must re-export, so an interrupted save self-heals instead of pinning a permanently unreachable entry.
 - **Restored mirror from another Kubernetes version:** the restore must not erase the sparse-checkout config that `sync-schemas.sh` uses to add a new version directory.
 - **Zero-length cached tool binary:** must be treated as a miss so `fetch_tool` re-downloads and re-stages it, never copied into `/usr/local/bin`.
+- **Metric names drift between rustfs builds:** a rule pinned to a name this build does not emit never fires (`rustfs_capacity_current` vs `..._current_bytes`), while a wrong `absent()` name fires forever — Task 2 Step 10 checks the live series before merge.
 - **Metrics silently missing:** if the rustfs pod, its OTLP sidecar, or the scrape stops, no `rustfs_*` series exist and nothing else complains — the `absent()` rule is the only signal that CI has quietly gone cold.
 - **Credentials missing or rotated:** restore/save fail loudly in their own log, the run stays green, and the next run is simply cold.
 
@@ -52,7 +62,16 @@
 | `README.md`, `TODO.md`, `woodpecker/application.woodpecker.yaml` (modify) | Document the cache; record cross-repo follow-ups; fix a stale cache claim |
 | `docs/ci-flakiness-2026-11-06.md` (add, already written) | Evidence the design argues from |
 
-Prerequisite: main is at or past `ca81d6c` (PRs #1139–#1142, #1141 merged), so `prepare` / `.ci/prepare-cache.sh` / `HELM_CHART_CACHE` exist.
+Prerequisite: cut the execution branch from `origin/main` and confirm the
+machinery this plan extends is actually present — `.ci/prepare-cache.sh`, the
+`prepare` step in `.woodpecker.yaml`, and `HELM_CHART_CACHE` (all introduced by
+`ca81d6c`). A branch cut before that merge has none of them, and every task from
+3 onward then builds on absent code; this document itself was merged up to
+`main` for exactly that reason. Verify before Task 1:
+
+```bash
+ls .ci/prepare-cache.sh && grep -n '^  prepare:' .woodpecker.yaml && grep -n HELM_CHART_CACHE .woodpecker.yaml
+```
 
 ---
 
@@ -260,17 +279,19 @@ kubectl apply --dry-run=server -f woodpecker/rustfs.woodpecker.yaml
 
 Expected: four lines ending in `(server dry run)`, no validation errors, and `secret "rustfs-ci-cache" ... created (server dry run)` — note the Secret is *not* applied for real, `secret-generator` will populate it on sync.
 
-- [ ] **Step 4: Commit the docs**
+- [ ] **Step 4: Confirm the design docs are already on the branch**
+
+The spec, this plan and the investigation it argues from are committed by the
+plan's own PR, so the implementation branch has nothing to stage here:
 
 ```bash
-git add docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md \
-        docs/superpowers/plans/2026-11-06-ci-cache-rustfs.md \
-        docs/ci-flakiness-2026-11-06.md
-git commit -m "docs: plan a rustfs-backed CI cache
-
-Records the flakiness investigation the cache design argues from, plus the
-spec and this plan."
+git log --oneline -3 -- docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md \
+  docs/superpowers/plans/2026-11-06-ci-cache-rustfs.md docs/ci-flakiness-2026-11-06.md
 ```
+
+Expected: the plan-PR commits (`docs: plan a rustfs-backed CI cache`,
+`docs: serve the cache on port 80 and plan its metrics`,
+`docs: fold metrics into the plan summary and file list`). No commit in this step.
 
 - [ ] **Step 5: Commit the manifest**
 
@@ -477,7 +498,9 @@ spec:
     - name: rustfs-ci-cache
       rules:
         - alert: CICacheMetricsMissing
-          expr: absent(rustfs_runtime_readiness_ready)
+          # Name-agnostic on purpose: absent() on one guessed metric fires
+          # forever if rustfs renames it, and the real breakage then hides.
+          expr: absent({__name__=~"rustfs_.*"})
           for: 1h
           labels:
             severity: warning
@@ -504,7 +527,10 @@ spec:
           annotations:
             summary: CI cache is restarting repeatedly
         - alert: CICacheVolumeNearlyFull
-          expr: rustfs_capacity_current_bytes > 8.6e9
+          # The capacity gauge ships as rustfs_capacity_current_bytes upstream
+          # but as rustfs_capacity_current in some builds; take whichever is
+          # present (Step 10 confirms the live name).
+          expr: (rustfs_capacity_current_bytes or rustfs_capacity_current) > 8.6e9
           for: 1h
           labels:
             severity: warning
@@ -556,6 +582,37 @@ first), a Thanos result whose value is `1` for the readiness gauge, and a scrape
 target count of at least `1` — the latter is what proves the series will be
 remote-written into Thanos.
 
+- [ ] **Step 10: Correct the metric names against the live series**
+
+Only some names are verified for the pinned `rustfs/rustfs:1.0.4`:
+`rustfs_capacity_current_bytes` exists upstream, while
+`rustfs_runtime_readiness_ready`, `rustfs_start_total` and the exact capacity
+gauge name vary by build (the prefix is configurable). Every expression that
+names a metric the build does not emit silently never fires; only the
+`absent({__name__=~"rustfs_.*"})` rule would catch the opposite mistake.
+
+```bash
+kubectl -n thanos port-forward svc/thanos-query 9090:9090 &
+sleep 2
+for q in 'count({__name__=~"rustfs_.*"})' \
+         'rustfs_runtime_readiness_ready' \
+         'rustfs_start_total' \
+         'rustfs_capacity_current_bytes' \
+         'rustfs_capacity_current'; do
+  printf '%-32s ' "$q"
+  curl -s --data-urlencode "query=$q" http://127.0.0.1:9090/api/v1/query \
+    | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(len(r), "series")'
+done
+kill %1
+```
+
+Expected: a non-zero count of `rustfs_*` series, and a non-empty result for each
+name the alert rules use. If a name used by a rule returns zero series while
+`rustfs_*` series exist, rename that expression to an observed name **in this
+PR** (`CICacheNotReady`, `CICacheRestartLooping`, and the capacity gauge are the
+three candidates) and commit it with the task — a rule pinned to a name the
+build never emits is indistinguishable from a healthy cache.
+
 - [ ] **Step 9: Verify the alerts are loaded**
 
 ```bash
@@ -598,6 +655,10 @@ set -eu
 # Run: sh .ci/test/cache-test.sh
 
 cd "$(dirname "$0")/../.."
+# pre-commit exports an absolute GIT_DIR/GIT_WORK_TREE, which override `git -C`;
+# without this the temporary repos below operate on the real checkout (the trap
+# .ci/sync-schemas.sh documents) and can mark it bare or reset it.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 # shellcheck disable=SC1091
 . .ci/lib/cache.sh
 
@@ -741,6 +802,13 @@ Expected: FAIL — `.ci/lib/cache.sh: No such file or directory`.
 # Every function must survive a cold, partial or corrupt cache without failing
 # the step: the restore/save steps run with `failure: ignore`, and a miss may
 # only ever cost time.
+
+# Git exports an absolute GIT_DIR/GIT_WORK_TREE to hooks in linked worktrees,
+# and `-C` does not clear them, so a `git -C <tmp>` call would `reset --hard`
+# or `sparse-checkout set` on the outer worktree instead (see the same guard in
+# .ci/sync-schemas.sh). Every function below runs under pre-commit, so clear
+# them here once for all callers.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
 
 SCHEMA_REPOS="kubernetes-json-schema CRDs-catalog"
 
@@ -901,6 +969,7 @@ by tests so the pipeline steps can treat every miss as 'just do the work'."
 **Files:**
 - Create: `.ci/cache-restore.sh`
 - Create: `.ci/cache-save.sh`
+- Create: `woodpecker/cache-secrets.woodpecker.yaml`
 - Modify: `.woodpecker.yaml` (add `cache-restore`, `cache-save`; `prepare` gains `depends_on: [cache-restore]`)
 
 **Interfaces:**
@@ -1061,18 +1130,178 @@ git add .ci/cache-restore.sh .ci/cache-save.sh
 git commit -m "ci: restore and save caches in rustfs"
 ```
 
-- [ ] **Step 6: Add the Woodpecker repo secrets (manual, once)**
+- [ ] **Step 6: Reconcile the secrets into Woodpecker's database**
 
-This step is performed by the human maintainer, not by an agent:
+No manual step: Woodpecker keeps repo secrets as plain rows in its `secrets`
+table (`value text`, `images json`, `events json`,
+`UNIQUE (org_id, repo_id, name)`), and the DSN is already a gitops object
+(`woodpecker-server-env`). A CronJob upserts the two rows from the
+`rustfs-ci-cache` Secret, so rotating that Secret propagates on the next tick
+instead of leaving a stale hand-registered copy.
 
-1. Woodpecker UI → repo `nijave/vmubtkube-a` → Settings → Secrets → add
-   `cache_access_key` and `cache_secret_key`.
-2. Values come from `kubectl -n woodpecker get secret rustfs-ci-cache -o jsonpath='{.data.access-key}' | base64 -d`
-   and the same for `secret-key`. Copy them straight into the UI; never paste
-   them into a commit, PR body, issue or agent transcript.
-3. If the `rustfs-ci-cache` Secret is ever deleted, secret-generator mints new
-   credentials and these two secrets must be updated with it — the cache is
-   then cold, which is the intended failure mode.
+Why the database rather than the API: a user token can only be minted from an
+authenticated browser session or by signing a JWT with `users.hash`, which lives
+in the same database. This therefore needs no new credential at all.
+
+Create `woodpecker/cache-secrets.woodpecker.yaml`:
+
+```yaml
+# Keeps the two Woodpecker repo secrets that .woodpecker.yaml references
+# (cache_access_key / cache_secret_key) in sync with the rustfs-ci-cache Secret.
+#
+# Woodpecker stores repo secrets as plain rows in its own `secrets` table
+# (value TEXT, images/events JSON, UNIQUE (org_id, repo_id, name)), so this
+# reconciles them with SQL instead of asking a human to paste values into the UI:
+# rotating rustfs-ci-cache is picked up on the next tick, which is the whole
+# point — a hand-registered copy goes silently stale.
+#
+# Why the database and not the API: the API needs a user token, and a token can
+# only be minted from an authenticated browser session or by signing a JWT with
+# users.hash (also only in this database). The DSN is already a gitops object
+# (woodpecker-server-env, managed by ExternalSecrets), so no new credential
+# enters the cluster.
+#
+# Trade-off: this couples to Woodpecker's schema. A version bump that renames or
+# retypes a column makes the Job fail loudly (KubeJobFailed) instead of quietly
+# serving stale values — which is the failure direction we want.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cache-secrets-sync
+  namespace: woodpecker
+data:
+  reconcile.sql: |
+    -- Idempotent upsert of the CI cache secrets for one repository. The values
+    -- arrive as psql variables so no secret ever reaches the container log.
+    -- `images` is written as NULL: image filters are only enforced for plugin
+    -- steps, and a normal command step that uses a filtered secret fails
+    -- pipeline compilation ("secret ... is only allowed to be used by
+    -- plugins"), which takes all of CI down. `events` restricts the rows to
+    -- pull_request pipelines and applies to every step kind.
+    INSERT INTO secrets (org_id, repo_id, name, value, images, events, note)
+    SELECT 0,
+           r.id,
+           v.name,
+           v.value,
+           NULL,
+           v.events::json,
+           'managed by cache-secrets-sync'
+    FROM repos r
+    CROSS JOIN (VALUES
+        ('cache_access_key', :'access_key', '["pull_request"]'),
+        ('cache_secret_key', :'secret_key', '["pull_request"]')
+    ) AS v(name, value, events)
+    WHERE r.full_name = 'nijave/vmubtkube-a'
+    ON CONFLICT (org_id, repo_id, name) DO UPDATE
+       SET value  = EXCLUDED.value,
+           images = EXCLUDED.images,
+           events = EXCLUDED.events,
+           note   = EXCLUDED.note;
+
+    -- Fail (and therefore alert through KubeJobFailed) instead of silently
+    -- leaving CI without credentials when the repo row or a secret is missing.
+    DO $$
+    DECLARE n int;
+    BEGIN
+        SELECT count(*) INTO n
+        FROM secrets s
+        JOIN repos r ON r.id = s.repo_id
+        WHERE r.full_name = 'nijave/vmubtkube-a'
+          AND s.name IN ('cache_access_key', 'cache_secret_key');
+        IF n <> 2 THEN
+            RAISE EXCEPTION 'expected 2 cache secrets for nijave/vmubtkube-a, found %', n;
+        END IF;
+    END $$;
+
+    -- Lengths, not values: this line is what shows up in the Job log.
+    SELECT s.name, length(s.value) AS value_len, s.images, s.events
+    FROM secrets s
+    JOIN repos r ON r.id = s.repo_id
+    WHERE r.full_name = 'nijave/vmubtkube-a'
+      AND s.name IN ('cache_access_key', 'cache_secret_key')
+    ORDER BY s.name;
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cache-secrets-sync
+  namespace: woodpecker
+spec:
+  # Every ten minutes: the cache steps are fail-open, so a delayed reconcile
+  # only means a cold run, never a broken one.
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            # postgres:17-alpine ships the postgres user as 999:999.
+            runAsUser: 999
+            runAsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reconcile
+              # renovate: datasource=docker depName=postgres
+              image: postgres:17-alpine
+              command:
+                - /bin/sh
+                - -c
+              args:
+                - |
+                  set -eu
+                  psql "$WOODPECKER_DATABASE_DATASOURCE" \
+                    -v ON_ERROR_STOP=1 \
+                    -v access_key="$(cat /etc/rustfs/access-key)" \
+                    -v secret_key="$(cat /etc/rustfs/secret-key)" \
+                    -f /sql/reconcile.sql
+              env:
+                - name: WOODPECKER_DATABASE_DATASOURCE
+                  valueFrom:
+                    secretKeyRef:
+                      name: woodpecker-server-env
+                      key: WOODPECKER_DATABASE_DATASOURCE
+              volumeMounts:
+                - name: sql
+                  mountPath: /sql
+                  readOnly: true
+                - name: rustfs
+                  mountPath: /etc/rustfs
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+          volumes:
+            - name: sql
+              configMap:
+                name: cache-secrets-sync
+            - name: rustfs
+              secret:
+                secretName: rustfs-ci-cache
+```
+
+- [ ] **Step 6b: Validate and review the one schema-coupled file**
+
+```bash
+cd /home/nick/Documents/workspace/infra/k8s-manifests/vmubtkube-a
+kubeconform -strict -summary woodpecker/cache-secrets.woodpecker.yaml
+SCHEMA_MIRROR=.tmp/schemas sh .ci/validate.sh 2>&1 | tail -1
+```
+
+Expected: `2 resources found in 1 file - Valid: 2` and `All manifests valid.`
+After the merge, the first Job run's log must show two rows with
+`value_len > 0`; a `KubeJobFailed` alert means the schema moved under us.
 
 - [ ] **Step 7: Verify on the PR pipeline (cold run)**
 
@@ -1092,9 +1321,10 @@ cache saved: 0 staged objects, 23 charts in the workspace
 
 Push an empty commit (`git commit --allow-empty -m "ci: verify warm cache"`) and
 re-read the logs. Expected: `cache restored: 23 charts, 0 tools, 0 schema
-objects`, and the `prepare` step no longer prints any `chart cache:` pull lines
-for charts already in `.tmp/charts` — it prints one `chart cache:` line per
-application only when a tarball is missing.
+objects`, and the `prepare` step still prints its `chart cache: <chart>@<version>`
+line for every application (`prime_app_charts` echoes unconditionally before
+`chart_tarball` returns early) — what disappears is the network activity: no
+`Pulled:`/`Digest:` lines, and the step finishes in seconds instead of ~90.
 
 - [ ] **Step 9: Verify the fail-open path**
 
@@ -1237,6 +1467,18 @@ line, and `sync-schemas.sh`'s output shows no clone ("schema mirrors ready"
 appears within a few seconds instead of after a clone).
 
 ---
+
+### Task 6: tool binary cache — DROPPED, not implemented
+
+Measured after the other tasks were built: restoring the three binaries costs
+~90 MB of bucket traffic per pipeline to save ~1.5 s (cold `wget` of
+kubeconform + pluto + vendir was 1.7 s). The cache was removed from the
+implementation — `kubeconform`, `pluto` and `vendir` stay pinned `wget`s in
+their own steps, `.ci/lib/cache.sh` keeps only the schema helpers, and there is
+no `tools/` prefix in the bucket. The steps below are kept for the reasoning and
+the numbers; do not implement them as written.
+
+#### Original steps (superseded)
 
 ### Task 6: tool binary cache
 
@@ -1540,7 +1782,8 @@ git commit -m "docs: document the CI cache and its follow-ups"
   tool cache (Task 6), out-of-scope repos recorded (Task 7). The "no GC" and
   "no PDB" decisions are encoded in Task 1's manifest and comments.
 - Placeholder scan: no `TBD`/`TODO`/"similar to" left; every code step carries
-  the full content.
+  the full content. The GIT_DIR unset appears in both Task 3 code blocks, and the
+  metric-name verification is a numbered step rather than a comment.
 - Type consistency: `cache_restore_schemas(mirror, in)`,
   `cache_export_schemas(mirror, in, out)`, `cache_restore_tools(in, bin)`,
   `cache_export_tool(name, version, src, in, out)`, `fetch_tool(name, version,
