@@ -69,8 +69,14 @@ secrets the cache steps use are rows in Woodpecker's own database, kept in sync
 with the `rustfs-ci-cache` Secret by `woodpecker/cache-secrets.woodpecker.yaml`
 — rotating the Secret needs no manual step.
 
-The cache is fail-open: both steps run with `failure: ignore`, saves are
-additive, and a miss only costs time. `woodpecker/rustfs.woodpecker.yaml`
+Cache *contents* are fail-open: both steps run with `failure: ignore`, saves are
+additive, and a miss only costs time. The cache *credential* is not: Woodpecker
+resolves `from_secret` while compiling the pipeline, so if `cache_access_key` /
+`cache_secret_key` are missing the whole pipeline fails before any step runs.
+Those rows are maintained by `woodpecker/cache-secrets.woodpecker.yaml` (a
+CronJob that upserts them from the `rustfs-ci-cache` Secret), which therefore has
+to be deployed and to have run once — treat it as infrastructure, not a
+convenience. `woodpecker/rustfs.woodpecker.yaml`
 deploys the endpoint; design in
 `docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`.
 
