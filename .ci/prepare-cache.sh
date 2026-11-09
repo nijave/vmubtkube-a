@@ -8,23 +8,35 @@ set -euo pipefail
 #   $HELM_CHART_CACHE  Helm chart tarballs (.ci/lib/render-helm.sh)
 #
 # All step pods of a workflow share one workspace PVC, so the caches are visible
-# to the steps that depend_on this one. Both used to be built implicitly by
-# whichever step got there first: validate.sh and validate-helm.sh each ran
-# sync-schemas.sh within the same second of the pipeline starting, and
-# validate-helm.sh plus validate-prom-selectors.sh each pulled all 27 Helm
-# charts straight from upstream (~54 downloads per pipeline, no retry).
+# to the steps that depend_on this one. Since the caches are also restored from
+# and saved to the rustfs bucket (see .ci/cache-restore.sh / .ci/cache-save.sh),
+# this script has a strict input/output contract:
 #
-# Runs as a step of its own (see the DAG note in .woodpecker.yaml). The
-# consumers still call sync-schemas.sh themselves, which is a no-op once warm,
-# so nothing here is required for pre-commit or for running one script by hand.
+#   .tmp/cache-in/   what the restore step downloaded (may be empty)
+#   .tmp/cache-out/  what the save step must upload (staged here)
+#
+# Design: docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md
+#
+# The consumers still call sync-schemas.sh themselves, which is a no-op once
+# warm, so nothing here is required for pre-commit or for running one script by
+# hand.
 
-WORKDIR=$(mktemp -d)
-trap 'rm -rf "$WORKDIR"' EXIT
 SELFDIR=$(dirname "$0")
+CACHE_IN=${CI_CACHE_IN:-.tmp/cache-in}
+CACHE_OUT=${CI_CACHE_OUT:-.tmp/cache-out}
+
+# shellcheck disable=SC1091
+. "$SELFDIR/lib/cache.sh"
+
+mkdir -p "$CACHE_OUT"
 
 if [ -n "${SCHEMA_MIRROR:-}" ]; then
   echo "=== schema mirrors ($SCHEMA_MIRROR) ==="
+  # Object directories only (tens of MB): the checkout is rebuilt locally,
+  # because kubeconform needs the files on disk either way.
+  cache_restore_schemas "$SCHEMA_MIRROR" "$CACHE_IN"
   sh "$SELFDIR/sync-schemas.sh"
+  cache_export_schemas "$SCHEMA_MIRROR" "$CACHE_IN" "$CACHE_OUT"
 fi
 
 # shellcheck disable=SC1091
@@ -32,9 +44,8 @@ fi
 
 if [ -n "${HELM_CHART_CACHE:-}" ]; then
   echo "=== helm chart cache ($HELM_CHART_CACHE) ==="
-  # prime_app_charts pulls one tarball per chart+version and fails on a chart
-  # that cannot be fetched, which is the point: better a clear failure here than
-  # two render steps racing the same upstream repo later.
+  WORKDIR=$(mktemp -d)
+  trap 'rm -rf "$WORKDIR"' EXIT
   extract_apps "$WORKDIR/apps" > "$WORKDIR/apps.txt"
   prime_app_charts "$WORKDIR/apps.txt"
   echo "chart cache holds $(find "$HELM_CHART_CACHE" -maxdepth 1 -name '*.tgz' | wc -l) tarballs"
