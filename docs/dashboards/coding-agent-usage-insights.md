@@ -26,7 +26,7 @@ and token trends live on the sibling dashboards
 | `kpi-cost` | number | reported cost $ | pi chat spans + Claude Code `api_request` logs |
 | `kpi-turns` | number | `invoke_agent` spans | canonical |
 | `kpi-tools` | number | `execute_tool` spans | canonical |
-| `kpi-tool-err` | number | tool error % | canonical (pi, codex only) |
+| `kpi-tool-err` | number | tool error % | canonical (titled "pi, codex"; see the tool errors note) |
 | `kpi-cache-hit` | number | prompt cache hit % | canonical |
 | `kpi-llm-err` | number | failed LLM requests | canonical |
 | `ln-cost-day` | line | daily cost per agent | as `kpi-cost` |
@@ -44,26 +44,33 @@ and token trends live on the sibling dashboards
 
 - **Cost.** Only two harnesses report cost. pi sets
   `coding_agent.usage.cost` on canonical chat spans. Claude Code reports
-  `cost_usd` only on its `api_request` log events in `otel.otel_logs`. Codex
-  reports no cost and does not appear in the cost tiles.
+  `cost_usd` on its `api_request` log events in `otel.otel_logs`, which the
+  tiles read. Since connector v0.9 (`claude_code.chat_source: logs`) its
+  canonical chat spans carry the same value as `coding_agent.usage.cost`, so
+  a tile that adds the canonical Claude Code spans to the log query counts
+  the cost twice. Codex reports no cost and does not appear in the cost
+  tiles.
 - **Prompt tokens and cache hit %.** Codex follows OpenAI usage:
   `gen_ai.usage.input_tokens` already includes cached tokens. claude_code
   and pi report input, cache read, and cache write separately. The tiles
   use `input` for codex and `input + cache_read + cache_write` for
   the others. Hit % is `cache_read / prompt`.
 - **Tool errors.** pi and codex set `StatusCode = 'Error'` on failed
-  `execute_tool` spans. The connector does not carry Claude Code's
-  `success = false` from `claude_code.tool.execution` onto the canonical
-  span, so claude_code tools show 0% errors. Fix this in the connector, not
-  here.
+  `execute_tool` spans. Since connector v0.9, a failed
+  `claude_code.tool.execution` also marks its canonical `execute_tool`
+  parent as Error, but only when both spans arrive in the same OTLP batch,
+  so claude_code tool error % is a lower bound. The tile SQL covers every
+  harness; only its "(pi, codex)" title predates this.
 - **Turns.** A turn is one canonical trace with an `invoke_agent` root. pi
   and codex chat or tool spans stay in the trace of their parent turn.
 - **Reasoning.** codex and pi report
   `gen_ai.usage.reasoning.output_tokens`. claude_code reports the effort
   level but not reasoning tokens, so its reasoning columns are 0.
 - **Subagents.** claude_code marks subagent requests with
-  `gen_ai.agent.id` on the canonical chat span. pi's canonical spans have no
-  such marker. The tile joins each canonical pi chat span to its raw
+  `gen_ai.agent.id` on the canonical chat span. Since connector v0.9, pi
+  subagent chat and tool spans carry the same marker (plus
+  `coding_agent.agent.parent_id`), but the tile predates that and still
+  joins each canonical pi chat span to its raw
   pi-telemetry `llm-generation [main]` / `[subagent]` span on
   `gen_ai.response.id` = `responseId`. pi-delegate child runs started from a
   pi session appear as `[subagent]`.

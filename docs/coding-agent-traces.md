@@ -17,7 +17,10 @@ invoke_agent <agent>
   (`claude_code.interaction` → `llm_request` / `tool`, see
   [project attribution](./claude-code-otel-project-attribution.md)). The
   connector preserves that hierarchy and renames spans/attributes into the same
-  vocabulary.
+  vocabulary. Chat spans are the exception: with `claude_code.chat_source:
+  logs` the connector builds them from the `claude_code.api_request` /
+  `api_error` log events and drops the native `llm_request` span. Only the
+  logs carry per-request cost (`coding_agent.usage.cost`) and API failures.
 
 The collector forwards raw vendor telemetry **in parallel, unmodified**, so
 the original Codex logs and Claude Code spans stay queryable in HyperDX
@@ -50,7 +53,10 @@ hostname is LAN-only — see "DNS zones and TLS" in the [README](../README.md).
 > `OTEL_EXPORTER_OTLP_ENDPOINT` now works for every signal; the
 > signal-specific variables below are the more explicit option.
 
-Claude Code — native trace export is still beta and off by default:
+Claude Code — native trace export is still beta and off by default. Export
+logs **and** traces: the canonical trace takes its interaction and tool spans
+from the traces and its chat spans from the logs, so a session missing either
+one is incomplete.
 
 ```bash
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
@@ -58,23 +64,30 @@ export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
 export OTEL_METRICS_EXPORTER=otlp
 export OTEL_EXPORTER_OTLP_METRICS_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=https://agents-otel.k8s.somemissing.info:4318/v1/metrics
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=https://agents-otel.k8s.somemissing.info:4318/v1/logs
 export OTEL_TRACES_EXPORTER=otlp
 export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://agents-otel.k8s.somemissing.info:4318/v1/traces
 ```
 
 Claude Code's *logs* carry prompt/tool content when you enable the
-`OTEL_LOG_*` content gates; leave them unset. Its traces are what the
-connector normalizes.
+`OTEL_LOG_*` content gates; leave them unset. The connector reads only the
+`api_request` / `api_error` events and copies no content into canonical
+spans, but it forwards the raw logs verbatim.
 
-> **Agent metrics do not reach Thanos yet.** Claude Code exports delta
-> temporality, and the remote-write exporter drops delta sums and histograms,
-> so only `target_info` arrives. The fix is a `deltatocumulative` processor,
-> which the connector image does not include yet (tracked upstream in
-> nijave/otel-agent-trace-connector,
-> `docs/superpowers/plans/2026-11-08-telemetry-gaps.md`, Task 8). Until then,
-> set `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative` for
-> Claude Code.
+Both connector instances (`coding_agent` on the logs pipeline,
+`coding_agent/claude` on the traces pipeline) share one config through a YAML
+anchor. `claude_code.chat_source` must be the same on every instance that sees
+Claude Code telemetry; a mismatch gives each request two chat spans or none.
+
+Agent metrics are remote-written to Thanos. Claude Code exports delta
+temporality, which the remote-write exporter drops, so the metrics pipeline
+runs `delta_to_cumulative` first; the client needs no temporality setting. The
+processor keeps per-series totals in memory, which is safe with the single
+replica; a restart resets them (Prometheus `rate`/`increase` handle that as a
+counter reset).
 
 Codex reads **user-level** `~/.codex/config.toml` only — it ignores
 project-local `[otel]` blocks (it warns and drops an `otel` key found in a
@@ -93,10 +106,11 @@ metrics_exporter = { otlp-grpc = { endpoint = "https://agents-otel.k8s.somemissi
 its `codex.*` events as OTLP *logs*, not traces, so **this is the one the
 connector needs** — `trace_exporter` alone produces no canonical Codex traces.
 
-`trace_exporter` is optional here. Codex's native spans are not normalized (the
-Claude edge drops any resource that has no `claude_code.`-prefixed span, so
-there is no duplication), but pointing it at this collector still gets those
-spans the 100% sampling exemption.
+`trace_exporter` is optional here. The connector sets `codex.signals: [logs]`,
+so its Codex native-traces edge is not built and the native spans produce no
+second canonical trace per turn. They are still forwarded raw (with the 100%
+sampling exemption) and add what the logs lack, such as MCP identity and
+per-turn token totals.
 
 `metrics_exporter` defaults to Statsig rather than OTLP; set it like
 `exporter` above to route Codex metrics through this collector into Thanos.
@@ -121,8 +135,9 @@ If you add another hop between here and HyperDX, it needs the same exemption.
   is in-memory; two replicas would split one turn's log records into two
   incomplete traces. The state does not survive a restart, so a roll or a crash
   drops in-flight turns. Completed traces survive both.
-- `max_active_turns: 500` bounds that state. Turns close on a quiet
-  `reorder_window` (30s) after `response.completed`, or at `turn_timeout` (10m).
+- `codex.max_active_turns: 500` bounds that state. Turns close on a quiet
+  `reorder_window` (30s) after `response.completed`, or at `turn_timeout`
+  (10m). The unused Cursor edge gets the same bounds in its `cursor:` block.
 - The connector is at **development stability** upstream; span names and
   attributes may change between releases.
 - Renovate tracks the pinned image tag. Tagging the upstream repo cuts each

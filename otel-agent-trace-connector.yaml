@@ -3,7 +3,8 @@
 #
 # A custom OCB-built Collector distribution carrying the `coding_agent`
 # connector, which turns Codex's structured OTLP logs into one trace per user
-# turn and normalizes Claude Code's native span tree into the same canonical
+# turn and normalizes Claude Code's native span tree (with chat spans built
+# from its api_request/api_error log events) into the same canonical
 # vocabulary:
 #
 #   invoke_agent <agent>
@@ -58,19 +59,48 @@ data:
               key_file: /tls/tls.key
 
     connectors:
-      # Codex: stateful correlation of codex.* logs into one trace per turn.
-      # A turn with a response.completed event is finalized once reorder_window
-      # is quiet; one without is finalized by turn_timeout. max_active_turns
-      # bounds memory -- 500 is generous for a handful of concurrent agents and
-      # keeps the worst case well inside the pod's memory limit (the upstream
-      # README's 10000 assumes a far larger fleet).
-      coding_agent:
-        turn_timeout: 10m
-        reorder_window: 30s
-        max_active_turns: 500
-        max_events_per_turn: 1000
-      # Claude Code: stateless normalization of its native span tree.
-      coding_agent/claude:
+      # Two instances of the same component: `coding_agent` sits on the logs
+      # pipeline and `coding_agent/claude` on the traces pipeline. Each builds
+      # every edge for its signal, so both get the same config through the
+      # &coding_agent anchor; claude_code.chat_source must match on every
+      # instance that sees Claude Code logs or traces, and the anchor stops
+      # the two from drifting.
+      coding_agent: &coding_agent
+        # Codex: stateful correlation of codex.* logs into one trace per turn.
+        # A turn with a response.completed event is finalized once
+        # reorder_window is quiet; one without is finalized by turn_timeout.
+        # signals: [logs] (also the default, stated so it is not missed)
+        # means the Codex native-traces edge is not built: native spans from
+        # a client with trace_exporter set are forwarded raw only, so a turn
+        # never gets a second canonical trace. The logs edge is the one with
+        # TTFT and failed-call chat spans.
+        codex:
+          signals: [logs]
+          turn_timeout: 10m
+          reorder_window: 30s
+          max_active_turns: 500
+          max_events_per_turn: 1000
+        # Cursor: unused here, but its logs edge is always constructed and
+        # holds its own turn state, so it gets the same bounds as Codex.
+        # max_active_turns bounds memory per edge -- 500 is generous for a
+        # handful of concurrent agents and keeps the worst case well inside
+        # the pod's memory limit (the upstream README's 10000 assumes a far
+        # larger fleet).
+        cursor:
+          turn_timeout: 10m
+          reorder_window: 30s
+          max_active_turns: 500
+          max_events_per_turn: 1000
+        # Claude Code: chat spans come from the claude_code.api_request /
+        # api_error log events instead of the native claude_code.llm_request
+        # span, which the traces edge then drops. Only the logs carry
+        # per-request cost (coding_agent.usage.cost), and api_error gives
+        # failed requests an Error chat span with the retry attempt. The
+        # interaction and tool spans still come from the native span tree,
+        # so Claude Code must export both logs and traces.
+        claude_code:
+          chat_source: logs
+      coding_agent/claude: *coding_agent
 
     processors:
       # Tags everything this collector forwards so the downstream collector can
@@ -96,6 +126,14 @@ data:
         send_batch_size: 16
         send_batch_max_size: 64
         timeout: 5s
+      # Claude Code exports delta temporality by default, and
+      # prometheus_remote_write drops delta sums and histograms (only
+      # target_info used to reach Thanos). This converts them to cumulative
+      # before export. It keeps accumulation state in memory per series, so
+      # every point of a series must reach the same pod -- true with the
+      # single replica below; a restart resets the running totals, which
+      # Prometheus counter functions treat as a counter reset.
+      delta_to_cumulative:
 
     exporters:
       otlp_grpc:
@@ -107,7 +145,12 @@ data:
       # to Thanos Receive -- the same URL kube-prometheus-stack and
       # prometheus-ext use; the receive router has no auth.
       prometheus_remote_write:
-        endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
+        # Under `http:`: top-level HTTP client settings are deprecated since
+        # collector v0.158, and the alpha feature gate
+        # exporter.prometheusremotewritexporter.removeTopLevelHTTPSettings
+        # rejects them once it is enabled.
+        http:
+          endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
         # Resource attrs as labels: without this, claude-code/codex series are
         # indistinguishable in Thanos (service.name) and the coding-agent tag
         # (telemetry.source) never arrives. included: ["*"] is the documented
@@ -148,10 +191,11 @@ data:
         # `metrics: null` stands, so the downstream contract is unchanged).
         # Agent metric volume is low; `batch` is reused as-is -- its 16/64
         # sizing was tuned for the 4 MiB gRPC hop, which this HTTP export is
-        # not subject to.
+        # not subject to. delta_to_cumulative runs before batch so
+        # remote write only ever sees cumulative series.
         metrics/agents:
           receivers: [otlp]
-          processors: [resource/coding_agent, batch]
+          processors: [resource/coding_agent, delta_to_cumulative, batch]
           exporters: [prometheus_remote_write]
 ---
 apiVersion: apps/v1
@@ -182,7 +226,7 @@ spec:
       containers:
         - name: collector
           # renovate: datasource=docker depName=ghcr.io/nijave/otel-agent-trace-connector
-          image: ghcr.io/nijave/otel-agent-trace-connector:v0.8.0
+          image: ghcr.io/nijave/otel-agent-trace-connector:v0.9.0-beta.1
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           ports:

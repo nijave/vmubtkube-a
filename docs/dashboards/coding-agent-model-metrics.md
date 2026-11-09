@@ -62,9 +62,12 @@ in the HyperDX/ClickStack instance in the `hyperdx` namespace.
   float string) — set by claude_code, pi, and most codex spans. Quantiles use
   `quantileIf` keyed on the attribute being non-empty so spans without it
   don't drag percentiles toward 0.
-- **There is no retry dimension:** no harness emits an `attempt` attribute,
-  so the retry KPI became an error-rate KPI (`kpi-err`) and `retry_pct`
-  columns were removed.
+- **No retry dimension:** no harness emitted an `attempt` attribute when
+  this dashboard was first exported, so the retry KPI became an error-rate
+  KPI (`kpi-err`) and the tiles dropped their `retry_pct` columns. Since
+  connector v0.9, Claude Code chat spans carry
+  `coding_agent.request.attempt`, but only on failed (`api_error`) requests;
+  the dashboard does not use it.
 
 ## Applying / re-exporting
 

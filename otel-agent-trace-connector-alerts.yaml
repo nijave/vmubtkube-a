@@ -64,11 +64,12 @@ spec:
           send_failed_metric_points and AgentTraceConnectorMetricsExportFailures
           stay at zero. The usual cause is delta temporality: Claude Code
           exports delta sums and histograms by default, and remote write
-          accepts only cumulative data. Agent metrics then never reach Thanos;
-          only target_info arrives. Fix by converting delta to cumulative in
-          the collector, or set
-          OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative on the
-          client.
+          accepts only cumulative data. The metrics/agents pipeline converts
+          them with delta_to_cumulative, so check first that the processor is
+          still in that pipeline (otel-agent-trace-connector.yaml) and the
+          pod logs for which metric failed to translate. As a client-side
+          workaround, set
+          OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative.
       expr: sum(rate(otelcol_exporter_prometheusremotewrite_failed_translations{job="otel-agent-trace-connector"}[10m])) > 0
       for: 5m
       labels:
