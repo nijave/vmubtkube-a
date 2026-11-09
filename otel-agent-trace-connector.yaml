@@ -126,6 +126,14 @@ data:
         send_batch_size: 16
         send_batch_max_size: 64
         timeout: 5s
+      # Claude Code exports delta temporality by default, and
+      # prometheus_remote_write drops delta sums and histograms (only
+      # target_info used to reach Thanos). This converts them to cumulative
+      # before export. It keeps accumulation state in memory per series, so
+      # every point of a series must reach the same pod -- true with the
+      # single replica below; a restart resets the running totals, which
+      # Prometheus counter functions treat as a counter reset.
+      delta_to_cumulative:
 
     exporters:
       otlp_grpc:
@@ -178,10 +186,11 @@ data:
         # `metrics: null` stands, so the downstream contract is unchanged).
         # Agent metric volume is low; `batch` is reused as-is -- its 16/64
         # sizing was tuned for the 4 MiB gRPC hop, which this HTTP export is
-        # not subject to.
+        # not subject to. delta_to_cumulative runs before batch so
+        # remote write only ever sees cumulative series.
         metrics/agents:
           receivers: [otlp]
-          processors: [resource/coding_agent, batch]
+          processors: [resource/coding_agent, delta_to_cumulative, batch]
           exporters: [prometheus_remote_write]
 ---
 apiVersion: apps/v1
