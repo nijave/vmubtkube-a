@@ -1174,21 +1174,24 @@ data:
   reconcile.sql: |
     -- Idempotent upsert of the CI cache secrets for one repository. The values
     -- arrive as psql variables so no secret ever reaches the container log.
-    -- `images` restricts the secret to the rclone steps; `events` restricts it
-    -- to pull_request pipelines, which is the only event this repo runs on.
+    -- `images` is written as NULL: image filters are only enforced for plugin
+    -- steps, and a normal command step that uses a filtered secret fails
+    -- pipeline compilation ("secret ... is only allowed to be used by
+    -- plugins"), which takes all of CI down. `events` restricts the rows to
+    -- pull_request pipelines and applies to every step kind.
     INSERT INTO secrets (org_id, repo_id, name, value, images, events, note)
     SELECT 0,
            r.id,
            v.name,
            v.value,
-           v.images::json,
+           NULL,
            v.events::json,
            'managed by cache-secrets-sync'
     FROM repos r
     CROSS JOIN (VALUES
-        ('cache_access_key', :'access_key', '["rclone/rclone"]', '["pull_request"]'),
-        ('cache_secret_key', :'secret_key', '["rclone/rclone"]', '["pull_request"]')
-    ) AS v(name, value, images, events)
+        ('cache_access_key', :'access_key', '["pull_request"]'),
+        ('cache_secret_key', :'secret_key', '["pull_request"]')
+    ) AS v(name, value, events)
     WHERE r.full_name = 'nijave/vmubtkube-a'
     ON CONFLICT (org_id, repo_id, name) DO UPDATE
        SET value  = EXCLUDED.value,
