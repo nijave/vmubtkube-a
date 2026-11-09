@@ -41,6 +41,19 @@ spec:
             annotations:
               k8s.somemissing.info/argocd-manage-secret-data: "true"
         grafana:
+          # ClickHouse datasource plugin for the HyperDX otel
+          # database; downloaded at pod start from grafana.com.
+          plugins:
+            - grafana-clickhouse-datasource@4.23.4
+          # Password of the dedicated read-only `grafana` ClickHouse user
+          # (hyperdx/clickhouse-grafana-credentials, mirrored into monitoring
+          # by hyperdx-clickhouse-grafana-externalsecret.yaml). The datasource
+          # below picks it up via $__env{} provisioning interpolation.
+          envValueFrom:
+            CLICKHOUSE_GRAFANA_PASSWORD:
+              secretKeyRef:
+                name: clickhouse-grafana-credentials
+                key: password
           env:
             GF_TRACING_OPENTELEMETRY_OTLP_ADDRESS: otel-collector.k8s.somemissing.info:4317
             GF_TRACING_OPENTELEMETRY_OTLP_PROPAGATION: w3c
@@ -106,6 +119,20 @@ spec:
           - name: prometheus_vmubtkube-a
             type: prometheus
             url: http://{{ printf "%s-kp-prometheus.monitoring.svc" .Release.Name }}:9090
+          - name: clickhouse_hyperdx
+            type: grafana-clickhouse-datasource
+            uid: clickhouse
+            access: proxy
+            editable: false
+            jsonData:
+              host: clickhouse-hyperdx.hyperdx.svc.cluster.local
+              port: 8123
+              protocol: http
+              username: grafana
+              defaultDatabase: otel
+              secure: false
+            secureJsonData:
+              password: $__env{CLICKHOUSE_GRAFANA_PASSWORD}
         prometheusOperator:
           verticalPodAutoscaler:
             enabled: true

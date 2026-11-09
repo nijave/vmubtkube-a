@@ -20,6 +20,20 @@ metadata:
 stringData:
   username: otelcollector
 ---
+# Dedicated read-only dashboard user for Grafana. The password is mirrored
+# into monitoring via ExternalSecret (hyperdx-clickhouse-grafana-externalsecret.yaml);
+# SELECT grants on the otel database are applied by the schema-seed job below.
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/basic-auth
+metadata:
+  name: clickhouse-grafana-credentials
+  namespace: hyperdx
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: password
+stringData:
+  username: grafana
+---
 apiVersion: clickhouse-keeper.altinity.com/v1
 kind: ClickHouseKeeperInstallation
 metadata:
@@ -152,6 +166,19 @@ spec:
         - 192.168.224.0/20
       otelcollector/profile: default
       otelcollector/quota: default
+      # Network ACL mirrors the other users: the whole pod CIDR slice so the
+      # Grafana pod (monitoring ns) can reach the HTTP interface. Privileges
+      # come from the schema-seed job's GRANT, not from this entry.
+      grafana/password:
+        valueFrom:
+          secretKeyRef:
+            name: clickhouse-grafana-credentials
+            key: password
+      grafana/networks/ip:
+        - 127.0.0.1/32
+        - 192.168.224.0/20
+      grafana/profile: default
+      grafana/quota: default
     profiles:
       default/allow_experimental_database_replicated: "1"
       default/allow_experimental_object_type: "1"
@@ -422,6 +449,25 @@ data:
     WHERE TraceId != ''
     GROUP BY TraceId;
     SQL
+
+    # The Grafana user comes from the ClickHouseInstallation users block and
+    # only exists once the operator has reconciled it. Access-control state
+    # is per replica, so apply the read-only grant on every replica. Re-running
+    # the same GRANT is a no-op, so this is idempotent across syncs.
+    for host in $CH_REPLICAS; do
+      tries=0
+      until clickhouse-client --host "$host" --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" \
+              --query "GRANT SELECT ON $DATABASE.* TO grafana" >/dev/null 2>&1; do
+        tries=$((tries + 1))
+        if [ "$tries" -ge 60 ]; then
+          echo "could not grant on $host after $tries attempts (grafana user missing?)" >&2
+          exit 1
+        fi
+        echo "waiting to grant on $host..."
+        sleep 3
+      done
+      echo "granted SELECT on $host"
+    done
 
     echo "schema seed complete"
 ---
