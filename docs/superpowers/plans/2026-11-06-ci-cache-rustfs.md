@@ -1238,6 +1238,18 @@ appears within a few seconds instead of after a clone).
 
 ---
 
+### Task 6: tool binary cache — DROPPED, not implemented
+
+Measured after the other tasks were built: restoring the three binaries costs
+~90 MB of bucket traffic per pipeline to save ~1.5 s (cold `wget` of
+kubeconform + pluto + vendir was 1.7 s). The cache was removed from the
+implementation — `kubeconform`, `pluto` and `vendir` stay pinned `wget`s in
+their own steps, `.ci/lib/cache.sh` keeps only the schema helpers, and there is
+no `tools/` prefix in the bucket. The steps below are kept for the reasoning and
+the numbers; do not implement them as written.
+
+#### Original steps (superseded)
+
 ### Task 6: tool binary cache
 
 **Files:**
