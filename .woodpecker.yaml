@@ -32,9 +32,31 @@ when:
 #    branch: main
 
 steps:
+  cache-restore:
+    # renovate: datasource=docker depName=rclone/rclone
+    image: rclone/rclone:1.76
+    # Cache misses are normal and rustfs is a single pod: never fail the run
+    # because the cache was unavailable (see .ci/cache-restore.sh).
+    failure: ignore
+    environment:
+      RCLONE_CONFIG_CICACHE_TYPE: s3
+      RCLONE_CONFIG_CICACHE_PROVIDER: Other
+      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local
+      RCLONE_CONFIG_CICACHE_REGION: us-east-1
+      RCLONE_CONFIG_CICACHE_FORCE_PATH_STYLE: "true"
+      # Woodpecker repo secrets (values from the rustfs-ci-cache Secret; the
+      # cache is not security-sensitive but nothing else may reach the API).
+      RCLONE_CONFIG_CICACHE_ACCESS_KEY_ID:
+        from_secret: cache_access_key
+      RCLONE_CONFIG_CICACHE_SECRET_ACCESS_KEY:
+        from_secret: cache_secret_key
+    commands:
+      - sh .ci/cache-restore.sh
+
   prepare:
     # renovate: datasource=docker depName=alpine/k8s
     image: alpine/k8s:1.37.2
+    depends_on: [cache-restore]
     # Single writer for the caches the validating steps read, so neither of them
     # pays for a 734 MB schema clone or ~27 chart downloads, and neither races
     # the other into the same git repositories or tarball paths (see
@@ -46,6 +68,24 @@ steps:
       HELM_CHART_CACHE: .tmp/charts
     commands:
       - sh .ci/prepare-cache.sh
+
+  cache-save:
+    # renovate: datasource=docker depName=rclone/rclone
+    image: rclone/rclone:1.76
+    depends_on: [prepare]
+    failure: ignore
+    environment:
+      RCLONE_CONFIG_CICACHE_TYPE: s3
+      RCLONE_CONFIG_CICACHE_PROVIDER: Other
+      RCLONE_CONFIG_CICACHE_ENDPOINT: http://rustfs.woodpecker.svc.cluster.local
+      RCLONE_CONFIG_CICACHE_REGION: us-east-1
+      RCLONE_CONFIG_CICACHE_FORCE_PATH_STYLE: "true"
+      RCLONE_CONFIG_CICACHE_ACCESS_KEY_ID:
+        from_secret: cache_access_key
+      RCLONE_CONFIG_CICACHE_SECRET_ACCESS_KEY:
+        from_secret: cache_secret_key
+    commands:
+      - sh .ci/cache-save.sh
 
   validate:
     # renovate: datasource=docker depName=alpine/k8s

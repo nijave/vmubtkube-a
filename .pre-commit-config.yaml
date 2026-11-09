@@ -26,3 +26,9 @@ repos:
         # actually changed — mirrors the CI step's path gate. Needs helm + yq.
         files: ^(application\..*\.yaml|\.ci/validate-helm\.sh)$
         pass_filenames: false
+      - id: ci-cache-tests
+        name: CI cache helper tests (no network, no S3)
+        entry: sh .ci/test/cache-test.sh
+        language: system
+        files: ^(\.ci/lib/cache\.sh|\.ci/test/cache-test\.sh)$
+        pass_filenames: false
