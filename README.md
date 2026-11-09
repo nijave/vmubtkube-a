@@ -53,6 +53,27 @@ pre-commit install   # needs kubeconform, pluto, and kustomize-or-kubectl on PAT
 
 Schemas are cached under `.tmp/`, so repeat runs take ~2s.
 
+CI itself caches two things across runs in a dedicated rustfs bucket
+(`ci-cache`) in the cluster, restored and saved by the `cache-restore` /
+`cache-save` steps:
+
+- `charts/<chart>-<version>.tgz` — Helm chart tarballs (no more 23 `index.yaml`
+  round trips per pipeline, ~90s)
+- `schemas/<repo>.git.tar` — git object databases for the kubeconform schema
+  mirrors (the 734 MB checkout is rebuilt locally from the cached
+  sparse-checkout config; the objects are what costs network)
+
+The validation binaries stay plain `wget`s: caching them saved ~1.5s while
+moving ~90 MB per pipeline into the bucket, so it was measured and dropped. The
+secrets the cache steps use are rows in Woodpecker's own database, kept in sync
+with the `rustfs-ci-cache` Secret by `woodpecker/cache-secrets.woodpecker.yaml`
+— rotating the Secret needs no manual step.
+
+The cache is fail-open: both steps run with `failure: ignore`, saves are
+additive, and a miss only costs time. `woodpecker/rustfs.woodpecker.yaml`
+deploys the endpoint; design in
+`docs/superpowers/specs/2026-11-06-ci-cache-rustfs-design.md`.
+
 ## DNS zones and TLS
 
 Two DNS zones, split by audience:

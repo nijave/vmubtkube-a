@@ -148,8 +148,10 @@ spec:
             #    later pods hit a Multi-Attach error and hang.  The first pod of
             #    a workflow schedules freely; the rest co-locate with it.
             #  - SOFT podAffinity on repo-id: prefer to keep other workflows of
-            #    the SAME repo on the same node to reuse warm caches (poetry
-            #    venv, buildkit layers).
+            #    the SAME repo on the same node to reuse the buildkit layer
+            #    cache, which lives on its own PVC. Workspace caches (poetry
+            #    venv, uv cache) do NOT persist between workflows: the workspace
+            #    PVC is per-workflow and deleted afterwards.
             #  - SOFT podAntiAffinity on repo-id: prefer to keep DIFFERENT repos
             #    on different nodes so one repo's build doesn't crowd another's.
             #
