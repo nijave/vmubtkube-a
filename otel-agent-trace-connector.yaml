@@ -145,7 +145,12 @@ data:
       # to Thanos Receive -- the same URL kube-prometheus-stack and
       # prometheus-ext use; the receive router has no auth.
       prometheus_remote_write:
-        endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
+        # Under `http:`: top-level HTTP client settings are deprecated since
+        # collector v0.158, and the alpha feature gate
+        # exporter.prometheusremotewritexporter.removeTopLevelHTTPSettings
+        # rejects them once it is enabled.
+        http:
+          endpoint: http://thanos-receive-router.thanos.svc.cluster.local.:19291/api/v1/receive
         # Resource attrs as labels: without this, claude-code/codex series are
         # indistinguishable in Thanos (service.name) and the coding-agent tag
         # (telemetry.source) never arrives. included: ["*"] is the documented
