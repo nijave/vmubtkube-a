@@ -27,13 +27,17 @@ spec:
   source:
     chart: opentelemetry-collector
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-    targetRevision: 0.178.2
+    targetRevision: 0.178.3
     helm:
       releaseName: otel-collector
       valuesObject:
         mode: deployment
         image:
           repository: docker.io/otel/opentelemetry-collector-contrib
+        # The collector reads /conf/relay.yaml once at startup and does not
+        # watch it, so a config change needs a pod restart. Reloader handles
+        # that (podAnnotations below); the chart checksum stays off so a
+        # change does not restart the pod twice.
         enableConfigChecksumAnnotation: false
 
         presets:
@@ -87,20 +91,18 @@ spec:
             # forwarding to otel-collector.k8s.somemissing.info) tag records with
             # log.source=journald|syslog and put service.name / host.name in log
             # attributes. Promote those to OTel resource attributes so HyperDX
-            # populates ServiceName and ResourceAttributes.
-            transform/promote_host_resource_attrs:
-              error_mode: ignore
-              log_statements:
-                - context: log
-                  conditions:
-                    - attributes["log.source"] == "journald" or attributes["log.source"] == "syslog"
-                  statements:
-                    - set(resource.attributes["service.name"], attributes["service.name"]) where attributes["service.name"] != nil
-                    - set(resource.attributes["host.name"],    attributes["host.name"])    where attributes["host.name"]    != nil
-                    - set(resource.attributes["log.source"],   attributes["log.source"])
-                    - delete_key(attributes, "service.name")
-                    - delete_key(attributes, "host.name")
-                    - delete_key(attributes, "log.source")
+            # populates ServiceName and ResourceAttributes. groupbyattrs moves the
+            # keys onto the resource and splits each batch into one resource per
+            # distinct value; a transform that set resource attributes from log
+            # context wrote one shared resource per batch, so every record took
+            # the last record's service.name (27-80% of journald lines carried
+            # the wrong ServiceName). Records without these keys keep their
+            # original resource.
+            groupbyattrs/host_resource_attrs:
+              keys:
+                - service.name
+                - host.name
+                - log.source
             # Coding-agent telemetry reaches this collector from the
             # otel-agent-trace-connector pod, so the kubernetesAttributes preset
             # (k8s_attributes, keyed on the client connection) stamps every
@@ -212,7 +214,7 @@ spec:
                   if: 'attributes["ident"] != nil'
                   from: attributes["ident"]
                   to: attributes["service.name"]
-                # Tag for transform/promote_host_resource_attrs.
+                # Tag for groupbyattrs/host_resource_attrs.
                 - type: add
                   field: attributes["log.source"]
                   value: syslog
@@ -237,11 +239,11 @@ spec:
             pipelines:
               logs:
                 receivers: [otlp]
-                processors: [memory_limiter, transform/promote_host_resource_attrs, transform/strip_coding_agent_k8s_attrs, batch]
+                processors: [memory_limiter, groupbyattrs/host_resource_attrs, transform/strip_coding_agent_k8s_attrs, batch]
                 exporters: [otlp_grpc]
               logs/syslog:
                 receivers: [udp_log/syslog, tcp_log/syslog]
-                processors: [memory_limiter, transform/promote_host_resource_attrs, batch]
+                processors: [memory_limiter, groupbyattrs/host_resource_attrs, batch]
                 exporters: [otlp_grpc]
               metrics: null
               traces:
@@ -282,6 +284,8 @@ spec:
         podAnnotations:
           # Restart when the TLS secret rotates (cert-manager renews ~every 60d).
           secret.reloader.stakater.com/reload: otel-collector-tls
+          # Restart when the chart-rendered collector config changes.
+          configmap.reloader.stakater.com/reload: otel-collector-opentelemetry-collector
 
         extraVolumes:
           - name: tls

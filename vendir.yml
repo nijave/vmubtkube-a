@@ -19,7 +19,7 @@ directories:
       - path: .
         githubRelease:
           slug: cloudnative-pg/plugin-barman-cloud   # NOT cloudnative-pg-plugin-barman-cloud
-          tag: v0.15.1
+          tag: v0.16.0
           assetNames: ["manifest.yaml"]               # upstream renamed from barman-cloud-plugin-*.yaml
           disableAutoChecksumValidation: true          # release ships no checksum file
 
@@ -50,7 +50,7 @@ directories:
         # chart. Source the bundled CRDs from git at the tag matching chart 2.7.0.
         git:
           url: https://github.com/external-secrets/external-secrets
-          ref: v2.14.0
+          ref: v2.15.0
         newRootPath: deploy/crds
         includePaths:
           - deploy/crds/bundle.yaml
