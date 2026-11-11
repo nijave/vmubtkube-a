@@ -8,7 +8,9 @@
 #
 # Step DAG (depends_on): prepare builds the two caches (.tmp/schemas,
 # .tmp/charts) in the workspace; validate, validate-helm, and
-# validate-prom-selectors wait for it and then read them. validate-pluto is
+# validate-prom-selectors wait for it and then read them; validate-prom-rules
+# waits for validate-prom-selectors and reads the object list it writes
+# (.tmp/prom-objects.json). validate-pluto is
 # independent (it shells out to kubectl only, no schemas). vendir-sync waits for
 # the steps that read vendored/ (it rewrites those files in the shared
 # workspace); mirror-images and vendir-push both wait for vendir-sync
@@ -150,8 +152,34 @@ steps:
     environment:
       # renders every Helm Application, like validate-helm
       HELM_CHART_CACHE: .tmp/charts
+      # full object list (Helm renders included) for validate-prom-rules
+      PROM_OBJECTS_OUT: .tmp/prom-objects.json
     commands:
       - sh .ci/validate-prom-selectors.sh
+
+  validate-prom-rules:
+    # renovate: datasource=docker depName=alpine/k8s
+    image: alpine/k8s:1.37.2
+    # Reads the object list validate-prom-selectors wrote, so Helm-rendered
+    # rules (kube-prometheus-stack) are checked without rendering twice.
+    depends_on: [validate-prom-selectors]
+    environment:
+      # Keep at the Prometheus version the cluster runs (the
+      # kube-prometheus-stack chart default) so promtool parses PromQL the same.
+      # renovate: datasource=github-releases depName=prometheus/prometheus
+      PROMETHEUS_VERSION: v3.16.0
+      PROM_OBJECTS: .tmp/prom-objects.json
+    commands:
+      - PROM_TGZ="prometheus-$${PROMETHEUS_VERSION#v}.linux-amd64.tar.gz"
+      - PROM_URL="https://github.com/prometheus/prometheus/releases/download/$PROMETHEUS_VERSION"
+      - wget -q -t 3 -T 30 -O "/tmp/$${PROM_TGZ}" "$${PROM_URL}/$${PROM_TGZ}"
+      - wget -q -t 3 -T 30 -O /tmp/sha256sums.txt "$${PROM_URL}/sha256sums.txt"
+      # grep fails the step when the tarball has no checksum line
+      - grep -F "  $${PROM_TGZ}" /tmp/sha256sums.txt > /tmp/prom.sha256
+      - (cd /tmp && sha256sum -c prom.sha256)
+      - tar xzf "/tmp/$${PROM_TGZ}" -C /tmp
+      - mv /tmp/prometheus-*.linux-amd64/promtool /usr/local/bin/
+      - sh .ci/validate-prom-rules.sh
 
   vendir-sync:
     # renovate: datasource=docker depName=alpine/k8s

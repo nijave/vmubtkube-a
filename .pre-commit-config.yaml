@@ -1,8 +1,10 @@
 # Runs the same manifest validation as the CI validate steps (.ci/validate*.sh).
 # Setup:   pre-commit install
 # Needs:   kubeconform (https://github.com/yannh/kubeconform),
-#          pluto (https://github.com/FairwindsOps/pluto), and
-#          kustomize or kubectl on PATH.
+#          pluto (https://github.com/FairwindsOps/pluto),
+#          promtool (from the Prometheus release tarball, same version as the
+#          CI validate-prom-rules step: https://github.com/prometheus/prometheus/releases),
+#          and kustomize or kubectl on PATH.
 repos:
   - repo: local
     hooks:
@@ -25,6 +27,12 @@ repos:
         # Chart downloads are slow; only fire when a Helm app (or the script)
         # actually changed — mirrors the CI step's path gate. Needs helm + yq.
         files: ^(application\..*\.yaml|\.ci/validate-helm\.sh)$
+        pass_filenames: false
+      - id: promtool-rules
+        name: promtool check + rule unit tests (CI validate-prom-rules, minus Helm renders)
+        entry: sh .ci/validate-prom-rules.sh
+        language: system
+        types_or: [yaml]
         pass_filenames: false
       - id: ci-cache-tests
         name: CI cache helper tests (no network, no S3)

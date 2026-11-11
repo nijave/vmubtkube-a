@@ -50,14 +50,17 @@ RENDER_TMPDIR="$WORKDIR/render"
 mkdir -p "$RENDER_TMPDIR"
 NDJSON="$WORKDIR/objects.ndjson"
 
-# collect_stream <yaml-file> <default-namespace>
+# collect_stream <yaml-file> <default-namespace> <source-label>
 #   Parse every document in the file into one JSON object per line and append
 #   to $NDJSON. Objects without metadata.namespace inherit <default-namespace>
 #   when it's non-empty (that's the destination namespace ArgoCD deploys into).
+#   ._ci_source records <source-label> for error messages in consumers of
+#   PROM_OBJECTS_OUT; the matcher ignores it.
 collect_stream() {
   yq -o=json '.' "$1" \
-    | jq -c --arg ns "$2" '
+    | jq -c --arg ns "$2" --arg src "$3" '
         select(type == "object")
+        | ._ci_source = $src
         | if $ns != "" and .metadata.namespace == null
           then .metadata.namespace = $ns
           else . end' >> "$NDJSON"
@@ -88,7 +91,7 @@ while read -r _ app <&3; do
   render_helm_app "$app" > "$WORKDIR/rendered.yaml" || rc=$?
   if [ "$rc" -eq 0 ]; then
     echo "--- helm app $name"
-    collect_stream "$WORKDIR/rendered.yaml" "$destns"
+    collect_stream "$WORKDIR/rendered.yaml" "$destns" "helm app $name"
   elif [ "$rc" -ne 1 ]; then
     echo "ERROR: helm render failed for Application $name" >&2
     exit "$rc"
@@ -106,7 +109,7 @@ for kz in $(git ls-files '*/kustomization.yaml' | grep -v '/base/'); do
   echo "--- kustomize $dir"
   default_ns=$(ns_for_path "$dir")
   kustomize_build "$dir" > "$WORKDIR/kustomized.yaml"
-  collect_stream "$WORKDIR/kustomized.yaml" "$default_ns"
+  collect_stream "$WORKDIR/kustomized.yaml" "$default_ns" "kustomize $dir"
 done
 
 # --- 3. plain vendored bases (same loop as .ci/validate.sh) ------------------
@@ -116,7 +119,7 @@ for base in vendored/*/base; do
   [ -f "$base/Chart.yaml" ] && continue   # Helm chart base; rendered above
   echo "--- vendored base $base"
   for f in "$base"/*.yaml; do
-    collect_stream "$f" ""
+    collect_stream "$f" "" "$f"
   done
 done
 
@@ -130,11 +133,17 @@ echo "--- hand-written manifests"
 for f in $(git ls-files '*.yaml' \
   | grep -vE '^(vendored/|fluentbit/|homelab-pki/|docs/|\.|renovate\.json|vendir)' \
   | grep -v 'kustomization\.yaml'); do
-  collect_stream "$f" ""
+  collect_stream "$f" "" "$f"
 done
 
 ALL_JSON="$WORKDIR/all.json"
 jq -s '.' < "$NDJSON" > "$ALL_JSON"
+# Hand the full object list (Helm renders included) to .ci/validate-prom-rules.sh
+# so it doesn't render every Application a second time.
+if [ -n "${PROM_OBJECTS_OUT:-}" ]; then
+  mkdir -p "$(dirname "$PROM_OBJECTS_OUT")"
+  cp "$ALL_JSON" "$PROM_OBJECTS_OUT"
+fi
 
 # --- no-namespace check -------------------------------------------------------
 # monitoring.coreos.com resources are namespaced; after the defaulting above,
