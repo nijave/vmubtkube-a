@@ -99,7 +99,7 @@ spec:
       containers:
         - name: rustfs
           # renovate: datasource=docker depName=rustfs/rustfs
-          image: rustfs/rustfs:1.0.4
+          image: rustfs/rustfs:1.0.5
           args:
             - /data
           env:
