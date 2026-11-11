@@ -229,7 +229,7 @@ traces per roll when agents are busy.
 
 ## Delta metrics across tier-2 changes
 
-Each tier-2 pod adds `collector_pod=<pod name>` to every series it
+Each tier-2 pod adds `collector_replica=<pod name>` to every series it
 remote-writes (`external_labels` on `prometheus_remote_write`, pod name from
 the downward API). `delta_to_cumulative` keeps a running total per series
 *per pod*, so the label gives each pod's totals their own series, and every
@@ -237,11 +237,11 @@ series stays monotonic. **Always sum the label away** in queries over these
 metrics:
 
 ```promql
-sum without (collector_pod) (increase(claude_code_token_usage_tokens_total[1h]))
+sum without (collector_replica) (increase(claude_code_token_usage_tokens_total[1h]))
 sum by (model) (rate(claude_code_cost_usage_USD_total[5m]))
 ```
 
-For a gauge, use `max without (collector_pod)` instead of `sum`: after a
+For a gauge, use `max without (collector_replica)` instead of `sum`: after a
 stream moves, the old pod's last value stays visible for the 5m lookback.
 
 Without the label, a stream that changes pod continues the *same* series
@@ -252,7 +252,7 @@ corrupts `increase()`. Measured locally (8 delta streams, one point per 2s;
 true total is the sum of the deltas sent; `increase()` over the whole run
 from a real Prometheus 3.16 fed by the same remote write):
 
-| Scenario | Without label | With `collector_pod` |
+| Scenario | Without label | With `collector_replica` |
 | --- | --- | --- |
 | stream moves to a fresh pod (k8s-order tier-2 restart) | 1259.8 / 1260 | 1223.1 / 1224 |
 | stream moves away and back to a pod with state | 1176.2 / 1188 (-1.0%; one earlier run over-counted one stream by 9 of 31) | 1149.5 / 1152 |
@@ -323,7 +323,7 @@ Run these after the cutover and after any tier-2 roll.
    `otelcol_exporter_prometheusremotewrite_failed_translations{job="otel-agent-trace-connector"}`
    stays flat and `AgentTraceConnectorMetricsTranslationFailures` stays
    silent; agent series (for example `claude_code_token_usage_tokens_total`)
-   keep arriving in Thanos, each with a `collector_pod` label naming a
+   keep arriving in Thanos, each with a `collector_replica` label naming a
    current tier-2 pod.
 
 5. **No gateway export failures.** These stay flat and the

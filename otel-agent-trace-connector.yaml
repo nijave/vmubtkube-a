@@ -119,7 +119,7 @@ data:
       # every point of a series must reach the same pod -- the gateway's
       # load_balancing/metrics exporter routes on streamID for exactly that.
       # When the replica set changes a stream can still move; each pod then
-      # writes it under its own collector_pod label (exporter below), so
+      # writes it under its own collector_replica label (exporter below), so
       # every series a pod writes stays monotonic.
       delta_to_cumulative:
 
@@ -151,12 +151,12 @@ data:
         # that moves to the other pod and back within max_stale resumes the
         # old pod's stale total in the *same* series, and increase()
         # over-counts by that total. Queries aggregate it away:
-        # sum without (collector_pod) (increase(...)). external_labels rather
+        # sum without (collector_replica) (increase(...)). external_labels rather
         # than a resource attribute keeps the pod name off the OTLP data and
-        # covers every series, target_info included. collector_pod is not a
+        # covers every series, target_info included. collector_replica is not a
         # label any agent sends.
         external_labels:
-          collector_pod: ${env:POD_NAME}
+          collector_replica: ${env:COLLECTOR_REPLICA}
 
     service:
       extensions: [health_check]
@@ -245,8 +245,8 @@ spec:
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           env:
-            # collector_pod label on remote-written series (see config).
-            - name: POD_NAME
+            # collector_replica label on remote-written series (see config).
+            - name: COLLECTOR_REPLICA
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
