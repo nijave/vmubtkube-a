@@ -1,0 +1,128 @@
+# Unit tests for otel-agent-trace-connector-alerts.yaml.
+# Run: sh .ci/validate-prom-rules.sh (rule_files paths are
+# <namespace>/<metadata.name>.yaml of the extracted PrometheusRule).
+rule_files: [monitoring/otel-agent-trace-connector-alerts.yaml]
+evaluation_interval: 1m
+tests:
+  # Translation failures: the job-scoped counter rising fires after `for: 5m`;
+  # the same metric from another job does not.
+  - name: translation failures fire
+    interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_prometheusremotewrite_failed_translations{job="otel-agent-trace-connector",pod="c-1",exporter="prometheusremotewrite"}'
+        values: '0+6x30'
+      - series: 'otelcol_exporter_prometheusremotewrite_failed_translations{job="some-other-collector",pod="o-1",exporter="prometheusremotewrite"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: AgentTraceConnectorMetricsTranslationFailures
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AgentTraceConnectorMetricsTranslationFailures
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Coding-agent trace connector is hitting 100m metric translation errors/s before remote write."
+              description: "The prometheusremotewrite exporter could not translate OTLP metrics into Prometheus series and dropped them before sending, so send_failed_metric_points and AgentTraceConnectorMetricsExportFailures stay at zero. The usual cause is delta temporality: Claude Code exports delta sums and histograms by default, and remote write accepts only cumulative data. The metrics/agents pipeline converts them with delta_to_cumulative, so check first that the processor is still in that pipeline (otel-agent-trace-connector.yaml) and the pod logs for which metric failed to translate. As a client-side workaround, set OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=cumulative."
+
+  - name: translation failures quiet
+    interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_prometheusremotewrite_failed_translations{job="otel-agent-trace-connector",pod="c-1",exporter="prometheusremotewrite"}'
+        values: '0x30'
+      - series: 'otelcol_exporter_prometheusremotewrite_failed_translations{job="some-other-collector",pod="o-1",exporter="prometheusremotewrite"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentTraceConnectorMetricsTranslationFailures
+        exp_alerts: []
+
+  # Export drops: spans failing on otlp_grpc fire per exporter; metric-point
+  # failures fire the separate remote-write alert.
+  - name: export drops fire
+    interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans{job="otel-agent-trace-connector",pod="c-1",exporter="otlp_grpc"}'
+        values: '0+3x30'
+      - series: 'otelcol_exporter_send_failed_metric_points{job="otel-agent-trace-connector",pod="c-1",exporter="prometheusremotewrite"}'
+        values: '0+12x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentTraceConnectorExportDrops
+        exp_alerts:
+          - exp_labels: {severity: critical, exporter: otlp_grpc}
+            exp_annotations:
+              summary: "Coding-agent trace connector dropped 50m spans/s to otel-collector."
+              description: "The otlp_grpc exporter is failing to send traces downstream. exporterhelper counts these as permanent failures and discards the batch, so every minute this stays up is agent telemetry gone for good. Known cause: batch payloads exceeding the 4 MiB gRPC message limit (ResourceExhausted). Check pod logs for 'Dropping data': kubectl -n monitoring logs deploy/otel-agent-trace-connector | grep -i resourceexhausted. Batch-size fixes live in the vmubtkube-a repo, otel-agent-trace-connector.yaml."
+      - eval_time: 20m
+        alertname: AgentTraceConnectorMetricsExportFailures
+        exp_alerts:
+          - exp_labels: {severity: warning, exporter: prometheusremotewrite}
+            exp_annotations:
+              summary: "Coding-agent trace connector is failing to send metrics to Thanos Receive."
+              description: "The prometheus_remote_write exporter is failing to deliver metric points to thanos-receive-router. Retries absorb transient errors, but once the sending queue fills the points are dropped for good, and non-retryable 4xx rejections drop immediately. Check the pod logs for the exporter error and that thanos-receive-router.thanos is reachable and its ingestors healthy."
+
+  - name: export drops quiet
+    interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans{job="otel-agent-trace-connector",pod="c-1",exporter="otlp_grpc"}'
+        values: '0x30'
+      - series: 'otelcol_exporter_send_failed_metric_points{job="otel-agent-trace-connector",pod="c-1",exporter="prometheusremotewrite"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentTraceConnectorExportDrops
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AgentTraceConnectorMetricsExportFailures
+        exp_alerts: []
+
+  # Ingest rejection: the expr adds six per-signal sums, and `+` between
+  # vectors drops to empty when any operand is empty, so every counter is
+  # present here (otelcol reports them at 0 once data flows).
+  - name: ingest rejection fires
+    interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_refused_spans{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_refused_log_records{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0+6x30'
+      - series: 'otelcol_receiver_refused_metric_points{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_spans{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_log_records{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_metric_points{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: AgentTraceConnectorIngestRejections
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: AgentTraceConnectorIngestRejections
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Coding-agent trace connector is refusing or failing inbound telemetry."
+              description: "The otlp receiver rejected spans, log records, or metric points instead of accepting them -- refused means the client's request bounced (TLS, auth, size), failed means it was accepted then errored inside the pipeline. Agents usually surface this as their own OTLP exporter errors, but headless runs may not. Compare otelcol_receiver_accepted_* against otelcol_receiver_refused_* / _failed_* for the affected signal."
+
+  - name: ingest rejection quiet
+    interval: 1m
+    input_series:
+      - series: 'otelcol_receiver_refused_spans{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_refused_log_records{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_refused_metric_points{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_spans{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_log_records{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+      - series: 'otelcol_receiver_failed_metric_points{job="otel-agent-trace-connector",pod="c-1",receiver="otlp"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentTraceConnectorIngestRejections
+        exp_alerts: []
