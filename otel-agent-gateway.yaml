@@ -250,7 +250,7 @@ spec:
       containers:
         - name: collector
           # renovate: datasource=docker depName=otel/opentelemetry-collector-contrib
-          image: docker.io/otel/opentelemetry-collector-contrib:0.163.2
+          image: docker.io/otel/opentelemetry-collector-contrib:0.165.0
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
           ports:
