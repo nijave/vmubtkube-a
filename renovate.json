@@ -60,6 +60,17 @@
       ],
       "depNameTemplate": "immich-app/immich",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "thanos app.kubernetes.io/version labels: the hand-written manifests under thanos/ carry the release in labels, which no manager bumps — they drifted to v0.41.0 while the images moved on to v0.42.5. Each label is extracted as a thanos/thanos dep with the same packageName/registryUrl as the image annotations in the same files, so Renovate bumps label and image together in one branch. Manager scope is thanos/ only: nothing else in the repo hand-maintains a version label.",
+      "managerFilePatterns": ["/^thanos/.+\\.yaml$/"],
+      "matchStrings": [
+        "app\\.kubernetes\\.io/version:\\s*[\"']?(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "thanos/thanos",
+      "datasourceTemplate": "docker",
+      "registryUrlTemplate": "https://quay.io"
     }
   ],
   "packageRules": [
