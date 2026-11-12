@@ -2,7 +2,8 @@
 
 `otel-agent-trace-connector.yaml` deploys
 [nijave/otel-agent-trace-connector](https://github.com/nijave/otel-agent-trace-connector),
-a custom OCB-built Collector distribution carrying the `coding_agent` connector.
+a custom OCB-built Collector distribution carrying the `coding_agent` connector,
+behind a gateway in `otel-agent-gateway.yaml` (see [HA topology](#ha-topology)).
 It gives Codex and Claude Code a **single comparable trace shape**:
 
 ```text
@@ -30,16 +31,65 @@ alongside the canonical traces.
 
 ```text
 Codex / Claude Code
-  └─ agents-otel.k8s.somemissing.info:4317 (gRPC) / :4318 (HTTP)   [this service]
-       ├─ logs + traces
-       │    └─ otel-collector.k8s.somemissing.info:4317            [monitoring]
-       │         └─ hyperdx-otel-collector.hyperdx:4317 → ClickHouse
-       └─ metrics
-            └─ thanos-receive-router.thanos.svc:19291 (remote write) → Thanos
+  └─ agents-otel.k8s.somemissing.info:4317 (gRPC) / :4318 (HTTP)   [Service otel-agent-trace-connector]
+       └─ otel-agent-gateway × 2 (tier 1, stock contrib, TLS ends here)
+            └─ otel-agent-trace-connector-headless:4317 (consistent hash)
+                 └─ otel-agent-trace-connector × 2 (tier 2, coding_agent connector)
+                      ├─ logs + traces
+                      │    └─ otel-collector.k8s.somemissing.info:4317   [monitoring]
+                      │         └─ hyperdx-otel-collector.hyperdx:4317 → ClickHouse
+                      └─ metrics
+                           └─ thanos-receive-router.thanos.svc:19291 (remote write) → Thanos
 ```
 
 The second hop is the same collector `projectcontour`'s `otel-collector`
 forwards to.
+
+## HA topology
+
+The connector holds each Codex turn in memory until the turn closes, so every
+record of a turn must reach the same process. A plain Service in front of two
+connector pods would split turns. The ingest has two tiers instead, after the
+upstream [multi-instance HA analysis][ha] (option B) and its `examples/k8s-ha`:
+
+- **Tier 1, `otel-agent-gateway.yaml`**: stock
+  `otel/opentelemetry-collector-contrib`, 2 replicas, stateless. It owns the
+  agent-facing Service, hostname, and certificate. A `routing` connector and
+  `load_balancing` exporters hash each record onto one tier-2 pod:
+
+  | Traffic | Hash key | Why |
+  | --- | --- | --- |
+  | Codex/Cursor logs (`conversation.id`, `cursor.conversation.id`) | the conversation | the turn state lives on one pod |
+  | all other logs (Claude Code included) and all traces | trace ID | spreads load, keeps a trace whole |
+  | metrics | stream identity (`streamID`) | `delta_to_cumulative` keeps a running total per series |
+
+  The k8s resolver watches the EndpointSlices of the headless Service (the
+  Role in the same file grants that) and drops pods that are not ready.
+
+- **Tier 2, `otel-agent-trace-connector.yaml`**: the connector image with the
+  same connector, batch, and export settings as the single replica had, 2
+  replicas behind `otel-agent-trace-connector-headless`. It accepts plain
+  gRPC from the gateway only; a NetworkPolicy closes it to everything else
+  (Prometheus can still scrape `:8888`).
+
+Claude Code does not need its trace and its `api_request`/`api_error` logs on
+the same pod. Both Claude edges are stateless: the logs edge takes the chat
+span's trace ID and parent from the log record, and the traces edge needs
+nothing from the logs. `load_balancing` hashes a log's trace ID as its hex
+string but a span's as raw bytes, so the two land on different pods about
+half the time, and that is fine here.
+
+Both tiers have a PodDisruptionBudget (`maxUnavailable: 1`), prefer separate
+nodes, and roll on config change through Reloader.
+
+Gateway resilience: each tier-2 pod gets 30s of retries; after that the batch
+goes back to the exporter-level queue (in memory, 64 MiB per exporter), which
+retries for up to 5 minutes and re-hashes against the current ring each time.
+Data for a pod that left the ring thus moves to a live one. A graceful gateway
+stop drains the queue (`terminationGracePeriodSeconds: 60`); a gateway crash
+loses whatever the queue held.
+
+[ha]: https://github.com/nijave/otel-agent-trace-connector/blob/main/docs/multi-instance-ha.md
 
 ## Pointing an agent at it
 
@@ -85,9 +135,10 @@ Claude Code telemetry; a mismatch gives each request two chat spans or none.
 Agent metrics are remote-written to Thanos. Claude Code exports delta
 temporality, which the remote-write exporter drops, so the metrics pipeline
 runs `delta_to_cumulative` first; the client needs no temporality setting. The
-processor keeps per-series totals in memory, which is safe with the single
-replica; a restart resets them (Prometheus `rate`/`increase` handle that as a
-counter reset).
+processor keeps per-series totals in memory; the gateway's `streamID` route
+sends every point of a series to the same tier-2 pod. See
+[Delta metrics across tier-2 changes](#delta-metrics-across-tier-2-changes)
+for what happens when a series changes pod.
 
 Codex reads **user-level** `~/.codex/config.toml` only — it ignores
 project-local `[otel]` blocks (it warns and drops an `otel` key found in a
@@ -131,17 +182,158 @@ If you add another hop between here and HyperDX, it needs the same exemption.
 
 ## Operational limits
 
-- **Single replica, `strategy: Recreate`** — deliberate. Codex turn correlation
-  is in-memory; two replicas would split one turn's log records into two
-  incomplete traces. The state does not survive a restart, so a roll or a crash
-  drops in-flight turns. Completed traces survive both.
-- `codex.max_active_turns: 500` bounds that state. Turns close on a quiet
+- Codex turn state lives in memory on one tier-2 pod and does not survive
+  that pod. See [What a restart loses](#what-a-restart-loses).
+- `codex.max_active_turns: 500` bounds that state per pod. Turns close on a quiet
   `reorder_window` (30s) after `response.completed`, or at `turn_timeout`
   (10m). The unused Cursor edge gets the same bounds in its `cursor:` block.
 - The connector is at **development stability** upstream; span names and
   attributes may change between releases.
 - Renovate tracks the pinned image tag. Tagging the upstream repo cuts each
   release and publishes `ghcr.io/nijave/otel-agent-trace-connector`.
+
+## What a restart loses
+
+Measured locally before the cutover with these configs (2 gateways, 2
+connectors; a static resolver stood in for the k8s one, and gateway restarts
+stood in for EndpointSlice updates). The replay sent 12 Codex turns, 16
+Claude Code traces with their `api_request` logs, and 8 delta metric streams
+through both gateways over 40s, then restarted one pod 15s in. A tier-2
+"restart" followed the k8s order: the pod leaves the endpoint list, gets
+SIGTERM, and a replacement with a new address joins.
+
+- **Gateway (tier 1)**: nothing lost. Agents retried the refused connections
+  (7 retries in the run) and every turn and trace arrived whole. A graceful
+  stop drains the gateway queue; only a crash loses what the queue held.
+- **Connector (tier 2)**: the pod flushes each in-flight Codex/Cursor turn
+  at once as finish reason `shutdown` (self-metric
+  `otelcol_coding_agent_turns_emitted{finish_reason="shutdown"}`), a root
+  with only what it had seen. The rest of those turns then lands on another
+  pod and becomes a second trace with a different trace ID. If the
+  replacement pod joins the ring while the turn is still active, the turn
+  can split a third time. In the run, 10 of 12 active turns hashed to the
+  restarted pod: 4 became two traces and 6 became three. The raw Codex logs
+  all arrived (64 of 64 per turn), so a turn can be rebuilt by replaying its
+  raw logs through one connector. Turns on the other pod that the ring
+  change moves split the same way. Completed turns are not affected.
+- **Claude Code and other stateless traffic**: unaffected in either case.
+  In a Claude-only replay of 48 traces across the same tier-2 restart, every
+  `api_request` log produced exactly one chat span with the log's trace and
+  parent, with no `llm_request` spans and no duplicates.
+- **Delta metrics**: see the next section.
+
+A tier-2 roll (config change, image bump, node drain) costs about
+what a restart of the old single replica cost, twice: once per pod, plus the
+remap when each replacement joins. Expect a few `shutdown` turns and split
+traces per roll when agents are busy.
+
+## Delta metrics across tier-2 changes
+
+Each tier-2 pod adds `collector_replica=<pod name>` to every series it
+remote-writes (`external_labels` on `prometheus_remote_write`, pod name from
+the downward API). `delta_to_cumulative` keeps a running total per series
+*per pod*, so the label gives each pod's totals their own series, and every
+series stays monotonic. **Always sum the label away** in queries over these
+metrics:
+
+```promql
+sum without (collector_replica) (increase(claude_code_token_usage_tokens_total[1h]))
+sum by (model) (rate(claude_code_cost_usage_USD_total[5m]))
+```
+
+For a gauge, use `max without (collector_replica)` instead of `sum`: after a
+stream moves, the old pod's last value stays visible for the 5m lookback.
+
+Without the label, a stream that changes pod continues the *same* series
+from a different total. A move to a fresh pod reads as a counter reset and
+counts right, but a stream that returns within `max_stale` (5m) to a pod
+that still holds its old total, or that two pods write at the same time,
+corrupts `increase()`. Measured locally (8 delta streams, one point per 2s;
+true total is the sum of the deltas sent; `increase()` over the whole run
+from a real Prometheus 3.16 fed by the same remote write):
+
+| Scenario | Without label | With `collector_replica` |
+| --- | --- | --- |
+| stream moves to a fresh pod (k8s-order tier-2 restart) | 1259.8 / 1260 | 1223.1 / 1224 |
+| stream moves away and back to a pod with state | 1176.2 / 1188 (-1.0%; one earlier run over-counted one stream by 9 of 31) | 1149.5 / 1152 |
+| two gateways send one stream to two pods | 498.9 / 720 (-31%) | 720.0 / 720 |
+
+Without the label the error on a return has either sign: the step from the
+other pod's last value to the old pod's resumed total counts as a reset
+(over-count by the old total) or as a too-small increase (under-count). With
+the label the remaining gap is `increase()` extrapolation at the window
+edges, under 0.25% in these runs. A brand-new series does not lose its
+first delta in practice: its first value is one interval's delta, and
+`increase()` extrapolates a counter back to zero over about one interval.
+
+A pod restart also starts new series, because the pod name changes. Old
+series simply stop.
+
+## Post-deploy checks
+
+Run these after the cutover and after any tier-2 roll.
+
+1. **Load spreads across both tier-2 pods.** Both pods accept data and the
+   gateways see 2 backends:
+
+   ```promql
+   sum by (pod) (rate(otelcol_receiver_accepted_log_records{job="otel-agent-trace-connector"}[15m]))
+   min by (pod) (otelcol_loadbalancer_num_backends{job="otel-agent-gateway"})
+   ```
+
+2. **One canonical trace per Codex turn.** Compare canonical roots against
+   `codex.user_prompt` events per conversation. A few mismatches at the
+   window edges are normal (the pre-cutover baseline had 3 in 3 days); more
+   than that outside a roll means turns are splitting.
+
+   ```sql
+   SELECT conv, roots, prompts FROM (
+     SELECT SpanAttributes['gen_ai.conversation.id'] AS conv, count() AS roots
+     FROM otel.otel_traces
+     WHERE SpanAttributes['gen_ai.operation.name'] = 'invoke_agent'
+       AND SpanAttributes['coding_agent.client.name'] = 'codex'
+       AND SpanAttributes['coding_agent.source'] = 'normalized'
+       AND Timestamp > now() - INTERVAL 1 DAY GROUP BY conv) r
+   LEFT JOIN (
+     SELECT LogAttributes['conversation.id'] AS conv, count() AS prompts
+     FROM otel.otel_logs
+     WHERE LogAttributes['event.name'] = 'codex.user_prompt'
+       AND TimestampTime > now() - INTERVAL 1 DAY GROUP BY conv) p USING conv
+   WHERE roots != prompts
+   ```
+
+   `otelcol_coding_agent_turns_emitted{finish_reason="shutdown"}` should
+   only move during a tier-2 roll.
+
+3. **Claude chat spans join their trace.** The chat span and the rest of
+   its trace often come from different tier-2 pods; expect 0 orphans:
+
+   ```sql
+   SELECT count() AS chat_spans,
+          countIf((TraceId, ParentSpanId) NOT IN (
+            SELECT TraceId, SpanId FROM otel.otel_traces
+            WHERE Timestamp > now() - INTERVAL 26 HOUR)) AS orphans
+   FROM otel.otel_traces
+   WHERE SpanName LIKE 'chat %'
+     AND SpanAttributes['coding_agent.client.name'] = 'claude_code'
+     AND Timestamp > now() - INTERVAL 24 HOUR
+   ```
+
+4. **No metric translation failures.**
+   `otelcol_exporter_prometheusremotewrite_failed_translations{job="otel-agent-trace-connector"}`
+   stays flat and `AgentTraceConnectorMetricsTranslationFailures` stays
+   silent; agent series (for example `claude_code_token_usage_tokens_total`)
+   keep arriving in Thanos, each with a `collector_replica` label naming a
+   current tier-2 pod.
+
+5. **No gateway export failures.** These stay flat and the
+   `otel-agent-gateway` alert group stays silent:
+
+   ```promql
+   sum by (exporter) (rate(otelcol_exporter_send_failed_log_records{job="otel-agent-gateway"}[15m]))
+   sum by (exporter) (rate(otelcol_exporter_send_failed_spans{job="otel-agent-gateway"}[15m]))
+   sum by (endpoint) (rate(otelcol_loadbalancer_backend_outcome{job="otel-agent-gateway", success="false"}[15m]))
+   ```
 
 ## Dashboards
 

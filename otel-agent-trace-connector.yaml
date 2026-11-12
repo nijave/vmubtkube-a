@@ -11,23 +11,13 @@
 #   ├── chat <model>
 #   └── execute_tool <tool>
 #
-# Agents point at agents-otel.k8s.somemissing.info; raw vendor telemetry and
-# the canonical traces are both forwarded to otel-collector.k8s.somemissing.info
-# -- the same collector projectcontour's otel-collector forwards to.
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: otel-agent-trace-connector
-  namespace: monitoring
-spec:
-  secretName: otel-agent-trace-connector-tls
-  commonName: &cn agents-otel.k8s.somemissing.info
-  dnsNames:
-    - *cn
-  issuerRef:
-    kind: ClusterIssuer
-    name: cert-manager-webhook-dnsimple-production
----
+# This is tier 2 of a two-tier setup. Agents point at
+# agents-otel.k8s.somemissing.info, which is the tier-1 gateway
+# (otel-agent-gateway.yaml); the gateway hashes each conversation, trace, and
+# metric stream onto one of the replicas below through the headless Service.
+# Raw vendor telemetry and the canonical traces are both forwarded to
+# otel-collector.k8s.somemissing.info -- the same collector projectcontour's
+# otel-collector forwards to.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -40,23 +30,19 @@ data:
         endpoint: 0.0.0.0:13133
 
     receivers:
+      # Only the tier-1 gateway sends here, over plain gRPC inside the
+      # cluster (TLS for agents ends at the gateway; the NetworkPolicy below
+      # admits nothing else).
       otlp:
         protocols:
           grpc:
             endpoint: 0.0.0.0:4317
             # 32 MiB (collector v0.159 renamed the byte-based
-            # max_recv_msg_size). Ceiling for bursty agent deliveries; sized
-            # together with the pod memory limit below, since an inbound
-            # message is decompressed in full before the pipeline can gate it.
+            # max_recv_msg_size). Ceiling for bursty agent deliveries, which
+            # the gateway forwards unmerged; sized together with the pod
+            # memory limit below, since an inbound message is decompressed in
+            # full before the pipeline can gate it.
             max_recv_msg_size_mib: 32
-            tls:
-              cert_file: /tls/tls.crt
-              key_file: /tls/tls.key
-          http:
-            endpoint: 0.0.0.0:4318
-            tls:
-              cert_file: /tls/tls.crt
-              key_file: /tls/tls.key
 
     connectors:
       # Two instances of the same component: `coding_agent` sits on the logs
@@ -130,9 +116,11 @@ data:
       # prometheus_remote_write drops delta sums and histograms (only
       # target_info used to reach Thanos). This converts them to cumulative
       # before export. It keeps accumulation state in memory per series, so
-      # every point of a series must reach the same pod -- true with the
-      # single replica below; a restart resets the running totals, which
-      # Prometheus counter functions treat as a counter reset.
+      # every point of a series must reach the same pod -- the gateway's
+      # load_balancing/metrics exporter routes on streamID for exactly that.
+      # When the replica set changes a stream can still move; each pod then
+      # writes it under its own collector_replica label (exporter below), so
+      # every series a pod writes stays monotonic.
       delta_to_cumulative:
 
     exporters:
@@ -158,6 +146,17 @@ data:
         # enabled: true and copies every resource attribute the same way.
         resource_constant_labels:
           included: ["*"]
+        # Each replica writes its own series. delta_to_cumulative keeps a
+        # running total per series and pod; without this label, a series
+        # that moves to the other pod and back within max_stale resumes the
+        # old pod's stale total in the *same* series, and increase()
+        # over-counts by that total. Queries aggregate it away:
+        # sum without (collector_replica) (increase(...)). external_labels rather
+        # than a resource attribute keeps the pod name off the OTLP data and
+        # covers every series, target_info included. collector_replica is not a
+        # label any agent sends.
+        external_labels:
+          collector_replica: ${env:COLLECTOR_REPLICA}
 
     service:
       extensions: [health_check]
@@ -204,17 +203,22 @@ metadata:
   name: otel-agent-trace-connector
   namespace: monitoring
   annotations:
-    # Roll on config edits and when cert-manager renews the cert (~every 60d).
+    # Roll on config edits.
     reloader.stakater.com/auto: "true"
 spec:
-  # Single replica, and Recreate rather than RollingUpdate. The Codex side of
-  # the connector correlates a turn from many log records held in memory; two
-  # pods would split one turn's events across two incomplete traces, and the
-  # state does not survive a restart either way. A dropped turn during a roll
-  # is the accepted cost -- see the upstream design doc's operational limits.
-  replicas: 1
+  # Two replicas behind the gateway's consistent hash. The Codex/Cursor side
+  # still holds each turn in memory, so a pod that stops flushes its active
+  # turns with finish reason `shutdown`, and every change to the replica set
+  # (a pod leaving or a new pod IP joining) moves part of the hash ring, which
+  # can split a turn that spans the change. One pod at a time, no surge:
+  # each roll moves the ring as few times as possible while the other pod
+  # keeps serving. See docs/coding-agent-traces.md for what a restart loses.
+  replicas: 2
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: otel-agent-trace-connector
@@ -222,19 +226,33 @@ spec:
     metadata:
       labels:
         app: otel-agent-trace-connector
+        # Shared by both tiers; the PodMonitor selects on it.
+        app.kubernetes.io/part-of: otel-agent-trace-connector
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: otel-agent-trace-connector
       containers:
         - name: collector
           # renovate: datasource=docker depName=ghcr.io/nijave/otel-agent-trace-connector
           image: ghcr.io/nijave/otel-agent-trace-connector:v0.9.0-beta.1
           imagePullPolicy: IfNotPresent
           args: ["--config=/conf/config.yaml"]
+          env:
+            # collector_replica label on remote-written series (see config).
+            - name: COLLECTOR_REPLICA
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           ports:
             - name: otlp-grpc
               containerPort: 4317
-              protocol: TCP
-            - name: otlp-http
-              containerPort: 4318
               protocol: TCP
             - name: metrics
               containerPort: 8888
@@ -265,31 +283,23 @@ spec:
             - name: config
               mountPath: /conf
               readOnly: true
-            - name: tls
-              mountPath: /tls
-              readOnly: true
       volumes:
         - name: config
           configMap:
             name: otel-agent-trace-connector
-        - name: tls
-          secret:
-            secretName: otel-agent-trace-connector-tls
 ---
+# Headless, so the gateway's k8s resolver sees each pod's address (from the
+# EndpointSlices) and hashes onto pods, not onto one ClusterIP. No
+# external-dns annotation: agents reach tier 2 only through the gateway.
 apiVersion: v1
 kind: Service
 metadata:
-  name: otel-agent-trace-connector
+  name: otel-agent-trace-connector-headless
   namespace: monitoring
   labels:
     app: otel-agent-trace-connector
-  annotations:
-    # ClusterIPs are routable on the LAN (Calico advertises the Service CIDR to
-    # the gateway over BGP), so a plain ClusterIP plus this annotation is all an
-    # agent outside the cluster needs -- see "DNS zones and TLS" in README.md.
-    external-dns.kubernetes.io/hostname: agents-otel.k8s.somemissing.info
 spec:
-  type: ClusterIP
+  clusterIP: None
   selector:
     app: otel-agent-trace-connector
   ports:
@@ -297,26 +307,64 @@ spec:
       port: 4317
       targetPort: otlp-grpc
       protocol: TCP
-    - name: otlp-http
-      port: 4318
-      targetPort: otlp-http
-      protocol: TCP
-    - name: metrics
-      port: 8888
-      targetPort: metrics
-      protocol: TCP
 ---
+# Pod IPs are reachable from the LAN like Service IPs, so close tier 2 to
+# everything except the gateway (OTLP) and Prometheus (self-metrics). Kubelet
+# probes from the node are always allowed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otel-agent-trace-connector
+  namespace: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: otel-agent-trace-connector
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: otel-agent-gateway
+      ports:
+        - protocol: TCP
+          port: 4317
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8888
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otel-agent-trace-connector
+  namespace: monitoring
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: otel-agent-trace-connector
+---
+# Scrapes both tiers. jobLabel takes the job name from each pod's `app`
+# label, so the connector keeps job="otel-agent-trace-connector" and the
+# gateway reports as job="otel-agent-gateway"
+# (otel-agent-trace-connector-alerts.yaml selects on both).
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
   name: otel-agent-trace-connector
   namespace: monitoring
   labels:
     release: prom
 spec:
+  jobLabel: app
   selector:
     matchLabels:
-      app: otel-agent-trace-connector
-  endpoints:
+      app.kubernetes.io/part-of: otel-agent-trace-connector
+  podMetricsEndpoints:
     - port: metrics
       interval: 30s
