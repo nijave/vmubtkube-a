@@ -53,7 +53,7 @@ tests:
           - exp_labels: {severity: critical, exporter: otlp_grpc}
             exp_annotations:
               summary: "Coding-agent trace connector dropped 50m spans/s to otel-collector."
-              description: "The otlp_grpc exporter is failing to send traces downstream. exporterhelper counts these as permanent failures and discards the batch, so every minute this stays up is agent telemetry gone for good. Known cause: batch payloads exceeding the 4 MiB gRPC message limit (ResourceExhausted). Check pod logs for 'Dropping data': kubectl -n monitoring logs deploy/otel-agent-trace-connector | grep -i resourceexhausted. Batch-size fixes live in the vmubtkube-a repo, otel-agent-trace-connector.yaml."
+              description: "The otlp_grpc exporter is failing to send traces downstream. exporterhelper counts these as permanent failures and discards the batch, so every minute this stays up is agent telemetry gone for good. Known cause: batch payloads exceeding the 4 MiB gRPC message limit (ResourceExhausted). Check pod logs for 'Dropping data': kubectl -n monitoring logs -l app=otel-agent-trace-connector | grep -i resourceexhausted. Batch-size fixes live in the vmubtkube-a repo, otel-agent-trace-connector.yaml."
       - eval_time: 20m
         alertname: AgentTraceConnectorMetricsExportFailures
         exp_alerts:
@@ -105,7 +105,7 @@ tests:
           - exp_labels: {severity: warning}
             exp_annotations:
               summary: "Coding-agent trace connector is refusing or failing inbound telemetry."
-              description: "The otlp receiver rejected spans, log records, or metric points instead of accepting them -- refused means the client's request bounced (TLS, auth, size), failed means it was accepted then errored inside the pipeline. Agents usually surface this as their own OTLP exporter errors, but headless runs may not. Compare otelcol_receiver_accepted_* against otelcol_receiver_refused_* / _failed_* for the affected signal."
+              description: "An otlp receiver in either tier rejected spans, log records, or metric points instead of accepting them -- refused means the client's request bounced (TLS, auth, size, or the gateway's memory_limiter), failed means it was accepted then errored inside the pipeline. On otel-agent-gateway the clients are the agents, which usually surface this as their own OTLP exporter errors, but headless runs may not; on otel-agent-trace-connector the client is the gateway, which retries and then shows up in AgentGatewayExportFailures. Compare otelcol_receiver_accepted_* against otelcol_receiver_refused_* / _failed_* for the affected signal."
 
   - name: ingest rejection quiet
     interval: 1m
