@@ -108,7 +108,6 @@ stringData:
         - ubthv01.homelab.somemissing.info:9100
         - vmcent74docker.homelab.somemissing.info:9100
         - vmcent74web02.homelab.somemissing.info:9100
-        - vmcentelk01.homelab.somemissing.info:9100
         - vmubt1604mail01.homelab.somemissing.info:9100
         - vmubt1804mysql01.homelab.somemissing.info:9100
         # piiot: Pine A64+ (Fedora) Podman host, WiFi DHCP reservation
