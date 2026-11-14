@@ -119,6 +119,14 @@ spec:
           - name: prometheus_vmubtkube-a
             type: prometheus
             url: http://{{ printf "%s-kp-prometheus.monitoring.svc" .Release.Name }}:9090
+          # The ext Prometheus scrapes the VM/host stack (mail01, mysql01,
+          # rtorrent, piiot, ...). Without this datasource its rules never
+          # show up in Grafana's Alerting page, which lists each Prometheus
+          # datasource's own /api/v1/rules; the default Thanos datasource
+          # cannot (Thanos does not proxy rule state from receive tenants).
+          - name: prometheus_ext
+            type: prometheus
+            url: http://prometheus-ext.monitoring.svc:9090
           - name: clickhouse_hyperdx
             type: grafana-clickhouse-datasource
             uid: clickhouse
