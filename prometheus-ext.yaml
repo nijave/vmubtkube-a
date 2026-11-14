@@ -166,6 +166,16 @@ spec:
   externalLabels:
     cluster: ext
     prometheus: ext
+  # Route fired VM-stack alerts to the shared in-cluster Alertmanager.
+  # Without spec.alerting the rules fired inside ext but were never sent
+  # anywhere: no notifications (MailServiceUnitDown is critical) and
+  # nothing in the Alertmanager UI or Grafana's alert list.
+  alerting:
+    alertmanagers:
+    - apiVersion: v2
+      name: prom-kp-alertmanager
+      namespace: monitoring
+      port: http-web
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
