@@ -5,6 +5,12 @@ metadata:
   namespace: projectcontour
 spec:
   template:
+    # Contour reads --config-path once at startup; without this annotation a
+    # ConfigMap-only change (e.g. dns-lookup-family) syncs but is never picked
+    # up. Reloader rolls the Deployment whenever the contour ConfigMap changes.
+    metadata:
+      annotations:
+        configmap.reloader.stakater.com/reload: contour
     spec:
       containers:
       - name: contour
