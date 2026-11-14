@@ -94,7 +94,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
           containers:
             - name: clickhouse-keeper
-              image: clickhouse/clickhouse-keeper:26.10.3.7-alpine
+              image: clickhouse/clickhouse-keeper:26.10.4.207-alpine
               imagePullPolicy: IfNotPresent
               resources:
                 requests:
