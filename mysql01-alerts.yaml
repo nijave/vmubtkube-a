@@ -14,10 +14,16 @@
 #   innodb_cmpmem, query_response_time, slave_status).
 # - Dropped prepared-statements utilization and HighQPS (>10k QPS is
 #   unreachable on this box): info-level noise for this workload.
-# - MysqlSlowQueries rescaled: slow_query_log runs at a 250 ms threshold
-#   with log_queries_not_using_indexes=1, so a slow-query trickle is normal
-#   here — upstream's any-slow-query-in-1m would fire constantly. 20 in 5m
-#   sustained for 10m instead.
+# - MysqlSlowQueries rescaled: slow_query_log runs at a 250 ms threshold.
+#   With log_queries_not_using_indexes=1 the not-indexed noise floor was
+#   ~0.7/s of sub-millisecond queries (selfoss's version poll every ~2s,
+#   mysqld_exporter's own info_schema scrape queries) — permanently above
+#   the 20/5m threshold, so the alert fired continuously since 2026-09-06.
+#   log_queries_not_using_indexes was turned off 2026-11-14 (SET PERSIST,
+#   see vmubtmysql01.md), so the counter now only moves on real ≥250ms
+#   queries and the 20/5m threshold is meaningful again. Upstream's
+#   any-slow-query-in-1m would still fire on a single slow query; 20 in 5m
+#   sustained for 10m catches scan-heavy regressions instead.
 # - Host sizing baked into the connection rules: max_connections is 75, so
 #   80% is ~60 connections; open_files_limit is 9500.
 #
@@ -106,10 +112,12 @@ spec:
       annotations:
         summary: MySQL on {{ $labels.instance }} logging slow queries at a sustained elevated rate.
         description: >-
-          More than 20 slow queries per 5m sustained for 10m. A trickle is
-          normal here (250 ms threshold, log_queries_not_using_indexes=1);
-          this rate means either the HA history range scans got heavier or
-          something new is scanning. Inspect mysql-slow.log via Datadog.
+          More than 20 slow queries per 5m sustained for 10m (250 ms
+          threshold; log_queries_not_using_indexes=0 since 2026-11-14, so
+          every entry is a real ≥250ms query). This rate means either the
+          HA history range scans got heavier or something new is scanning.
+          Inspect mysql-slow.log via HyperDX (fluent-bit ships it as
+          mysql.slow since 2026-09-07).
       expr: delta(mysql_global_status_slow_queries{job="mysqld-exporter"}[5m]) > 20
       for: 10m
       labels:
