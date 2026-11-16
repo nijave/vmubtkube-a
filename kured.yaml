@@ -33,11 +33,6 @@ spec:
       valuesObject:
         configuration:
           period: 10m
-          rebootDays:
-          - sa
-          - su
-          startTime: "04:00"
-          endTime: "08:00"
           timeZone: America/New_York
         metrics:
           create: true
