@@ -392,7 +392,7 @@ spec:
         securityContext:
           seccompProfile:
             type: RuntimeDefault
-        image: docker.io/tobbez/deluge_exporter:latest@sha256:e605f0abd0c7be1044b00202daa846edb27679c06700ba5c7a06d199e5d22ca4
+        image: docker.io/tobbez/deluge_exporter:latest@sha256:c87cb28d885a7bd9ffba94eb394b1ac352140165a3140f33729f7074edd27d38
         ports:
         - containerPort: 9354
           name: metrics
