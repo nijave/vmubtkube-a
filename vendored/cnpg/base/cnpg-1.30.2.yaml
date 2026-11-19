@@ -8,8 +8,6 @@ metadata:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: backups.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -419,6 +417,26 @@ spec:
                     - key
                     - name
                     type: object
+                  sseCustomerKey:
+                    description: |-
+                      Reference to the secret holding the key for Server-Side Encryption with
+                      Customer-provided keys (SSE-C): a base64-encoded 256-bit AES key.
+                      barman-cloud uses it to encrypt the objects it uploads and to read them
+                      back. Meant for S3-compatible providers that only support SSE-C
+                      (e.g. Hetzner Object Storage). Cannot be combined with `encryption`.
+                      Works with any authentication method. Changing the key makes the
+                      existing objects unreadable: use a new `destinationPath` or `serverName`.
+                    properties:
+                      key:
+                        description: The key to select
+                        type: string
+                      name:
+                        description: Name of the referent.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                 type: object
               serverName:
                 description: |-
@@ -480,8 +498,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: clusterimagecatalogs.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -700,8 +716,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: clusters.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -1850,12 +1864,13 @@ spec:
                             description: |-
                               Compress a backup file (a tar file per tablespace) while streaming it
                               to the object store. Available options are empty string (no
-                              compression, default), `gzip`, `bzip2`, `lz4`, and `snappy`.
+                              compression, default), `gzip`, `bzip2`, `lz4`, `snappy`, and `zstd`.
                             enum:
                             - bzip2
                             - gzip
                             - lz4
                             - snappy
+                            - zstd
                             type: string
                           encryption:
                             description: |-
@@ -1961,6 +1976,16 @@ spec:
                           HistoryTags is a list of key value pairs that will be passed to the
                           Barman --history-tags option.
                         type: object
+                      s3AddressingStyle:
+                        description: |-
+                          How bucket names appear in S3 requests: `virtual` (bucket.endpoint/key),
+                          `path` (endpoint/bucket/key) or `auto` (boto3 decides, same as unset).
+                          Requires s3Credentials and Barman 3.18 or later.
+                        enum:
+                        - auto
+                        - virtual
+                        - path
+                        type: string
                       s3Credentials:
                         description: The credentials to use to upload data to S3
                         properties:
@@ -2010,6 +2035,26 @@ spec:
                             type: object
                           sessionToken:
                             description: The references to the session key
+                            properties:
+                              key:
+                                description: The key to select
+                                type: string
+                              name:
+                                description: Name of the referent.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          sseCustomerKey:
+                            description: |-
+                              Reference to the secret holding the key for Server-Side Encryption with
+                              Customer-provided keys (SSE-C): a base64-encoded 256-bit AES key.
+                              barman-cloud uses it to encrypt the objects it uploads and to read them
+                              back. Meant for S3-compatible providers that only support SSE-C
+                              (e.g. Hetzner Object Storage). Cannot be combined with `encryption`.
+                              Works with any authentication method. Changing the key makes the
+                              existing objects unreadable: use a new `destinationPath` or `serverName`.
                             properties:
                               key:
                                 description: The key to select
@@ -2113,6 +2158,11 @@ spec:
                     required:
                     - destinationPath
                     type: object
+                    x-kubernetes-validations:
+                    - fieldPath: .s3AddressingStyle
+                      message: s3AddressingStyle requires s3Credentials
+                      reason: FieldValueForbidden
+                      rule: '!has(self.s3AddressingStyle) || has(self.s3Credentials)'
                   retentionPolicy:
                     description: |-
                       RetentionPolicy is the retention policy to be used for backups
@@ -3465,12 +3515,13 @@ spec:
                               description: |-
                                 Compress a backup file (a tar file per tablespace) while streaming it
                                 to the object store. Available options are empty string (no
-                                compression, default), `gzip`, `bzip2`, `lz4`, and `snappy`.
+                                compression, default), `gzip`, `bzip2`, `lz4`, `snappy`, and `zstd`.
                               enum:
                               - bzip2
                               - gzip
                               - lz4
                               - snappy
+                              - zstd
                               type: string
                             encryption:
                               description: |-
@@ -3576,6 +3627,16 @@ spec:
                             HistoryTags is a list of key value pairs that will be passed to the
                             Barman --history-tags option.
                           type: object
+                        s3AddressingStyle:
+                          description: |-
+                            How bucket names appear in S3 requests: `virtual` (bucket.endpoint/key),
+                            `path` (endpoint/bucket/key) or `auto` (boto3 decides, same as unset).
+                            Requires s3Credentials and Barman 3.18 or later.
+                          enum:
+                          - auto
+                          - virtual
+                          - path
+                          type: string
                         s3Credentials:
                           description: The credentials to use to upload data to S3
                           properties:
@@ -3625,6 +3686,26 @@ spec:
                               type: object
                             sessionToken:
                               description: The references to the session key
+                              properties:
+                                key:
+                                  description: The key to select
+                                  type: string
+                                name:
+                                  description: Name of the referent.
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                            sseCustomerKey:
+                              description: |-
+                                Reference to the secret holding the key for Server-Side Encryption with
+                                Customer-provided keys (SSE-C): a base64-encoded 256-bit AES key.
+                                barman-cloud uses it to encrypt the objects it uploads and to read them
+                                back. Meant for S3-compatible providers that only support SSE-C
+                                (e.g. Hetzner Object Storage). Cannot be combined with `encryption`.
+                                Works with any authentication method. Changing the key makes the
+                                existing objects unreadable: use a new `destinationPath` or `serverName`.
                               properties:
                                 key:
                                   description: The key to select
@@ -3728,6 +3809,11 @@ spec:
                       required:
                       - destinationPath
                       type: object
+                      x-kubernetes-validations:
+                      - fieldPath: .s3AddressingStyle
+                        message: s3AddressingStyle requires s3Credentials
+                        reason: FieldValueForbidden
+                        rule: '!has(self.s3AddressingStyle) || has(self.s3Credentials)'
                     connectionParameters:
                       additionalProperties:
                         type: string
@@ -8501,8 +8587,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: databaseroles.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -8828,8 +8912,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: databases.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -9425,8 +9507,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: failoverquorums.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -9502,8 +9582,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: imagecatalogs.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -9721,8 +9799,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: poolers.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -14817,6 +14893,7 @@ spec:
                                 Domain names *.k8s.io and *.kubernetes.io are reserved.
                                 This field must be unique for each responder.
                                 This field is required.
+                              minLength: 1
                               type: string
                             priority:
                               description: |-
@@ -14833,12 +14910,15 @@ spec:
                                 The interval 0-999 is reserved for responders with *.k8s.io suffix.
                                 This field is required.
                               format: int32
+                              maximum: 100000
+                              minimum: 0
                               type: integer
                           required:
                           - name
                           - priority
                           type: object
                           x-kubernetes-map-type: atomic
+                        maxItems: 10
                         type: array
                         x-kubernetes-list-map-keys:
                         - name
@@ -19529,8 +19609,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: publications.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -19727,8 +19805,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: scheduledbackups.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -19924,8 +20000,6 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
   name: subscriptions.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -20239,6 +20313,7 @@ rules:
   - leases
   verbs:
   - create
+  - delete
   - get
   - list
   - update
@@ -21013,14 +21088,14 @@ spec:
         - /manager
         env:
         - name: OPERATOR_IMAGE_NAME
-          value: ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1
+          value: ghcr.io/cloudnative-pg/cloudnative-pg:1.30.2
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
         - name: MONITORING_QUERIES_CONFIGMAP
           value: cnpg-default-monitoring
-        image: ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1
+        image: ghcr.io/cloudnative-pg/cloudnative-pg:1.30.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
