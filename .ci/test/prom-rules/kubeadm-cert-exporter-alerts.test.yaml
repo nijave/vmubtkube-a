@@ -1,0 +1,130 @@
+# Unit tests for kubeadm-cert-exporter.yaml's PrometheusRule.
+# Run: sh .ci/validate-prom-rules.sh (rule_files paths are
+# <namespace>/<metadata.name>.yaml of the extracted PrometheusRule).
+# The test clock starts at t=0, so cert not_after values are expressed as
+# (eval time + days remaining) to keep `time()` arithmetic predictable.
+rule_files: [monitoring/kubeadm-cert-exporter-alerts.yaml]
+evaluation_interval: 1m
+tests:
+  # 30d/7d thresholds: a cert with 20 days left trips the warning only; one
+  # with 5 days left trips both warning and critical.
+  - name: expiry thresholds fire
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_not_after_seconds{job="node-exporter",instance="cp1:9100",file="apiserver.crt",cn="kube-apiserver"}'
+        values: '1735200+0x400' # 2h eval + 20d left
+      - series: 'kubeadm_cert_not_after_seconds{job="node-exporter",instance="cp1:9100",file="old.crt",cn="old"}'
+        values: '439200+0x400' # 2h eval + 5d left
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: KubeadmCertificateExpiringSoon
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: cp1:9100, file: apiserver.crt, cn: kube-apiserver}
+            exp_annotations:
+              summary: "Kubeadm certificate apiserver.crt (CN kube-apiserver) on cp1:9100 expires in 20d 0h 0m 0s."
+              description: "The kubeadm control-plane certificate apiserver.crt (CN kube-apiserver) on cp1:9100 has less than 30 days of validity left. Renew with `kubeadm certs renew all` on each control-plane node (a kubeadm upgrade renews automatically), restart the affected static pods so they reload the new certs, and copy the refreshed /etc/kubernetes/admin.conf to the workstations that use it."
+          - exp_labels: {severity: warning, job: node-exporter, instance: cp1:9100, file: old.crt, cn: old}
+            exp_annotations:
+              summary: "Kubeadm certificate old.crt (CN old) on cp1:9100 expires in 5d 0h 0m 0s."
+              description: "The kubeadm control-plane certificate old.crt (CN old) on cp1:9100 has less than 30 days of validity left. Renew with `kubeadm certs renew all` on each control-plane node (a kubeadm upgrade renews automatically), restart the affected static pods so they reload the new certs, and copy the refreshed /etc/kubernetes/admin.conf to the workstations that use it."
+      - eval_time: 2h
+        alertname: KubeadmCertificateExpiryCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node-exporter, instance: cp1:9100, file: old.crt, cn: old}
+            exp_annotations:
+              summary: "Kubeadm certificate old.crt (CN old) on cp1:9100 expires in 5d 0h 0m 0s."
+              description: "The kubeadm control-plane certificate old.crt (CN old) on cp1:9100 has less than 7 days of validity left; the control plane breaks when it lapses. Renew with `kubeadm certs renew all` on each control-plane node (a kubeadm upgrade renews automatically), restart the affected static pods so they reload the new certs, and copy the refreshed /etc/kubernetes/admin.conf to the workstations that use it."
+
+  # 31 days left: outside the 30-day warning window, nothing fires (the
+  # boundary the threshold exists to draw).
+  - name: expiry thresholds quiet at 31 days
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_not_after_seconds{job="node-exporter",instance="cp1:9100",file="fresh.crt",cn="fresh"}'
+        values: '2685600+0x400' # 2h eval + 31d left
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: KubeadmCertificateExpiringSoon
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: KubeadmCertificateExpiryCritical
+        exp_alerts: []
+
+  # Staleness: last run at epoch 0 (3h+ old) fires; a fresh timestamp does not.
+  - name: stale exporter fires
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_exporter_last_run_timestamp_seconds{job="node-exporter",instance="cp1:9100"}'
+        values: '0+0x400'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: KubeadmCertExporterStale
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: cp1:9100}
+            exp_annotations:
+              summary: "Kubeadm cert exporter on cp1:9100 has not completed a run for 5h 0m 0s."
+              description: "kubeadm_cert_exporter_last_run_timestamp_seconds on cp1:9100 is more than 3h old (the exporter runs every 1h), so certificate ages on this node are unverified. Check kubectl -n monitoring get pods -l app=kubeadm-cert-exporter -o wide for the pod on this node and its logs; the pod writes kubeadm_certs.prom into /var/lib/node_exporter/textfile_collector on the host, so also check the directory exists and is writable by uid 65534."
+
+  - name: fresh exporter stays quiet
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_exporter_last_run_timestamp_seconds{job="node-exporter",instance="cp1:9100"}'
+        values: '14400+0x400' # matches the 4h eval clock exactly
+    alert_rule_test:
+      - eval_time: 4h
+        alertname: KubeadmCertExporterStale
+        exp_alerts: []
+
+  # Parse errors must persist 2h before firing; zero errors never fire.
+  - name: parse errors fire after 2h
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_exporter_errors{job="node-exporter",instance="cp1:9100"}'
+        values: '1+0x400'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: KubeadmCertExporterParseErrors
+        exp_alerts: []
+      - eval_time: 3h
+        alertname: KubeadmCertExporterParseErrors
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: cp1:9100}
+            exp_annotations:
+              summary: "Kubeadm cert exporter on cp1:9100 failed to parse 1 certificate file(s)."
+              description: "The kubeadm cert exporter on cp1:9100 could not parse 1 *.crt file(s) in /etc/kubernetes/pki (or pki/etcd) for the last 2h. Any file it cannot read is silently unmonitored. Check the pod logs and the .crt files on the node: a truncated or corrupt cert (or an unexpected new file in the PKI) needs to be fixed or replaced on the host."
+
+  - name: zero parse errors stay quiet
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_exporter_errors{job="node-exporter",instance="cp1:9100"}'
+        values: '0+0x400'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: KubeadmCertExporterParseErrors
+        exp_alerts: []
+
+  # Absent: no last_run series anywhere for 1h fires the canary; the series
+  # being present keeps it quiet.
+  - name: absent last-run series fires
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_not_after_seconds{job="node-exporter",instance="cp1:9100",file="apiserver.crt",cn="kube-apiserver"}'
+        values: '2685600+0x400'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: KubeadmCertExporterAbsent
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "No kubeadm cert exporter output anywhere in the cluster."
+              description: "No node reports kubeadm_cert_exporter_last_run_timestamp_seconds, so kubeadm certificate expiry is completely unmonitored: the DaemonSet is not running, not scheduled onto the control-plane nodes, or its output is not reaching the textfile directory node-exporter reads. Check the DaemonSet status and init container (kubectl -n monitoring get ds kubeadm-cert-exporter and its pod events), and that the pods' nodes carry the control-plane label."
+
+  - name: present last-run series stays quiet
+    interval: 1m
+    input_series:
+      - series: 'kubeadm_cert_exporter_last_run_timestamp_seconds{job="node-exporter",instance="cp1:9100"}'
+        values: '0+0x400'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: KubeadmCertExporterAbsent
+        exp_alerts: []
