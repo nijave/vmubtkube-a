@@ -40,3 +40,9 @@ repos:
         language: system
         files: ^(\.ci/lib/cache\.sh|\.ci/test/cache-test\.sh)$
         pass_filenames: false
+      - id: ci-verify-images-tests
+        name: CI verify-images tests (no network, stubbed regctl)
+        entry: sh .ci/test/verify-images-test.sh
+        language: system
+        files: ^(\.ci/verify-images\.sh|\.ci/lib/diff-base\.sh|\.ci/test/verify-images-test\.sh)$
+        pass_filenames: false

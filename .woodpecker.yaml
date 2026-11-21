@@ -6,6 +6,14 @@
 # Runs on PRs so Renovate's tag bumps mirror the new image before merge, and on
 # push to main as a self-healing backstop (re-mirrors anything missing).
 #
+# verify-images (PR-only) fails the PR when it introduces an image ref whose
+# tag/digest does not exist upstream — Renovate tracks GitHub releases, but a
+# release and its image are published independently (immich v3.4.2 shipped
+# while immich-machine-learning:v3.4.2-openvino was never pushed, CI stayed
+# green, Mergify auto-merged, and the pod sat in ImagePullBackOff). Renovate's
+# hosted app cannot run post-upgrade commands, so the check lives here, where
+# Mergify's required ci/woodpecker status blocks the merge on failure.
+#
 # Step DAG (depends_on): prepare builds the two caches (.tmp/schemas,
 # .tmp/charts) in the workspace; validate, validate-helm, and
 # validate-prom-selectors wait for it and then read them; validate-prom-rules
@@ -16,6 +24,9 @@
 # workspace); mirror-images and vendir-push both wait for vendir-sync
 # (mirror-images git-diffs the same workspace; vendir-push, PR-only, pushes
 # vendir-sync's commit back to the PR branch with the deploy key).
+# verify-images is independent (no depends_on): it only git-diffs the
+# workspace and probes upstream registries with regctl, touching nothing the
+# other steps produce or consume.
 clone:
   git:
     # renovate: datasource=docker depName=woodpeckerci/plugin-git
@@ -232,3 +243,21 @@ steps:
       # every run; one retry is enough to absorb its transient failures.
       - apk add --no-cache yq jq git || (sleep 10 && apk add --no-cache yq jq git)
       - sh .ci/mirror-images.sh
+
+  verify-images:
+    # renovate: datasource=docker depName=ghcr.io/regclient/regctl
+    image: ghcr.io/regclient/regctl:v0.11.7-alpine
+    # No depends_on: independent of the DAG (see header comment). It must NOT
+    # wait for mirror-images: it checks upstream refs precisely because the
+    # mirror can only be populated from refs that exist upstream.
+    backend_options:
+      kubernetes:
+        hostUsers: false
+        # regclient image runs as non-root; need root to apk add yq/jq.
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+    commands:
+      # Same apk-retry pattern as mirror-images above.
+      - apk add --no-cache yq jq git || (sleep 10 && apk add --no-cache yq jq git)
+      - sh .ci/verify-images.sh
