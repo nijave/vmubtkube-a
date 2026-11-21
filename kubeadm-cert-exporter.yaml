@@ -1,0 +1,360 @@
+# kubeadm-cert-exporter: exports kubeadm control-plane certificate expiry
+# times through node-exporter's textfile collector, plus alert rules.
+#
+# Why this shape: x509-certificate-exporter's kubeadm setup runs as root with
+# the PKI directories (CA private keys included) mounted. That is unnecessary: on kubeadm
+# control-plane nodes every /etc/kubernetes/pki/*.crt (and pki/etcd/*.crt) is
+# root:root 0644 — world-readable — while every *.key is 0600 root:root, so a
+# NON-ROOT container can read every certificate and the kernel denies every
+# private key. A tiny sh+openssl loop running as uid 65534 gives us the
+# metrics with zero privilege and zero key exposure, so the container that
+# mounts the PKI must never run as root (enforced by runAsNonRoot below).
+#
+# Delivery: this DaemonSet writes kubeadm_certs.prom into the host textfile
+# directory that node-exporter already reads (enabled for the
+# prometheus-node-exporter chart in application.kube-prometheus.yaml:
+# --collector.textfile.directory=/host/textfile, hostPath
+# /var/lib/node_exporter/textfile_collector mounted read-only at /host/textfile,
+# node-exporter runs as uid/gid 65534). Only *.prom files are collected, so
+# the exporter's .tmp/.samples scratch names are invisible to it.
+#
+# Renewal runbook (mirrored in the alert descriptions): run
+# `kubeadm certs renew all` on each control-plane node (a kubeadm upgrade
+# renews automatically), restart the affected static pods so they reload the
+# new certs, and copy the refreshed /etc/kubernetes/admin.conf to the
+# workstations that use it.
+#
+# Renovate tracks the image via the `# renovate:` annotation (custom regex
+# manager scans every *.yaml; registryAliases maps the mirror host to
+# Docker Hub, and .ci/mirror-images.sh populates the mirror path 1:1).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeadm-cert-exporter-script
+  namespace: monitoring
+  labels:
+    app: kubeadm-cert-exporter
+data:
+  export.sh: |
+    #!/bin/sh
+    # Export kubeadm control-plane certificate validity as node-exporter
+    # textfile-collector metrics. Every INTERVAL seconds, read each *.crt
+    # directly under /pki and /pki/etcd, convert notBefore/notAfter to unix
+    # epoch seconds, and atomically write /out/kubeadm_certs.prom.
+    #
+    # Security property: this runs as uid/gid 65534. kubeadm's PKI holds
+    # every *.crt as root:root 0644 (readable by anyone) and every *.key as
+    # 0600 root:root (denied to us by the kernel), so the exporter can read
+    # all certificates and cannot read any private key. It must never run
+    # as root.
+    #
+    # Failure behaviour: a file that fails to parse is counted in
+    # kubeadm_cert_exporter_errors but never aborts the run; the completed
+    # run's timestamp is exported for the staleness alert.
+    set -u
+
+    PKI_DIR=${PKI_DIR:-/pki}
+    OUT_DIR=${OUT_DIR:-/out}
+    INTERVAL=${INTERVAL:-3600}
+    OUT_FILE=$OUT_DIR/kubeadm_certs.prom
+    TMP_FILE=$OUT_DIR/.kubeadm_certs.prom.tmp
+    SAMPLES_FILE=$OUT_DIR/.kubeadm_certs.prom.samples
+    # openssl -dateopt iso_8601 prints "YYYY-MM-DD HH:MM:SSZ" (a space, not
+    # a T), which is what the strptime format below must match.
+    DATE_FMT="%Y-%m-%d %H:%M:%SZ"
+
+    # Exit promptly on SIGTERM/SIGINT (k8s stops pods with TERM). Every
+    # foreground command here (openssl, date) finishes well under a second
+    # and the trap fires between commands; the sleep runs in the background
+    # so the wait below is interrupted immediately instead of after the
+    # full interval.
+    trap 'exit 0' TERM INT
+
+    # ISO 8601 date -> unix seconds, via busybox date's strptime input format.
+    to_epoch() {
+      date -u -D "$DATE_FMT" -d "$1" +%s 2>/dev/null
+    }
+
+    # Escape backslash and double quote per the Prometheus text format.
+    # openssl prints the subject on a single line, so a newline can never
+    # reach a label value here.
+    escape_label() {
+      printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+    }
+
+    run_once() {
+      errors=0
+      : > "$SAMPLES_FILE"
+      for dir in "$PKI_DIR" "$PKI_DIR/etcd"; do
+        for f in "$dir"/*.crt; do
+          # The glob stays literal when nothing matches; skip it.
+          [ -f "$f" ] || continue
+          dates=$(openssl x509 -in "$f" -noout -dateopt iso_8601 -startdate -enddate 2>/dev/null) || {
+            errors=$((errors + 1))
+            continue
+          }
+          not_before=$(printf '%s\n' "$dates" | sed -n 's/^notBefore=//p')
+          not_after=$(printf '%s\n' "$dates" | sed -n 's/^notAfter=//p')
+          ts_before=$(to_epoch "$not_before")
+          ts_after=$(to_epoch "$not_after")
+          if [ -z "$ts_before" ] || [ -z "$ts_after" ]; then
+            errors=$((errors + 1))
+            continue
+          fi
+          # CN of the RFC2253 subject: the value right after the first CN=
+          # attribute, up to the next RDN separator. A comma escaped inside a
+          # CN value would truncate the label; kubeadm's CNs never contain
+          # commas.
+          cn=$(openssl x509 -in "$f" -noout -subject -nameopt RFC2253 2>/dev/null \
+            | awk -F 'CN=' 'NF > 1 { s = $2; sub(/,.*/, "", s); sub(/^subject=/, "", s); print s; exit }')
+          rel=$(escape_label "${f#"$PKI_DIR"/}")
+          cn_esc=$(escape_label "$cn")
+          printf 'kubeadm_cert_not_after_seconds{file="%s",cn="%s"} %s\n' "$rel" "$cn_esc" "$ts_after" >> "$SAMPLES_FILE"
+          printf 'kubeadm_cert_not_before_seconds{file="%s",cn="%s"} %s\n' "$rel" "$cn_esc" "$ts_before" >> "$SAMPLES_FILE"
+        done
+      done
+      # The text format wants each metric's HELP, TYPE and samples as one
+      # contiguous group, so split the collected samples per metric name.
+      {
+        echo '# HELP kubeadm_cert_not_after_seconds Unix epoch seconds of the notAfter (expiry) of a kubeadm control-plane certificate.'
+        echo '# TYPE kubeadm_cert_not_after_seconds gauge'
+        grep '^kubeadm_cert_not_after_seconds{' "$SAMPLES_FILE"
+        echo '# HELP kubeadm_cert_not_before_seconds Unix epoch seconds of the notBefore (valid-from) of a kubeadm control-plane certificate.'
+        echo '# TYPE kubeadm_cert_not_before_seconds gauge'
+        grep '^kubeadm_cert_not_before_seconds{' "$SAMPLES_FILE"
+        echo '# HELP kubeadm_cert_exporter_last_run_timestamp_seconds Unix epoch seconds at which the exporter last completed a run.'
+        echo '# TYPE kubeadm_cert_exporter_last_run_timestamp_seconds gauge'
+        echo "kubeadm_cert_exporter_last_run_timestamp_seconds $(date +%s)"
+        echo '# HELP kubeadm_cert_exporter_errors Number of certificate files that failed to parse in the last completed run.'
+        echo '# TYPE kubeadm_cert_exporter_errors gauge'
+        echo "kubeadm_cert_exporter_errors $errors"
+      } > "$TMP_FILE"
+      chmod 0644 "$TMP_FILE"
+      # Atomic rename: node-exporter never sees a half-written file.
+      mv "$TMP_FILE" "$OUT_FILE"
+      rm -f "$SAMPLES_FILE"
+      echo "kubeadm-cert-exporter: wrote $OUT_FILE ($errors parse error(s))"
+    }
+
+    while :; do
+      run_once
+      sleep "$INTERVAL" &
+      wait "$!"
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kubeadm-cert-exporter
+  namespace: monitoring
+  labels:
+    app: kubeadm-cert-exporter
+spec:
+  selector:
+    matchLabels:
+      app: kubeadm-cert-exporter
+  template:
+    metadata:
+      labels:
+        app: kubeadm-cert-exporter
+      annotations:
+        # The script is baked into a ConfigMap; restart the pods when it
+        # changes (repo convention for ConfigMap-driven workloads).
+        reloader.stakater.com/auto: "true"
+    spec:
+      automountServiceAccountToken: false
+      # kubeadm control-plane nodes only: they hold the PKI and carry the
+      # NoSchedule taint, so both the selector and the toleration are needed.
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      # Deliberately NOT setting hostUsers: false. With a user namespace the
+      # container's uid 65534 maps to an arbitrary subuid on the host, which
+      # breaks both halves of the ownership story: the kernel would evaluate
+      # hostPath access against a host identity that owns nothing, and the
+      # init container's chown 65534 would chown into an idmapped view that
+      # node-exporter (a plain host uid 65534) does not share. Keeping the
+      # host user namespace keeps container uid 65534 == host uid 65534,
+      # exactly matching node-exporter's ownership of the textfile dir.
+      initContainers:
+        - name: fix-textfile-dir
+          # Same image as the main container (busybox ash; no openssl work
+          # done here). Root is acceptable ONLY because this container does
+          # not mount the PKI: it just fixes the ownership of the shared
+          # textfile directory so the unprivileged exporter (and the equally
+          # unprivileged node-exporter) can use it. On a fresh node the
+          # DirectoryOrCreate dir appears root-owned; 0755 keeps it
+          # traversable for the *.prom files it may already hold.
+          # renovate: datasource=docker depName=alpine/openssl
+          image: registry.apps.nickv.me/alpine/openssl:3.5.9
+          command: ["/bin/sh", "-c"]
+          args:
+            - chown 65534:65534 /out && chmod 0755 /out
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              # Only what the chown needs; nothing else runs here.
+              add: [CHOWN]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 16Mi
+          volumeMounts:
+            - name: textfile
+              mountPath: /out
+      containers:
+        - name: exporter
+          # alpine/openssl: busybox sh + openssl 3, ~10 MB. Plain alpine
+          # would need `apk add openssl` at start, which readOnlyRootFilesystem
+          # rules out.
+          # renovate: datasource=docker depName=alpine/openssl
+          image: registry.apps.nickv.me/alpine/openssl:3.5.9
+          command: ["/bin/sh", "/etc/kubeadm-cert-exporter/export.sh"]
+          env:
+            # One export run per hour; certificates renew on a year scale, so
+            # hourly is ample and matches the staleness alert thresholds.
+            - name: INTERVAL
+              value: "3600"
+          securityContext:
+            # The core security property (see file header): non-root so the
+            # kernel denies every 0600 private key while every 0644 cert
+            # stays readable. No capabilities at all.
+            runAsUser: 65534
+            runAsGroup: 65534
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          volumeMounts:
+            # kubeadm PKI, read-only: certs readable, keys unreadable.
+            - name: pki
+              mountPath: /pki
+              readOnly: true
+            # Writable: where the .prom file lands (shared with node-exporter).
+            - name: textfile
+              mountPath: /out
+            - name: script
+              mountPath: /etc/kubeadm-cert-exporter
+              readOnly: true
+      volumes:
+        - name: pki
+          hostPath:
+            path: /etc/kubernetes/pki
+            type: Directory
+        - name: textfile
+          hostPath:
+            path: /var/lib/node_exporter/textfile_collector
+            type: DirectoryOrCreate
+        - name: script
+          configMap:
+            name: kubeadm-cert-exporter-script
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubeadm-cert-exporter-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+  - name: kubeadm-cert-exporter
+    rules:
+    - alert: KubeadmCertificateExpiringSoon
+      annotations:
+        summary: "Kubeadm certificate {{ $labels.file }} (CN {{ $labels.cn }}) on {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+        description: >-
+          The kubeadm control-plane certificate {{ $labels.file }} (CN
+          {{ $labels.cn }}) on {{ $labels.instance }} has less than 30 days
+          of validity left. Renew with `kubeadm certs renew all` on each
+          control-plane node (a kubeadm upgrade renews automatically), restart
+          the affected static pods so they reload the new certs, and copy the
+          refreshed /etc/kubernetes/admin.conf to the workstations that use it.
+      expr: kubeadm_cert_not_after_seconds - time() < 30 * 24 * 60 * 60
+      for: 1h
+      labels:
+        severity: warning
+    - alert: KubeadmCertificateExpiryCritical
+      annotations:
+        summary: "Kubeadm certificate {{ $labels.file }} (CN {{ $labels.cn }}) on {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+        description: >-
+          The kubeadm control-plane certificate {{ $labels.file }} (CN
+          {{ $labels.cn }}) on {{ $labels.instance }} has less than 7 days of
+          validity left; the control plane breaks when it lapses. Renew with
+          `kubeadm certs renew all` on each control-plane node (a kubeadm
+          upgrade renews automatically), restart the affected static pods so
+          they reload the new certs, and copy the refreshed
+          /etc/kubernetes/admin.conf to the workstations that use it.
+      expr: kubeadm_cert_not_after_seconds - time() < 7 * 24 * 60 * 60
+      for: 1h
+      labels:
+        severity: critical
+    - alert: KubeadmCertExporterStale
+      annotations:
+        summary: "Kubeadm cert exporter on {{ $labels.instance }} has not completed a run for {{ $value | humanizeDuration }}."
+        description: >-
+          kubeadm_cert_exporter_last_run_timestamp_seconds on
+          {{ $labels.instance }} is more than 3h old (the exporter runs every
+          1h), so certificate ages on this node are unverified. Check
+          kubectl -n monitoring get pods -l app=kubeadm-cert-exporter -o wide
+          for the pod on this node and its logs; the pod writes
+          kubeadm_certs.prom into /var/lib/node_exporter/textfile_collector
+          on the host, so also check the directory exists and is writable by
+          uid 65534.
+      expr: time() - kubeadm_cert_exporter_last_run_timestamp_seconds > 3 * 60 * 60
+      for: 1h
+      labels:
+        severity: warning
+    - alert: KubeadmCertExporterParseErrors
+      annotations:
+        summary: "Kubeadm cert exporter on {{ $labels.instance }} failed to parse {{ $value }} certificate file(s)."
+        description: >-
+          The kubeadm cert exporter on {{ $labels.instance }} could not parse
+          {{ $value }} *.crt file(s) in /etc/kubernetes/pki (or pki/etcd) for
+          the last 2h. Any file it cannot read is silently unmonitored. Check
+          the pod logs and the .crt files on the node: a truncated or corrupt
+          cert (or an unexpected new file in the PKI) needs to be fixed or
+          replaced on the host.
+      expr: kubeadm_cert_exporter_errors > 0
+      for: 2h
+      labels:
+        severity: warning
+    - alert: KubeadmCertExporterAbsent
+      annotations:
+        summary: "No kubeadm cert exporter output anywhere in the cluster."
+        description: >-
+          No node reports kubeadm_cert_exporter_last_run_timestamp_seconds,
+          so kubeadm certificate expiry is completely unmonitored: the
+          DaemonSet is not running, not scheduled onto the control-plane
+          nodes, or its output is not reaching the textfile directory
+          node-exporter reads. Check the DaemonSet status and init container
+          (kubectl -n monitoring get ds kubeadm-cert-exporter and its pod
+          events), and that the pods' nodes carry the control-plane label.
+      expr: absent(kubeadm_cert_exporter_last_run_timestamp_seconds)
+      for: 1h
+      labels:
+        severity: warning
