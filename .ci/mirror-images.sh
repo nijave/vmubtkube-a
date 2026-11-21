@@ -15,10 +15,8 @@
 # Bare-name mirrors (registry.apps.nickv.me/thanos) will resolve against the
 # default upstream and almost certainly fail — rename them to org/image first.
 #
-# Only mirrors refs that appear on lines *added* since the diff base:
-#   - pull_request: origin/$CI_COMMIT_TARGET_BRANCH
-#   - push:         $CI_COMMIT_BEFORE
-#   - otherwise:    HEAD^
+# Only mirrors refs that appear on lines *added* since the diff base (see
+# .ci/lib/diff-base.sh for how the base is picked).
 #
 # Requires: yq (mikefarah), jq, regctl, git, grep, sort, awk, sed, comm.
 set -euo pipefail
@@ -108,28 +106,9 @@ jq -r '.ignoreDeps[]? // empty' "$RENOVATE_FILE" > "$IGNORE"
 # Pick a diff base appropriate for the trigger, then mirror refs found on
 # added lines only. Re-runs against the same base are idempotent (regctl copy
 # no-ops when digests match).
-case "${CI_PIPELINE_EVENT:-}" in
-  pull_request)
-    target_branch="${CI_COMMIT_TARGET_BRANCH:-main}"
-    # depth=100 covers main's history back ~3-4 weeks at typical merge rates,
-    # enough for nearly all PRs (Renovate bot PRs are <5 commits ahead).
-    # If the merge-base falls outside this, the git-diff check below fails
-    # loudly with a clear error rather than silently producing empty refs.
-    git fetch --no-tags --depth=100 origin "$target_branch" >/dev/null 2>&1 || true
-    BASE_REF="origin/$target_branch"
-    ;;
-  push)
-    if [ -n "${CI_COMMIT_BEFORE:-}" ] \
-       && [ "$CI_COMMIT_BEFORE" != "0000000000000000000000000000000000000000" ]; then
-      BASE_REF="$CI_COMMIT_BEFORE"
-    else
-      BASE_REF="HEAD^"
-    fi
-    ;;
-  *)
-    BASE_REF="${BASE_REF:-HEAD^}"
-    ;;
-esac
+# shellcheck source=lib/diff-base.sh disable=SC1091
+. "$(dirname "$0")/lib/diff-base.sh"
+compute_diff_base
 
 echo "diff base: $BASE_REF"
 # Detect git diff failure explicitly — without this, a missing merge-base
