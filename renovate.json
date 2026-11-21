@@ -141,6 +141,11 @@
       "enabled": false
     },
     {
+      "description": "immich v3.4.2 has a GitHub release but no ghcr.io/immich-app/immich-machine-learning:v3.4.2-openvino image (the upstream release build failed on that variant). Skip it so Renovate does not re-propose the missing tag for the ML image; the server image already runs v3.4.2.",
+      "matchPackageNames": ["immich-app/immich"],
+      "allowedVersions": "!/^v3\\.4\\.2$/"
+    },
+    {
       "description": "cloudflared is mirrored from cloudflare/cloudflared on DockerHub",
       "matchPackageNames": ["cloudflare/cloudflared"]
     },
