@@ -65,6 +65,13 @@ spec:
                 image:
                   repository: ghcr.io/immich-app/immich-server
                   tag: v3.4.2
+                env:
+                  # v3.4.2 (immich#33450) binds the Prometheus exporter to
+                  # IMMICH_HOST, default "::". The OTel exporter parses
+                  # http://${host}:${port}/ per request, which is invalid for
+                  # "::", so every /metrics scrape returned 400. Pod network
+                  # is IPv4-only, so 0.0.0.0 also covers the API listener.
+                  IMMICH_HOST: 0.0.0.0
                 resources:
                   requests:
                     cpu: 50m
