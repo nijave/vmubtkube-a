@@ -65,6 +65,13 @@ spec:
                 image:
                   repository: ghcr.io/immich-app/immich-server
                   tag: v3.4.2
+                env:
+                  # v3.4.2 (immich#33450) binds the Prometheus exporter to
+                  # IMMICH_HOST, default "::". The OTel exporter parses
+                  # http://${host}:${port}/ per request, which is invalid for
+                  # "::", so every /metrics scrape returned 400. Pod network
+                  # is IPv4-only, so 0.0.0.0 also covers the API listener.
+                  IMMICH_HOST: 0.0.0.0
                 resources:
                   requests:
                     cpu: 50m
@@ -97,7 +104,9 @@ spec:
                   image:
                     repository: ghcr.io/immich-app/immich-machine-learning
                     # OpenVINO variant -> Intel iGPU acceleration (matches server tag)
-                    tag: v3.4.2-openvino
+                    # Held at v3.4.1: upstream never published v3.4.2-openvino
+                    # (release build failed); renovate.json skips v3.4.2.
+                    tag: v3.4.1-openvino
                   env:
                     # Keep the CLIP model resident for fast first-search after startup.
                     # Preload names must match the active Smart Search model set in the UI.
