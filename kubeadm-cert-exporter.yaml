@@ -206,8 +206,9 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-              # Only what the chown needs; nothing else runs here.
-              add: [CHOWN]
+              # CHOWN for the chown; FOWNER for the chmod, because after the
+              # chown (and on every restart) root no longer owns the dir.
+              add: [CHOWN, FOWNER]
           resources:
             requests:
               cpu: 5m
