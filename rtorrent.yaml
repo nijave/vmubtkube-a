@@ -379,7 +379,7 @@ spec:
       # after reloader restarts the pod. The password never appears in
       # argv (piped to openssl's stdin).
       - name: rtorrent-init
-        image: ghcr.io/hotio/rflood:release-0.16.28@sha256:2a638eb01ae981390c9c7ef9b0fef612957ebc65319482bea310b310b6171a9c
+        image: ghcr.io/hotio/rflood:release-0.16.28@sha256:e1404fe4de3c51ccfdd7b1e12b65d4b21ba0b35a06d2d3e1801577e44c57558c
         command:
         - sh
         - -c
@@ -514,7 +514,7 @@ spec:
         # version the VM runs — with Flood bundled and nginx serving
         # /RPC2. s6-overlay starts as root and drops to PUID/PGID (hotio),
         # so runAsUser is deliberately not set here.
-        image: ghcr.io/hotio/rflood:release-0.16.28@sha256:2a638eb01ae981390c9c7ef9b0fef612957ebc65319482bea310b310b6171a9c
+        image: ghcr.io/hotio/rflood:release-0.16.28@sha256:e1404fe4de3c51ccfdd7b1e12b65d4b21ba0b35a06d2d3e1801577e44c57558c
         env:
         - name: PUID
           value: "1002"
