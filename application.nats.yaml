@@ -1,0 +1,142 @@
+# HA NATS JetStream. Design:
+# docs/superpowers/specs/2026-11-25-nats-jetstream-design.md
+# PKI: nats-pki.yaml. Network: nats-networkpolicy.yaml. Alerts: nats-alerts.yaml.
+#
+# Rules for editing these values:
+#  - Clients (pods and nats-box included) dial nats.k8s.somemissing.info. The
+#    server certificate is Let's Encrypt and covers no in-cluster name.
+#  - Add to pod/container lists with `patch` (JSON patch), never `merge`:
+#    merge REPLACES the list and drops the chart's config, data and TLS mounts.
+#  - A NATS user is "CN=<certificate commonName>". Adding a client = one
+#    Certificate on ClusterIssuer nats-ca + one user entry below.
+#  - Workload users get no "$JS.API.>" permission: it allows stream delete
+#    and purge across the whole account.
+#  - Create streams with --replicas 3; the server does not enforce it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nats
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: nats
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PruneLast=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
+  source:
+    chart: nats
+    repoURL: https://nats-io.github.io/k8s/helm/charts/
+    targetRevision: 2.15.3
+    helm:
+      releaseName: nats
+      valuesObject:
+        config:
+          cluster:
+            enabled: true
+            replicas: 3
+            routeURLs:
+              useFQDN: true
+            tls:
+              enabled: true
+              secretName: nats-route-tls
+              merge:
+                verify: true
+                ca_file: /etc/nats-certs/cluster/ca.crt
+          jetstream:
+            enabled: true
+            fileStore:
+              maxSize: 8Gi
+              pvc:
+                size: 10Gi
+                storageClassName: zfs-generic-iscsi-csi
+          nats:
+            tls:
+              enabled: true
+              secretName: nats-server-tls
+              merge:
+                verify_and_map: true
+                ca_file: /etc/nats-client-ca/ca.crt
+          merge:
+            system_account: SYS
+            accounts:
+              SYS:
+                users:
+                  - user: CN=nats-admin
+              APP:
+                jetstream: enabled
+                users:
+                  - user: CN=nats-operator
+                  - user: CN=nats-lan-test
+                    permissions:
+                      publish: ["lantest.>"]
+                      subscribe: ["lantest.>", "_INBOX.>"]
+        container:
+          env:
+            GOMEMLIMIT: 900MiB
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          patch:
+            - op: add
+              path: /volumeMounts/-
+              value:
+                name: client-ca
+                mountPath: /etc/nats-client-ca
+        podTemplate:
+          topologySpreadConstraints:
+            kubernetes.io/hostname:
+              maxSkew: 1
+              whenUnsatisfiable: DoNotSchedule
+          patch:
+            - op: add
+              path: /spec/volumes/-
+              value:
+                name: client-ca
+                secret:
+                  secretName: nats-admin-tls
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        promExporter:
+          enabled: true
+          podMonitor:
+            enabled: true
+            merge:
+              metadata:
+                labels:
+                  release: prom
+        service:
+          merge:
+            metadata:
+              annotations:
+                external-dns.kubernetes.io/hostname: nats.k8s.somemissing.info
+        natsBox:
+          contexts:
+            default:
+              tls:
+                secretName: nats-admin-tls
+              merge:
+                url: nats://nats.k8s.somemissing.info:4222
+            app:
+              tls:
+                secretName: nats-operator-tls
+              merge:
+                url: nats://nats.k8s.somemissing.info:4222
