@@ -1,0 +1,195 @@
+# Unit tests for nats-alerts.yaml's PrometheusRule "nats-alerts".
+# Run: sh .ci/validate-prom-rules.sh
+rule_files: [monitoring/nats-alerts.yaml]
+evaluation_interval: 1m
+tests:
+  - name: three healthy servers with one leader are quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="nats/nats",pod="nats-0"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-1"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-2"}'
+        values: '1+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="nats-0",is_meta_leader="true"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="nats-0",is_meta_leader="false"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-2",server_id="S2",server_name="nats-2",meta_leader="nats-0",is_meta_leader="false"}'
+        values: '0+0x60'
+      - series: 'nats_server_total_message_bytes{job="nats/nats",pod="nats-0",server_name="nats-0"}'
+        values: '1000000000+0x60'
+      - series: 'nats_server_max_storage{job="nats/nats",pod="nats-0",server_name="nats-0"}'
+        values: '8589934592+0x60'
+    alert_rule_test:
+      - {eval_time: 45m, alertname: NatsTelemetryMissing, exp_alerts: []}
+      - {eval_time: 45m, alertname: NatsServerNotReporting, exp_alerts: []}
+      - {eval_time: 45m, alertname: NatsJetStreamDisabled, exp_alerts: []}
+      - {eval_time: 45m, alertname: NatsJetStreamMetaLeader, exp_alerts: []}
+      - {eval_time: 45m, alertname: NatsJetStreamStorageHigh, exp_alerts: []}
+
+  # No target discovered at all: count() of nothing is empty, so the rule
+  # relies on "or vector(0)" to alert.
+  - name: zero discovered targets raises telemetry missing only
+    interval: 1m
+    input_series:
+      - series: 'up{job="other"}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NatsTelemetryMissing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "0 of 3 NATS exporter targets are up."
+              description: "Prometheus scrapes fewer than three healthy NATS exporter targets for job nats/nats. A pod is down, the exporter sidecar is failing, or the PodMonitor found no targets. Check the pods in namespace nats."
+      - {eval_time: 15m, alertname: NatsServerNotReporting, exp_alerts: []}
+      - {eval_time: 15m, alertname: NatsJetStreamMetaLeader, exp_alerts: []}
+
+  - name: one target down raises telemetry missing
+    interval: 1m
+    input_series:
+      - series: 'up{job="nats/nats",pod="nats-0"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-1"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-2"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="nats-0",is_meta_leader="true"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="nats-0",is_meta_leader="false"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NatsTelemetryMissing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "2 of 3 NATS exporter targets are up."
+              description: "Prometheus scrapes fewer than three healthy NATS exporter targets for job nats/nats. A pod is down, the exporter sidecar is failing, or the PodMonitor found no targets. Check the pods in namespace nats."
+      - {eval_time: 15m, alertname: NatsServerNotReporting, exp_alerts: []}
+      - {eval_time: 15m, alertname: NatsJetStreamMetaLeader, exp_alerts: []}
+
+  - name: exporter up without server series raises server not reporting
+    interval: 1m
+    input_series:
+      - series: 'up{job="nats/nats",pod="nats-0"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-1"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-2"}'
+        values: '1+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="nats-0",is_meta_leader="true"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="nats-0",is_meta_leader="false"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - {eval_time: 15m, alertname: NatsTelemetryMissing, exp_alerts: []}
+      - eval_time: 15m
+        alertname: NatsServerNotReporting
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Only 2 NATS servers report JetStream data."
+              description: "An exporter target is up but its NATS server returns no JetStream data on the monitoring port. Check the nats container in each pod."
+
+  - name: no leader with healthy scrapes raises the leader alert only
+    interval: 1m
+    input_series:
+      - series: 'up{job="nats/nats",pod="nats-0"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-1"}'
+        values: '1+0x60'
+      - series: 'up{job="nats/nats",pod="nats-2"}'
+        values: '1+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="",is_meta_leader="false"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="",is_meta_leader="false"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-2",server_id="S2",server_name="nats-2",meta_leader="",is_meta_leader="false"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - {eval_time: 15m, alertname: NatsTelemetryMissing, exp_alerts: []}
+      - {eval_time: 15m, alertname: NatsServerNotReporting, exp_alerts: []}
+      - eval_time: 15m
+        alertname: NatsJetStreamMetaLeader
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "0 NATS servers claim the JetStream meta leader role; expected 1."
+              description: "JetStream telemetry is present, but the number of servers that report themselves as meta leader is not one. Zero means the cluster has no quorum; stream and consumer changes fail."
+
+  - name: two leaders raise the leader alert
+    interval: 1m
+    input_series:
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="nats-0",is_meta_leader="true"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="nats-1",is_meta_leader="true"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NatsJetStreamMetaLeader
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "2 NATS servers claim the JetStream meta leader role; expected 1."
+              description: "JetStream telemetry is present, but the number of servers that report themselves as meta leader is not one. Zero means the cluster has no quorum; stream and consumer changes fail."
+
+  # The exporter sets is_meta_leader="true" with an empty meta_leader when a
+  # server reports no meta group. That server must not count as a leader.
+  - name: server with no meta group beside a real leader is quiet
+    interval: 1m
+    input_series:
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="nats-0",is_meta_leader="true"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-2",server_id="S2",server_name="nats-2",meta_leader="",is_meta_leader="true"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - {eval_time: 15m, alertname: NatsJetStreamMetaLeader, exp_alerts: []}
+
+  - name: server with no meta group does not mask a leader outage
+    interval: 1m
+    input_series:
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-0",server_id="S0",server_name="nats-0",meta_leader="",is_meta_leader="false"}'
+        values: '0+0x60'
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-2",server_id="S2",server_name="nats-2",meta_leader="",is_meta_leader="true"}'
+        values: '0+0x60'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NatsJetStreamMetaLeader
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "0 NATS servers claim the JetStream meta leader role; expected 1."
+              description: "JetStream telemetry is present, but the number of servers that report themselves as meta leader is not one. Zero means the cluster has no quorum; stream and consumer changes fail."
+
+  - name: jetstream disabled on one server
+    interval: 1m
+    input_series:
+      - series: 'nats_server_jetstream_disabled{job="nats/nats",pod="nats-1",server_id="S1",server_name="nats-1",meta_leader="",is_meta_leader="true"}'
+        values: '1+0x60'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: NatsJetStreamDisabled
+        exp_alerts:
+          - exp_labels: {severity: critical, job: nats/nats, pod: nats-1, server_id: S1, server_name: nats-1, is_meta_leader: "true"}
+            exp_annotations:
+              summary: "JetStream is disabled on NATS server nats-1."
+              description: "The server runs without JetStream, usually because the store directory is unusable. Check the pod log and its data volume."
+
+  - name: storage above 80 percent of the store limit
+    interval: 1m
+    input_series:
+      - series: 'nats_server_total_message_bytes{job="nats/nats",pod="nats-0",server_name="nats-0"}'
+        values: '7301444403+0x60' # 85% of 8Gi
+      - series: 'nats_server_max_storage{job="nats/nats",pod="nats-0",server_name="nats-0"}'
+        values: '8589934592+0x60'
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: NatsJetStreamStorageHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, job: nats/nats, pod: nats-0, server_name: nats-0}
+            exp_annotations:
+              summary: "JetStream message bytes exceed 80% of the configured store limit on nats-0."
+              description: "Message bytes are at 85% of the JetStream file store limit (max_file_store). This is the JetStream limit, not the filesystem; KubePersistentVolumeFillingUp covers the volume."

@@ -1,0 +1,177 @@
+# Unit tests for nats-alerts.yaml's PrometheusRule
+# "nats-client-cert-alerts-ext". Run: sh .ci/validate-prom-rules.sh
+# Two synthetic clients (dev-a, dev-b) show that no rule names a client.
+# The test clock starts at t=0; not_after values are (eval time + time left).
+rule_files: [monitoring/nats-client-cert-alerts-ext.yaml]
+evaluation_interval: 1m
+tests:
+  - name: two healthy clients are quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager-nats"}'
+        values: '1+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-a",condition="True"}'
+        values: '1+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-b",condition="True"}'
+        values: '1+0x300'
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h1:9100",cn="dev-a",file="/etc/nats/client.crt"}'
+        values: '3466800+0x300' # 3h eval + 40d
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h2:9100",cn="dev-b",file="/opt/app/nats.crt"}'
+        values: '3466800+0x300'
+      - series: 'nats_client_cert_exporter_last_run_timestamp_seconds{job="node-exporter",instance="h1:9100"}'
+        values: '0+60x300' # runs every minute
+      - series: 'nats_client_cert_exporter_errors{job="node-exporter",instance="h1:9100"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: NatsClientCertExpiry, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientCertExpiryCritical, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientCertExporterStale, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientCertExporterParseErrors, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientCertMetricsMissing, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientInventoryScrapeDown, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientInventoryMetricsMissing, exp_alerts: []}
+
+  - name: expiry thresholds apply to every client
+    interval: 1m
+    input_series:
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h1:9100",cn="dev-a",file="/etc/nats/client.crt"}'
+        values: '1735200+0x300' # 2h eval + 20d
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h2:9100",cn="dev-b",file="/opt/app/nats.crt"}'
+        values: '439200+0x300' # 2h eval + 5d
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: NatsClientCertExpiry
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: h1:9100, cn: dev-a, file: /etc/nats/client.crt}
+            exp_annotations:
+              summary: "NATS client certificate dev-a on h1:9100 expires in 20d 0h 0m 0s."
+              description: "The certificate installed at /etc/nats/client.crt for NATS user CN=dev-a has less than 21 days left. cert-manager renewed the Secret in namespace nats 30 days before expiry; copy tls.crt and tls.key from it to the host before the time above runs out."
+          - exp_labels: {severity: warning, job: node-exporter, instance: h2:9100, cn: dev-b, file: /opt/app/nats.crt}
+            exp_annotations:
+              summary: "NATS client certificate dev-b on h2:9100 expires in 5d 0h 0m 0s."
+              description: "The certificate installed at /opt/app/nats.crt for NATS user CN=dev-b has less than 21 days left. cert-manager renewed the Secret in namespace nats 30 days before expiry; copy tls.crt and tls.key from it to the host before the time above runs out."
+      - eval_time: 2h
+        alertname: NatsClientCertExpiryCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node-exporter, instance: h2:9100, cn: dev-b, file: /opt/app/nats.crt}
+            exp_annotations:
+              summary: "NATS client certificate dev-b on h2:9100 expires in 5d 0h 0m 0s."
+              description: "The certificate installed at /opt/app/nats.crt for NATS user CN=dev-b has less than 7 days left; the client loses its NATS connection when it lapses. Copy tls.crt and tls.key from the Secret in namespace nats to the host now."
+
+  # dev-a reports. dev-c never reported. dev-d is not issued yet
+  # (condition="True" has value 0) and is still expected.
+  - name: client that never reported and client not yet issued are both missing
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-a",condition="True"}'
+        values: '1+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-c",condition="True"}'
+        values: '1+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-d",condition="True"}'
+        values: '0+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-d",condition="Unknown"}'
+        values: '1+0x300'
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h1:9100",cn="dev-a",file="/etc/nats/client.crt"}'
+        values: '3466800+0x300'
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: NatsClientCertMetricsMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, name: nats-device-dev-c, cn: dev-c}
+            exp_annotations:
+              summary: "NATS device client dev-c exports no certificate metrics."
+              description: "Certificate nats-device-dev-c exists in namespace nats, but no host exports nats_client_cert_not_after_seconds with cn=\"dev-c\". Install or repair the exporter on the device, or decommission the client (revoke the NATS user first, then delete the Certificate)."
+          - exp_labels: {severity: warning, name: nats-device-dev-d, cn: dev-d}
+            exp_annotations:
+              summary: "NATS device client dev-d exports no certificate metrics."
+              description: "Certificate nats-device-dev-d exists in namespace nats, but no host exports nats_client_cert_not_after_seconds with cn=\"dev-d\". Install or repair the exporter on the device, or decommission the client (revoke the NATS user first, then delete the Certificate)."
+
+  # The device reports for an hour, then stops. The alert must still be
+  # active a day later (an "offset 1d" comparison would have cleared).
+  - name: client that stopped reporting stays missing
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-device-dev-a",condition="True"}'
+        values: '1+0x3000'
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h1:9100",cn="dev-a",file="/etc/nats/client.crt"}'
+        values: '9999999+0x60 stale'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: NatsClientCertMetricsMissing, exp_alerts: []}
+      - eval_time: 4h
+        alertname: NatsClientCertMetricsMissing
+        exp_alerts: &dev_a_missing
+          - exp_labels: {severity: warning, name: nats-device-dev-a, cn: dev-a}
+            exp_annotations:
+              summary: "NATS device client dev-a exports no certificate metrics."
+              description: "Certificate nats-device-dev-a exists in namespace nats, but no host exports nats_client_cert_not_after_seconds with cn=\"dev-a\". Install or repair the exporter on the device, or decommission the client (revoke the NATS user first, then delete the Certificate)."
+      - eval_time: 40h
+        alertname: NatsClientCertMetricsMissing
+        exp_alerts: *dev_a_missing
+
+  # No Certificate in the inventory: a host that still exports metrics for a
+  # decommissioned client raises nothing.
+  - name: decommissioned client is quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager-nats"}'
+        values: '1+0x300'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager-nats",namespace="nats",name="nats-server",condition="True"}'
+        values: '1+0x300'
+      - series: 'nats_client_cert_not_after_seconds{job="node-exporter",instance="h1:9100",cn="dev-a",file="/etc/nats/client.crt"}'
+        values: '3466800+0x300'
+    alert_rule_test:
+      - {eval_time: 3h, alertname: NatsClientCertMetricsMissing, exp_alerts: []}
+      - {eval_time: 3h, alertname: NatsClientInventoryMetricsMissing, exp_alerts: []}
+
+  - name: inventory scrape down
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager-nats"}'
+        values: '0+0x300'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: NatsClientInventoryScrapeDown
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "prometheus-ext cannot scrape cert-manager for the NATS device inventory."
+              description: "No healthy target for job cert-manager-nats. The device inventory is empty, so NatsClientCertMetricsMissing cannot fire for any device while this lasts."
+      - {eval_time: 1h, alertname: NatsClientInventoryMetricsMissing, exp_alerts: []}
+
+  - name: inventory scrape up with no certificate series
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager-nats"}'
+        values: '1+0x300'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: NatsClientInventoryScrapeDown, exp_alerts: []}
+      - eval_time: 1h
+        alertname: NatsClientInventoryMetricsMissing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "The NATS device inventory scrape returns no certificate series."
+              description: "Job cert-manager-nats is up, but no certmanager_certificate_ready_status series for namespace nats arrive. That namespace always holds certificates, so the relabel rule or the metric name is wrong. NatsClientCertMetricsMissing cannot fire while this lasts."
+
+  - name: stale exporter and parse errors
+    interval: 1m
+    input_series:
+      - series: 'nats_client_cert_exporter_last_run_timestamp_seconds{job="node-exporter",instance="h1:9100"}'
+        values: '0+0x400' # ran once at t=0, never again
+      - series: 'nats_client_cert_exporter_errors{job="node-exporter",instance="h1:9100"}'
+        values: '2+0x400'
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: NatsClientCertExporterStale
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: h1:9100}
+            exp_annotations:
+              summary: "NATS client certificate exporter on h1:9100 last ran 5h 0m 0s ago."
+              description: "The exporter must run at least hourly. Its metrics are frozen, so the expiry alerts for this host are not trustworthy. Check the cron job on the host."
+      - eval_time: 5h
+        alertname: NatsClientCertExporterParseErrors
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node-exporter, instance: h1:9100}
+            exp_annotations:
+              summary: "NATS client certificate exporter on h1:9100 failed to parse 2 file(s)."
+              description: "A certificate file is unreadable or not valid PEM, so it exports no expiry series. Run the exporter by hand on the host to see which file."

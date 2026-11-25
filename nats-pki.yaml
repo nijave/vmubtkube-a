@@ -1,0 +1,189 @@
+# PKI for the NATS cluster (application.nats.yaml).
+# Design: docs/superpowers/specs/2026-11-25-nats-jetstream-design.md
+#
+# Three trust chains, on purpose:
+#   server cert  <- Let's Encrypt. Clients verify it with system roots, so
+#                   every client must dial nats.k8s.somemissing.info.
+#   client certs <- nats-ca (ClusterIssuer). The ONLY CA the client listener
+#                   trusts. A NATS user is "CN=<commonName>".
+#   route certs  <- nats-route-ca (Issuer, this namespace only). Separate so
+#                   a client certificate can never open a server route.
+#
+# Trust assumption: anyone who can create or patch a Certificate or
+# CertificateRequest on nats-ca can become any NATS user, including
+# nats-admin. Only cluster admins may hold that permission (checked before
+# rollout; re-check before delegating issuance to anyone).
+#
+# Both roots set an explicit commonName: a self-signed certificate with no
+# subject also has an empty issuer DN.
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: nats-ca-selfsigned
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: nats-client-ca
+  secretName: nats-ca-tls
+  duration: 87660h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: nats-ca-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: nats-ca
+spec:
+  ca:
+    secretName: nats-ca-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: nats-route-ca-selfsigned
+  namespace: nats
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-route-ca
+  namespace: nats
+spec:
+  isCA: true
+  commonName: nats-route-ca
+  secretName: nats-route-ca-tls
+  duration: 87660h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: nats-route-ca-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: nats-route-ca
+  namespace: nats
+spec:
+  ca:
+    secretName: nats-route-ca-tls
+---
+# Client listener (4222). Let's Encrypt cannot sign in-cluster names, so this
+# is the only name any client may use.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-server
+  namespace: nats
+spec:
+  secretName: nats-server-tls
+  commonName: &cn nats.k8s.somemissing.info
+  dnsNames:
+    - *cn
+  issuerRef:
+    kind: ClusterIssuer
+    name: cert-manager-webhook-dnsimple-production
+---
+# Route listener (6222), server-to-server mTLS. The wildcards cover
+# nats-N.nats-headless in every DNS form; the chart dials the FQDN.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-route
+  namespace: nats
+spec:
+  secretName: nats-route-tls
+  dnsNames:
+    - "*.nats-headless"
+    - "*.nats-headless.nats"
+    - "*.nats-headless.nats.svc"
+    - "*.nats-headless.nats.svc.cluster.local"
+  usages:
+    - server auth
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: Issuer
+    name: nats-route-ca
+    group: cert-manager.io
+---
+# System account user. nats-box context "default". The NATS server pods also
+# mount ONLY the ca.crt key of this secret as the client-verification CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-admin
+  namespace: nats
+spec:
+  secretName: nats-admin-tls
+  commonName: nats-admin
+  usages:
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: ClusterIssuer
+    name: nats-ca
+    group: cert-manager.io
+---
+# Full access inside the APP account: stream administration and tests.
+# nats-box context "app".
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-operator
+  namespace: nats
+spec:
+  secretName: nats-operator-tls
+  commonName: nats-operator
+  usages:
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: ClusterIssuer
+    name: nats-ca
+    group: cert-manager.io
+---
+# TEMPORARY acceptance-test identity, restricted like a device. Removed by
+# the decommissioning procedure once the rollout checks pass. Deliberately
+# not named nats-device-*: it must stay out of the device alert inventory.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nats-lan-test
+  namespace: nats
+spec:
+  secretName: nats-lan-test-tls
+  commonName: nats-lan-test
+  usages:
+    - client auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: ClusterIssuer
+    name: nats-ca
+    group: cert-manager.io

@@ -101,6 +101,23 @@ stringData:
       static_configs:
       - targets:
         - localhost:9090
+    # Device inventory for nats-alerts.yaml (NatsClientCertMetricsMissing):
+    # prometheus-ext evaluates the client certificate rules but otherwise
+    # scrapes only hosts, so it needs cert-manager's view of the nats
+    # namespace to know which device clients should be reporting. The
+    # relabel rule keeps only certificate series for namespace nats; the
+    # cluster-wide cert-manager alerts stay with the main Prometheus
+    # (cert-manager-monitoring.yaml). A static target has no `namespace`
+    # target label, so cert-manager's own `namespace` label survives.
+    - job_name: cert-manager-nats
+      scrape_interval: 60s
+      static_configs:
+      - targets:
+        - cert-manager.cert-manager.svc.cluster.local.:9402
+      metric_relabel_configs:
+      - source_labels: [__name__, namespace]
+        regex: certmanager_certificate_.*;nats
+        action: keep
     - job_name: node-exporter
       scrape_interval: 10s
       static_configs:
