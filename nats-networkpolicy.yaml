@@ -1,0 +1,45 @@
+# Ingress policy for the NATS server pods (not nats-box).
+#
+#   4222 clients     anywhere; every client authenticates with a certificate
+#   6222 routes      NATS server pods only
+#   7777 exporter    Prometheus in monitoring
+#   8222 monitoring  nobody. NATS monitoring has no authentication, the pod
+#                    listens on its pod IP, and the chart also publishes 8222
+#                    on nats-headless. The in-pod exporter uses localhost.
+#
+# Kubelet probes on 8222 still work: Calico always allows traffic from a node
+# to its own pods (same reliance as otel-agent-trace-connector.yaml).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nats
+  namespace: nats
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nats
+      app.kubernetes.io/component: nats
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 4222
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nats
+              app.kubernetes.io/component: nats
+      ports:
+        - protocol: TCP
+          port: 6222
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 7777
