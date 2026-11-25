@@ -88,3 +88,123 @@ spec:
               JetStream file store limit (max_file_store). This is the JetStream
               limit, not the filesystem; KubePersistentVolumeFillingUp covers
               the volume.
+---
+# Client certificate alerts, evaluated by prometheus-ext (hosts outside
+# Kubernetes). Built only on the client certificate metric contract in the
+# design doc, so one rule set covers every client; no rule names a host.
+#
+# Identity is the `cn` label alone (= certificate commonName = NATS user
+# without "CN="). `file` is informational.
+#
+# The two expiry alerts carry seconds remaining as their value. The other
+# alerts have no expiry value and state no deadline.
+#
+# Inventory for NatsClientCertMetricsMissing: every Certificate named
+# nats-device-<cn> in namespace nats, from the cert-manager-nats scrape job
+# in prometheus-ext.yaml. If that scrape breaks, the inventory is empty and
+# the missing-metrics alert goes quiet; the two NatsClientInventory* alerts
+# guard that.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nats-client-cert-alerts-ext
+  namespace: monitoring
+  labels:
+    prometheus: ext
+spec:
+  groups:
+    - name: nats-client-certs
+      rules:
+        - alert: NatsClientCertExpiry
+          expr: nats_client_cert_not_after_seconds - time() < 21 * 86400
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS client certificate {{ $labels.cn }} on {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+            description: >-
+              The certificate installed at {{ $labels.file }} for NATS user
+              CN={{ $labels.cn }} has less than 21 days left. cert-manager
+              renewed the Secret in namespace nats 30 days before expiry; copy
+              tls.crt and tls.key from it to the host before the time above
+              runs out.
+        - alert: NatsClientCertExpiryCritical
+          expr: nats_client_cert_not_after_seconds - time() < 7 * 86400
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "NATS client certificate {{ $labels.cn }} on {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
+            description: >-
+              The certificate installed at {{ $labels.file }} for NATS user
+              CN={{ $labels.cn }} has less than 7 days left; the client loses
+              its NATS connection when it lapses. Copy tls.crt and tls.key from
+              the Secret in namespace nats to the host now.
+        - alert: NatsClientCertExporterStale
+          expr: time() - nats_client_cert_exporter_last_run_timestamp_seconds > 3 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS client certificate exporter on {{ $labels.instance }} last ran {{ $value | humanizeDuration }} ago."
+            description: >-
+              The exporter must run at least hourly. Its metrics are frozen, so
+              the expiry alerts for this host are not trustworthy. Check the
+              cron job on the host.
+        - alert: NatsClientCertExporterParseErrors
+          expr: nats_client_cert_exporter_errors > 0
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS client certificate exporter on {{ $labels.instance }} failed to parse {{ $value }} file(s)."
+            description: >-
+              A certificate file is unreadable or not valid PEM, so it exports
+              no expiry series. Run the exporter by hand on the host to see
+              which file.
+        - alert: NatsClientCertMetricsMissing
+          # Inventory = every Certificate named nats-device-<cn> in namespace
+          # nats, ready or not ("group by (name)" ignores value and condition).
+          expr: >-
+            label_replace(
+              group by (name) (certmanager_certificate_ready_status{namespace="nats",name=~"nats-device-.+"}),
+              "cn", "$1", "name", "nats-device-(.+)"
+            )
+            unless on (cn) nats_client_cert_not_after_seconds
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "NATS device client {{ $labels.cn }} exports no certificate metrics."
+            description: >-
+              Certificate {{ $labels.name }} exists in namespace nats, but no
+              host exports nats_client_cert_not_after_seconds with
+              cn="{{ $labels.cn }}". Install or repair the exporter on the
+              device, or decommission the client (revoke the NATS user first,
+              then delete the Certificate).
+        - alert: NatsClientInventoryScrapeDown
+          expr: absent(up{job="cert-manager-nats"} == 1)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "prometheus-ext cannot scrape cert-manager for the NATS device inventory."
+            description: >-
+              No healthy target for job cert-manager-nats. The device inventory
+              is empty, so NatsClientCertMetricsMissing cannot fire for any
+              device while this lasts.
+        - alert: NatsClientInventoryMetricsMissing
+          expr: >-
+            (count(up{job="cert-manager-nats"} == 1) > 0)
+            unless on() (count(certmanager_certificate_ready_status{namespace="nats"}) > 0)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The NATS device inventory scrape returns no certificate series."
+            description: >-
+              Job cert-manager-nats is up, but no
+              certmanager_certificate_ready_status series for namespace nats
+              arrive. That namespace always holds certificates, so the relabel
+              rule or the metric name is wrong. NatsClientCertMetricsMissing
+              cannot fire while this lasts.
