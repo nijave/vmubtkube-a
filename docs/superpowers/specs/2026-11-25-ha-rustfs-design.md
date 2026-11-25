@@ -68,9 +68,12 @@ happens next, and the two cases differ:
   may have lost only its network, with rustfs and every other workload on it
   still running and their zvols still mounted. Releasing a pod identity then
   lets a replacement attach the same zvol from another node, and two writers
-  corrupt it. The only accepted fence is the VM powered off at the hypervisor
-  and left off. A closed iSCSI session on the NAS does not count, because a
-  partitioned VM can log back in later. Blocking one LUN on the NAS does not
+  corrupt it. The only accepted fence is the machine powered off and left
+  off. The five workers are physical mini PCs with no remote power control,
+  so someone confirms this at the hardware: no power light, or the plug
+  pulled. A failed ping does not count, because a partitioned node also
+  fails it. A closed iSCSI session on the NAS does not count, because a
+  partitioned node can log back in later. Blocking one LUN on the NAS does not
   count either: the recovery step below detaches every volume on the node,
   not only the rustfs one.
 
@@ -88,7 +91,8 @@ hours:
 
 Procedure for a node that will not return, in order:
 
-1. Confirm at the hypervisor that the VM is off, and keep it off until step 6.
+1. Confirm at the hardware that the machine is off, and keep it off until
+   step 6.
 2. Taint the node `node.kubernetes.io/out-of-service=nodeshutdown:NoExecute`.
    This is the Kubernetes path for a failed node: it deletes the stuck pods
    and force-detaches their volumes without waiting for kubelet. It applies
@@ -100,11 +104,11 @@ Procedure for a node that will not return, in order:
 4. If the replacement still waits on attachment after 10 minutes, read the
    CSI controller log before doing anything else. Delete the old
    VolumeAttachment by hand only when that log shows the detach cannot finish
-   and the VM is still off.
+   and the machine is still off.
 5. Confirm the same PVC is the one attached, four peers are online, and the
    drive heals.
-6. Remove the taint before powering the VM back on, or after deleting the
-   Node object if the VM will not come back.
+6. Remove the taint before powering the machine back on, or after deleting
+   the Node object if the machine will not come back.
 
 The README section records the fencing rule and this procedure.
 
@@ -491,7 +495,7 @@ waits for four Ready pods and a finished heal before the next one starts.
      new UID mounts the same PVC on the spare without a manual
      VolumeAttachment delete, four peers come online, and the drive heals.
      Record the time from taint to four peers.
-   - Powering the VM back on needs the hypervisor, so this test needs you or
-     access to `ubthv01`.
+   - The workers are physical, so powering the machine back on needs you at
+     the hardware.
 10. Metrics visible in Thanos for all four pods; each new alert fires in a
     forced condition and clears; the rule unit tests pass in CI.
