@@ -129,6 +129,15 @@ spec:
               annotations:
                 external-dns.kubernetes.io/hostname: nats.k8s.somemissing.info
         natsBox:
+          # argocd-cm ignores .data/.stringData on every Secret that lacks
+          # this annotation (application.argocd.yaml). Without it the first
+          # sync creates the contexts Secret and later edits never apply,
+          # while the app still reports Synced.
+          contextsSecret:
+            merge:
+              metadata:
+                annotations:
+                  k8s.somemissing.info/argocd-manage-secret-data: "true"
           contexts:
             default:
               tls:

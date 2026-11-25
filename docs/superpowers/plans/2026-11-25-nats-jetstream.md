@@ -23,6 +23,8 @@
 - Workload users get no `$JS.API.>` permission.
 - Service annotation key: `external-dns.kubernetes.io/hostname` (GA prefix, not `alpha`).
 - PrometheusRule labels: `release: prom` for the main Prometheus, `prometheus: ext` for `prometheus-ext`.
+- Stage a new file with `git add <path>` before running any `.ci/validate*.sh` script. The validators list files with `git ls-files` and skip untracked ones.
+- A chart-rendered Secret needs the annotation `k8s.somemissing.info/argocd-manage-secret-data: "true"`, or ArgoCD ignores later changes to its data.
 - Git: work on branch `nats-jetstream`, stage explicit paths only (no `git add -A` or `git add .`), conventional-commit subjects.
 - ArgoCD deploys from `main`. Nothing reaches the cluster until the user merges a PR; do not merge or push to `main` yourself.
 - Do not print private keys. Commands that read `tls.key` write it to a file or a pipe, never to the terminal.
@@ -904,6 +906,15 @@ spec:
               annotations:
                 external-dns.kubernetes.io/hostname: nats.k8s.somemissing.info
         natsBox:
+          # argocd-cm ignores .data/.stringData on every Secret that lacks
+          # this annotation (application.argocd.yaml). Without it the first
+          # sync creates the contexts Secret and later edits never apply,
+          # while the app still reports Synced.
+          contextsSecret:
+            merge:
+              metadata:
+                annotations:
+                  k8s.somemissing.info/argocd-manage-secret-data: "true"
           contexts:
             default:
               tls:
