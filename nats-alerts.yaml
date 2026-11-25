@@ -1,0 +1,90 @@
+# Alerts for the NATS JetStream cluster (application.nats.yaml).
+#
+# Every expression is scoped to job="nats/nats" (the chart's PodMonitor).
+# "or vector(0)" turns "no series" into 0 so zero discovered targets alerts
+# instead of evaluating to nothing.
+#
+# Telemetry vs servers vs leader are separate alerts:
+#   NatsTelemetryMissing     scrapes are failing or no target was discovered
+#   NatsServerNotReporting   exporter answers, its NATS server does not
+#   NatsJetStreamMetaLeader  telemetry is fine, leader count is not 1
+#
+# A server counts as meta leader only with is_meta_leader="true", a non-empty
+# meta_leader and JetStream enabled: exporter 0.20.3 also sets
+# is_meta_leader="true" (with meta_leader empty) on a server that reports no
+# meta group at all.
+#
+# NatsJetStreamStorageHigh is about the JetStream store limit
+# (max_file_store), not the filesystem; KubePersistentVolumeFillingUp covers
+# the volume.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nats-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+    - name: nats
+      rules:
+        - alert: NatsTelemetryMissing
+          expr: (count(up{job="nats/nats"} == 1) or vector(0)) < 3
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} of 3 NATS exporter targets are up."
+            description: >-
+              Prometheus scrapes fewer than three healthy NATS exporter targets
+              for job nats/nats. A pod is down, the exporter sidecar is failing,
+              or the PodMonitor found no targets. Check the pods in namespace nats.
+        - alert: NatsServerNotReporting
+          expr: >-
+            (count(count by (server_id) (nats_server_jetstream_disabled{job="nats/nats"})) or vector(0))
+            < (count(up{job="nats/nats"} == 1) or vector(0))
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Only {{ $value }} NATS servers report JetStream data."
+            description: >-
+              An exporter target is up but its NATS server returns no JetStream
+              data on the monitoring port. Check the nats container in each pod.
+        - alert: NatsJetStreamDisabled
+          expr: nats_server_jetstream_disabled{job="nats/nats"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "JetStream is disabled on NATS server {{ $labels.server_name }}."
+            description: >-
+              The server runs without JetStream, usually because the store
+              directory is unusable. Check the pod log and its data volume.
+        - alert: NatsJetStreamMetaLeader
+          expr: >-
+            ((count(nats_server_jetstream_disabled{job="nats/nats",is_meta_leader="true",meta_leader!=""} == 0) or vector(0)) != 1)
+            and on() (count(nats_server_jetstream_disabled{job="nats/nats"}) >= 1)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $value }} NATS servers claim the JetStream meta leader role; expected 1."
+            description: >-
+              JetStream telemetry is present, but the number of servers that
+              report themselves as meta leader is not one. Zero means the
+              cluster has no quorum; stream and consumer changes fail.
+        - alert: NatsJetStreamStorageHigh
+          expr: >-
+            nats_server_total_message_bytes{job="nats/nats"}
+            / (nats_server_max_storage{job="nats/nats"} > 0) > 0.8
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "JetStream message bytes exceed 80% of the configured store limit on {{ $labels.server_name }}."
+            description: >-
+              Message bytes are at {{ $value | humanizePercentage }} of the
+              JetStream file store limit (max_file_store). This is the JetStream
+              limit, not the filesystem; KubePersistentVolumeFillingUp covers
+              the volume.
