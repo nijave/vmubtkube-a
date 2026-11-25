@@ -1,0 +1,83 @@
+# Alerts for the HA rustfs instance (namespace rustfs, application.rustfs.yaml).
+# Every rustfs_* selector carries namespace="rustfs": the CI cache in namespace
+# woodpecker exports the same metric names, and rustfs-alerts.yaml scopes its
+# rules the other way. Pod liveness and restarts come from kube-state-metrics,
+# so they keep working when the rustfs-metrics collector is down. Design:
+# docs/superpowers/specs/2026-11-25-ha-rustfs-design.md
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rustfs-ha
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+    - name: rustfs-ha
+      rules:
+        - alert: RustfsHAPodsNotReady
+          expr: kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"} < 4
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: HA rustfs has fewer than 4 ready pods
+            description: >-
+              {{ $value }} of 4 rustfs pods are ready. The service still reads
+              and writes on 3, but a second loss stops writes. If a node is
+              down for good, follow the failed-node procedure in README.md.
+        - alert: RustfsHAWriteQuorumLost
+          expr: kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"} < 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: HA rustfs has lost write quorum
+            description: >-
+              {{ $value }} of 4 rustfs pods are ready; writes need 3.
+        - alert: RustfsHARestartLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="rustfs", container="rustfs"}[30m]) > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: "HA rustfs pod {{ $labels.pod }} is restarting repeatedly"
+        - alert: RustfsHADriveOffline
+          expr: max by (namespace) (rustfs_cluster_health_drives_offline_count{namespace="rustfs"}) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: HA rustfs reports an offline drive
+            description: >-
+              {{ $value }} of 4 drives are offline according to rustfs itself.
+        - alert: RustfsHACapacity
+          # Usable used over usable total, both from the same reporting pod.
+          # Never divide by rustfs_cluster_capacity_raw_total_bytes: at EC:2
+          # that ratio tops out near 0.5 and this alert would never fire.
+          expr: >-
+            max by (namespace) (
+              rustfs_cluster_capacity_used_bytes{namespace="rustfs"}
+              /
+              rustfs_cluster_capacity_usable_total_bytes{namespace="rustfs"}
+            ) > 0.8
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: HA rustfs is over 80% of its usable capacity
+            description: >-
+              Usable capacity is {{ $value | humanizePercentage }} full. Every
+              byte stored costs two on the shared NAS pool; expand all four
+              PVCs together or remove data.
+        - alert: RustfsHAMetricsMissing
+          expr: absent({__name__=~"rustfs_.*", namespace="rustfs"})
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: HA rustfs metrics have been missing for an hour
+            description: >-
+              No rustfs_* series from namespace rustfs. Check the
+              rustfs-metrics collector Deployment, its PodMonitor, and the
+              RUSTFS_OBS_* settings; drive and capacity alerts are blind
+              until this clears.
