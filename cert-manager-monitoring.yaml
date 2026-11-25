@@ -1,0 +1,101 @@
+# Scrape and alerts for cert-manager. Nothing scraped the controller before
+# NATS: its certificates (a Let's Encrypt server certificate and private-CA
+# route and client certificates) depend on renewals working, so a failed
+# renewal has to alert. The rules cover every Certificate in the cluster.
+#
+# honorLabels keeps cert-manager's own `namespace` label (the Certificate's
+# namespace). Without it Prometheus renames that label to exported_namespace
+# and `namespace` becomes "cert-manager" for every series.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+  labels:
+    release: prom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  podMetricsEndpoints:
+    - port: http-metrics
+      honorLabels: true
+---
+# cert-manager exports 0 for the renewal and expiry timestamps until a
+# certificate has its first issuance; the "> 0" filters keep a pending
+# certificate from reading as overdue since 1970. Pending issuance is the
+# readiness rule's job (Unknown = no Ready condition yet).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager-alerts
+  namespace: monitoring
+  labels:
+    release: prom
+spec:
+  groups:
+    - name: cert-manager
+      rules:
+        - alert: CertManagerCertificateNotReady
+          expr: certmanager_certificate_ready_status{condition=~"False|Unknown"} == 1
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} is not ready (Ready={{ $labels.condition }})."
+            description: >-
+              cert-manager has not issued or cannot renew this certificate.
+              Run `kubectl -n {{ $labels.namespace }} describe certificate
+              {{ $labels.name }}` and read the newest CertificateRequest and
+              Order events.
+        - alert: CertManagerRenewalOverdue
+          expr: time() - (certmanager_certificate_renewal_timestamp_seconds > 0) > 86400
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} renewal is {{ $value | humanizeDuration }} overdue."
+            description: >-
+              The renewal time passed more than a day ago and cert-manager
+              still serves the old certificate. The deadline is the
+              certificate's notAfter: read it with `kubectl -n
+              {{ $labels.namespace }} get certificate {{ $labels.name }} -o
+              jsonpath='{.status.notAfter}'`.
+        - alert: CertManagerCertificateExpiryCritical
+          expr: (certmanager_certificate_expiration_timestamp_seconds > 0) - time() < 3 * 86400
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | humanizeDuration }}."
+            description: >-
+              Less than 3 days of validity remain and renewal has not
+              succeeded. Whatever serves this certificate breaks when it
+              lapses.
+        - alert: CertManagerScrapeDown
+          expr: absent(up{job="cert-manager/cert-manager"} == 1)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Prometheus cannot scrape the cert-manager controller."
+            description: >-
+              No healthy target for job cert-manager/cert-manager. Certificate
+              alerts cannot fire while this lasts. Check the controller pod and
+              the cert-manager PodMonitor.
+        - alert: CertManagerCertificateMetricsMissing
+          # Name-agnostic on purpose (see rustfs-alerts.yaml): a renamed metric
+          # must not hide a scrape that returns nothing useful.
+          expr: >-
+            (count(up{job="cert-manager/cert-manager"} == 1) > 0)
+            unless on() (count({__name__=~"certmanager_certificate_.*"}) > 0)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cert-manager is scraped but exports no certificate series."
+            description: >-
+              The cert-manager target is up, yet no certmanager_certificate_*
+              series exist. Certificate alerts cannot fire while this lasts.
+              Check for a renamed metric or a relabel rule that drops them.

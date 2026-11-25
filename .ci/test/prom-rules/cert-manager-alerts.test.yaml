@@ -1,0 +1,127 @@
+# Unit tests for cert-manager-monitoring.yaml's PrometheusRule
+# "cert-manager-alerts". Run: sh .ci/validate-prom-rules.sh
+# The test clock starts at t=0; timestamps are (eval time + offset).
+rule_files: [monitoring/cert-manager-alerts.yaml]
+evaluation_interval: 1m
+tests:
+  - name: healthy certificate is quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager/cert-manager"}'
+        values: '1+0x200'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-server",condition="True"}'
+        values: '1+0x200'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-server",condition="False"}'
+        values: '0+0x200'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-server",condition="Unknown"}'
+        values: '0+0x200'
+      - series: 'certmanager_certificate_renewal_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-server"}'
+        values: '871200+0x200' # 2h eval + 10d
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-server"}'
+        values: '3463200+0x200' # 2h eval + 40d
+    alert_rule_test:
+      - {eval_time: 2h, alertname: CertManagerCertificateNotReady, exp_alerts: []}
+      - {eval_time: 2h, alertname: CertManagerRenewalOverdue, exp_alerts: []}
+      - {eval_time: 2h, alertname: CertManagerCertificateExpiryCritical, exp_alerts: []}
+      - {eval_time: 2h, alertname: CertManagerScrapeDown, exp_alerts: []}
+      - {eval_time: 2h, alertname: CertManagerCertificateMetricsMissing, exp_alerts: []}
+
+  - name: Ready=False fires not ready
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-route",condition="False"}'
+        values: '1+0x200'
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-route",condition="True"}'
+        values: '0+0x200'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertManagerCertificateNotReady
+        exp_alerts:
+          - exp_labels: {severity: warning, job: cert-manager/cert-manager, namespace: nats, name: nats-route, condition: "False"}
+            exp_annotations:
+              summary: "Certificate nats/nats-route is not ready (Ready=False)."
+              description: "cert-manager has not issued or cannot renew this certificate. Run `kubectl -n nats describe certificate nats-route` and read the newest CertificateRequest and Order events."
+
+  # A Certificate waiting for its first issuance: no Ready condition yet
+  # (Unknown=1) and cert-manager exports 0 for both timestamps. Only the
+  # readiness rule may fire; 0 must not read as "expired in 1970".
+  - name: pending first issuance fires not ready only
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_ready_status{job="cert-manager/cert-manager",namespace="nats",name="nats-new",condition="Unknown"}'
+        values: '1+0x2000'
+      - series: 'certmanager_certificate_renewal_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-new"}'
+        values: '0+0x2000'
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-new"}'
+        values: '0+0x2000'
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: CertManagerCertificateNotReady
+        exp_alerts:
+          - exp_labels: {severity: warning, job: cert-manager/cert-manager, namespace: nats, name: nats-new, condition: Unknown}
+            exp_annotations:
+              summary: "Certificate nats/nats-new is not ready (Ready=Unknown)."
+              description: "cert-manager has not issued or cannot renew this certificate. Run `kubectl -n nats describe certificate nats-new` and read the newest CertificateRequest and Order events."
+      - {eval_time: 30h, alertname: CertManagerRenewalOverdue, exp_alerts: []}
+      - {eval_time: 30h, alertname: CertManagerCertificateExpiryCritical, exp_alerts: []}
+
+  - name: renewal overdue by more than a day
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_renewal_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-server"}'
+        values: '3600+0x2000' # renewal was due at t=1h
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-server"}'
+        values: '540000+0x2000' # 30h eval + 5d
+    alert_rule_test:
+      - eval_time: 30h
+        alertname: CertManagerRenewalOverdue
+        exp_alerts:
+          - exp_labels: {severity: warning, job: cert-manager/cert-manager, namespace: nats, name: nats-server}
+            exp_annotations:
+              summary: "Certificate nats/nats-server renewal is 1d 5h 0m 0s overdue."
+              description: "The renewal time passed more than a day ago and cert-manager still serves the old certificate. The deadline is the certificate's notAfter: read it with `kubectl -n nats get certificate nats-server -o jsonpath='{.status.notAfter}'`."
+      - {eval_time: 30h, alertname: CertManagerCertificateExpiryCritical, exp_alerts: []}
+
+  - name: under three days to expiry is critical
+    interval: 1m
+    input_series:
+      - series: 'certmanager_certificate_expiration_timestamp_seconds{job="cert-manager/cert-manager",namespace="nats",name="nats-server"}'
+        values: '180000+0x200' # 2h eval + 2d
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertManagerCertificateExpiryCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, job: cert-manager/cert-manager, namespace: nats, name: nats-server}
+            exp_annotations:
+              summary: "Certificate nats/nats-server expires in 2d 0h 0m 0s."
+              description: "Less than 3 days of validity remain and renewal has not succeeded. Whatever serves this certificate breaks when it lapses."
+
+  - name: scrape down
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager/cert-manager"}'
+        values: '0+0x200'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: CertManagerScrapeDown
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "Prometheus cannot scrape the cert-manager controller."
+              description: "No healthy target for job cert-manager/cert-manager. Certificate alerts cannot fire while this lasts. Check the controller pod and the cert-manager PodMonitor."
+      - {eval_time: 1h, alertname: CertManagerCertificateMetricsMissing, exp_alerts: []}
+
+  - name: scrape up with no certificate series
+    interval: 1m
+    input_series:
+      - series: 'up{job="cert-manager/cert-manager"}'
+        values: '1+0x200'
+    alert_rule_test:
+      - {eval_time: 1h, alertname: CertManagerScrapeDown, exp_alerts: []}
+      - eval_time: 1h
+        alertname: CertManagerCertificateMetricsMissing
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "cert-manager is scraped but exports no certificate series."
+              description: "The cert-manager target is up, yet no certmanager_certificate_* series exist. Certificate alerts cannot fire while this lasts. Check for a renamed metric or a relabel rule that drops them."
