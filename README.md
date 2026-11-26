@@ -168,9 +168,11 @@ delete and multipart calls have their own thresholds.
 A drain or kured reboot moves the pod to the spare worker and reattaches its
 zvol; the PDB allows the next eviction only after that pod is Ready. A crashed
 node is different: its pod stays `Terminating` on the dead node and nothing
-replaces it. The service keeps reading and writing on three pods. Clients see
-write errors for under a minute after a crash (43 seconds in the rehearsal;
-reads did not fail), then recover without action.
+replaces it. The service keeps reading and writing on three pods. Expect
+request errors for up to two minutes after a crash, until Kubernetes takes
+the dead pod out of the Service; clients with retries then recover without
+action. In the rehearsal an in-cluster client saw write errors for 43
+seconds and no read errors. LAN clients were not measured.
 
 ### A node that will not come back
 
@@ -208,23 +210,38 @@ restart.
 
 Rotating the private CA is manual and causes a full outage (22 seconds in
 the rehearsal). cert-manager does not reissue
-leaves when a CA changes.
+leaves when a CA changes. Save the script below to a file and run it; it
+stops at the first failed check. `cmctl` is the cert-manager CLI.
 
 ```sh
-fp() { kubectl -n rustfs get secret "$1" -o jsonpath="{.data.$2}" | base64 -d | openssl x509 -noout -fingerprint -sha256; }
-OLD=$(fp rustfs-peer-ca 'tls\.crt')
+#!/bin/sh
+# Rotate the rustfs peer CA. Stops at the first failed check.
+set -eu
+fp() { kubectl -n rustfs get secret "$1" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d | openssl x509 -noout -fingerprint -sha256 2>/dev/null; }
+# Run a check every 2 seconds until it passes; give up after 2 minutes.
+poll() { n=0; until "$@"; do n=$((n+1)); [ "$n" -lt 60 ] || { echo "STOP: timed out waiting for: $*"; exit 1; }; sleep 2; done; }
+
+OLD=$(fp rustfs-peer-ca 'tls\.crt'); [ -n "$OLD" ] || { echo "STOP: cannot read the current CA"; exit 1; }
 kubectl -n rustfs delete secret rustfs-peer-ca
-kubectl -n rustfs wait certificate/rustfs-peer-ca --for=condition=Ready --timeout=2m
-NEW=$(fp rustfs-peer-ca 'tls\.crt'); [ "$OLD" != "$NEW" ] || echo "STOP: CA did not change"
+new_ca() { NEW=$(fp rustfs-peer-ca 'tls\.crt'); [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; }
+poll new_ca
+
+# cert-manager does not reissue the leaf by itself. The Certificate stays
+# Ready while it reissues, so wait on the Secret content, not the condition.
 cmctl renew -n rustfs rustfs-peer
-kubectl -n rustfs wait certificate/rustfs-peer --for=condition=Ready --timeout=2m
-# Verify against the CA Secret, not the leaf Secret's own ca.crt.
-kubectl -n rustfs get secret rustfs-peer-ca -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/ca.pem
-kubectl -n rustfs get secret rustfs-peer -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl verify -CAfile /tmp/ca.pem /dev/stdin
-[ "$(fp rustfs-peer 'ca\.crt')" = "$NEW" ] || echo "STOP: leaf Secret still trusts the old CA"
+leaf_trusts_new_ca() { [ "$(fp rustfs-peer 'ca\.crt')" = "$NEW" ]; }
+poll leaf_trusts_new_ca
+
+# Verify the leaf against the CA Secret, not the leaf Secret's own ca.crt.
+kubectl -n rustfs get secret rustfs-peer-ca -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/rustfs-ca.pem
+kubectl -n rustfs get secret rustfs-peer -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/rustfs-leaf.pem
+openssl verify -CAfile /tmp/rustfs-ca.pem /tmp/rustfs-leaf.pem
+
 # All four together: a pod on the new CA and one on the old reject each other.
 kubectl -n rustfs delete pod -l app.kubernetes.io/name=rustfs
+sleep 5
 kubectl -n rustfs rollout status statefulset/rustfs --timeout=10m
+kubectl -n rustfs wait pod -l app.kubernetes.io/name=rustfs --for=condition=Ready --timeout=5m
 ```
 
 ### Upgrades
