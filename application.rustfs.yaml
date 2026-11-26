@@ -308,7 +308,7 @@ spec:
                   containers:
                     - name: otel-collector
                       # renovate: datasource=docker depName=otel/opentelemetry-collector-contrib
-                      image: otel/opentelemetry-collector-contrib:0.165.0
+                      image: otel/opentelemetry-collector-contrib:0.166.0
                       args:
                         - --config=/etc/otelcol/collector.yaml
                       ports:
