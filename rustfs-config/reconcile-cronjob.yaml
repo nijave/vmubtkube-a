@@ -1,0 +1,64 @@
+# Periodic reconcile: puts back a user, policy or consumer Secret that was
+# changed or deleted outside git (console edits, a recreated namespace).
+# concurrencyPolicy Forbid; the OpenTofu state lock also guards against
+# overlap with the Sync-hook Job.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rustfs-config-reconcile
+spec:
+  schedule: "17 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: rustfs-config-reconciler
+          containers:
+            - name: reconcile
+              # renovate: datasource=docker depName=ghcr.io/opentofu/opentofu
+              image: ghcr.io/opentofu/opentofu:1.13.10
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eux
+                  mkdir -p /tofu/plugin-cache /tofu/data
+                  tofu -chdir=/config init -input=false -no-color -lockfile=readonly
+                  tofu -chdir=/config apply -input=false -auto-approve -no-color
+              env:
+                - name: TF_DATA_DIR
+                  value: /tofu/data
+                - name: TF_PLUGIN_CACHE_DIR
+                  value: /tofu/plugin-cache
+                - name: MINIO_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: rustfs-root
+                      key: RUSTFS_ACCESS_KEY
+                - name: MINIO_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: rustfs-root
+                      key: RUSTFS_SECRET_KEY
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: tofu-cache
+                  mountPath: /tofu
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: "1", memory: 512Mi }
+          volumes:
+            - name: config
+              configMap:
+                name: rustfs-config-tofu-config
+            - name: tofu-cache
+              persistentVolumeClaim:
+                claimName: rustfs-config-tofu-cache

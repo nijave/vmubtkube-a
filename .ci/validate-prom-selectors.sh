@@ -131,7 +131,7 @@ echo "--- hand-written manifests"
 # destination namespace, so a missing namespace on a namespaced resource is
 # itself an error, caught by the no-namespace check below.
 for f in $(git ls-files '*.yaml' \
-  | grep -vE '^(vendored/|fluentbit/|homelab-pki/|docs/|\.|renovate\.json|vendir)' \
+  | grep -vE '^(vendored/|fluentbit/|homelab-pki/|rustfs-config/|docs/|\.|renovate\.json|vendir)' \
   | grep -v 'kustomization\.yaml'); do
   collect_stream "$f" "" "$f"
 done

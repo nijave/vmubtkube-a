@@ -1,0 +1,45 @@
+# rustfs-config-reconciler: the OpenTofu kubernetes-backend state Secret and
+# lock Lease in namespace rustfs, and read access to rustfs-root (the provider
+# gets it through secretKeyRef; the Role covers state only).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rustfs-config-reconciler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rustfs-config-reconciler
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rustfs-config-reconciler
+subjects:
+  - kind: ServiceAccount
+    name: rustfs-config-reconciler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rustfs-config-reconciler
+---
+# Consumer credentials go into each consumer's own namespace as Secret
+# s3-<name>. Nothing here grants that: each consumer namespace binds this
+# ClusterRole to the reconciler with its own RoleBinding (README.md), so write
+# access exists only where a consumer was declared.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rustfs-config-secret-writer
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

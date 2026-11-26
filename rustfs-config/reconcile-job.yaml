@@ -1,0 +1,60 @@
+# Runs on every child-app sync: a .tf/lock change (new ConfigMap hash) or
+# image tag bump re-renders the Job and Argo re-runs the hook.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rustfs-config-reconcile
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: rustfs-config-reconciler
+      containers:
+        - name: reconcile
+          # renovate: datasource=docker depName=ghcr.io/opentofu/opentofu
+          image: ghcr.io/opentofu/opentofu:1.13.10
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eux
+              # TF_PLUGIN_CACHE_DIR must exist before init (see homelab-pki).
+              mkdir -p /tofu/plugin-cache /tofu/data
+              tofu -chdir=/config init -input=false -no-color -lockfile=readonly
+              tofu -chdir=/config apply -input=false -auto-approve -no-color
+          env:
+            - name: TF_DATA_DIR
+              value: /tofu/data
+            - name: TF_PLUGIN_CACHE_DIR
+              value: /tofu/plugin-cache
+            - name: MINIO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-root
+                  key: RUSTFS_ACCESS_KEY
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rustfs-root
+                  key: RUSTFS_SECRET_KEY
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: tofu-cache
+              mountPath: /tofu
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: "1", memory: 512Mi }
+      volumes:
+        - name: config
+          configMap:
+            name: rustfs-config-tofu-config
+        - name: tofu-cache
+          persistentVolumeClaim:
+            claimName: rustfs-config-tofu-cache

@@ -1,0 +1,33 @@
+# Buckets, policies, users and consumer credentials for the HA rustfs
+# (application.rustfs.yaml), declared with OpenTofu in rustfs-config/ and
+# applied by a Job in namespace rustfs. Same pattern as homelab-pki.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rustfs-config
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: rustfs
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PruneLast=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+      limit: 2
+  source:
+    repoURL: ssh://git@github.com/nijave/vmubtkube-a.git
+    path: rustfs-config/
+    targetRevision: HEAD
