@@ -81,10 +81,6 @@ spec:
                 jetstream: enabled
                 users:
                   - user: CN=nats-operator
-                  - user: CN=nats-lan-test
-                    permissions:
-                      publish: ["lantest.>"]
-                      subscribe: ["lantest.>", "_INBOX.>"]
         container:
           env:
             GOMEMLIMIT: 900MiB
