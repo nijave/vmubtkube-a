@@ -166,24 +166,3 @@ spec:
     kind: ClusterIssuer
     name: nats-ca
     group: cert-manager.io
----
-# TEMPORARY acceptance-test identity, restricted like a device. Removed by
-# the decommissioning procedure once the rollout checks pass. Deliberately
-# not named nats-device-*: it must stay out of the device alert inventory.
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: nats-lan-test
-  namespace: nats
-spec:
-  secretName: nats-lan-test-tls
-  commonName: nats-lan-test
-  usages:
-    - client auth
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    kind: ClusterIssuer
-    name: nats-ca
-    group: cert-manager.io
