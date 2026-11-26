@@ -3,6 +3,8 @@
 # slowdown, not a failed build. Metrics arrive through the OTLP sidecar in
 # woodpecker/rustfs.woodpecker.yaml and are relayed to Thanos by
 # kube-prometheus-stack's remote-write, like every other scraped series.
+# Every selector carries namespace="woodpecker": the HA instance in namespace
+# rustfs (rustfs-ha-alerts.yaml) exports the same metric names.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -17,7 +19,7 @@ spec:
         - alert: CICacheMetricsMissing
           # Name-agnostic on purpose: absent() on one guessed metric fires
           # forever if rustfs renames it, and the real breakage then hides.
-          expr: absent({__name__=~"rustfs_.*"})
+          expr: absent({__name__=~"rustfs_.*", namespace="woodpecker"})
           for: 1h
           labels:
             severity: warning
@@ -28,7 +30,7 @@ spec:
               the scrape is broken; CI still passes but every pipeline pays the
               full download cost again.
         - alert: CICacheNotReady
-          expr: rustfs_runtime_readiness_ready == 0
+          expr: rustfs_runtime_readiness_ready{namespace="woodpecker"} == 0
           for: 30m
           labels:
             severity: warning
@@ -38,7 +40,7 @@ spec:
               rustfs reports itself not ready, so pipelines run cold. Check the
               pod and its iSCSI volume.
         - alert: CICacheRestartLooping
-          expr: increase(rustfs_start_total[30m]) > 2
+          expr: increase(rustfs_start_total{namespace="woodpecker"}[30m]) > 2
           labels:
             severity: warning
           annotations:
@@ -47,7 +49,7 @@ spec:
           # The capacity gauge ships as rustfs_capacity_current_bytes upstream
           # but as rustfs_capacity_current in some builds; take whichever is
           # present (Step 10 confirms the live name).
-          expr: (rustfs_capacity_current_bytes or rustfs_capacity_current) > 8.6e9
+          expr: (rustfs_capacity_current_bytes{namespace="woodpecker"} or rustfs_capacity_current{namespace="woodpecker"}) > 8.6e9
           for: 1h
           labels:
             severity: warning
