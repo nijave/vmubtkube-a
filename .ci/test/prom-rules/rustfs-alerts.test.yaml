@@ -208,3 +208,21 @@ tests:
           - exp_labels: {severity: warning, namespace: rustfs, pod: rustfs-2, container: rustfs}
             exp_annotations:
               summary: "HA rustfs pod rustfs-2 is restarting repeatedly"
+
+  # The two kube-state-metrics replicas disagree (one lags). The alert takes
+  # the lower reading and still fires once, without instance labels.
+  - name: kube-state-metrics replicas disagree, lower reading wins
+    interval: 1m
+    input_series:
+      - series: 'kube_statefulset_status_replicas_ready{namespace="rustfs",statefulset="rustfs",instance="ksm-a"}'
+        values: '4+0x60'
+      - series: 'kube_statefulset_status_replicas_ready{namespace="rustfs",statefulset="rustfs",instance="ksm-b"}'
+        values: '3+0x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: RustfsHAPodsNotReady
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: rustfs, statefulset: rustfs}
+            exp_annotations:
+              summary: HA rustfs has fewer than 4 ready pods
+              description: "3 of 4 rustfs pods are ready. The service still reads and writes on 3, but a second loss stops writes. If a node is down for good, follow the failed-node procedure in README.md."

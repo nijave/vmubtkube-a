@@ -2,9 +2,11 @@
 # Every rustfs_* selector carries namespace="rustfs": the CI cache in namespace
 # woodpecker exports the same metric names, and rustfs-alerts.yaml scopes its
 # rules the other way. Pod liveness and restarts come from kube-state-metrics,
-# so they keep working when the rustfs-metrics collector is down; those are
-# aggregated because kube-state-metrics runs two replicas and each series
-# arrives twice. Design:
+# so they keep working when the rustfs-metrics collector is down. Those are
+# aggregated so no alert carries a kube-state-metrics instance label: two
+# replicas report every series. Ready counts take the lower reading (min);
+# the restart increase takes the higher (max), because a replica that started
+# recently has seen less of the window. Design:
 # docs/superpowers/specs/2026-11-25-ha-rustfs-design.md
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -18,7 +20,7 @@ spec:
     - name: rustfs-ha
       rules:
         - alert: RustfsHAPodsNotReady
-          expr: max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 4
+          expr: min by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 4
           for: 15m
           labels:
             severity: warning
@@ -29,7 +31,7 @@ spec:
               and writes on 3, but a second loss stops writes. If a node is
               down for good, follow the failed-node procedure in README.md.
         - alert: RustfsHAWriteQuorumLost
-          expr: max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 3
+          expr: min by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 3
           for: 5m
           labels:
             severity: critical
