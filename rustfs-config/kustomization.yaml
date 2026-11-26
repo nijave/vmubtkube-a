@@ -5,8 +5,7 @@ namespace: rustfs
 resources:
   - rbac.yaml
   - pvc.yaml
-  - reconcile-job.yaml
-  - reconcile-cronjob.yaml
+  - reconcile.yaml
 
 # Hash-suffixed ConfigMap so any .tf/lock change re-rolls the Job/CronJob
 # that reference it (kustomize rewrites the configMap.name in pod specs).

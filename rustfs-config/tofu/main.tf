@@ -27,7 +27,7 @@ provider "kubernetes" {}
 
 # rustfs serves MinIO's admin API, so this provider manages its buckets,
 # policies and users. Root keys arrive as MINIO_USER / MINIO_PASSWORD from
-# Secret rustfs/rustfs-root (see reconcile-job.yaml).
+# Secret rustfs/rustfs-root (see reconcile.yaml).
 provider "minio" {
   minio_server = "s3.k8s.somemissing.info"
   minio_ssl    = true

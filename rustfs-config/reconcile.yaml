@@ -1,18 +1,24 @@
-# Periodic reconcile: puts back a user, policy or consumer Secret that was
-# changed or deleted outside git (console edits, a recreated namespace).
-# concurrencyPolicy Forbid; the OpenTofu state lock also guards against
-# overlap with the Sync-hook Job.
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: rustfs-config-reconcile
-spec:
-  schedule: "17 */6 * * *"
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
+# The reconcile Job and CronJob share one Job spec through a YAML anchor.
+# Anchors only resolve inside one YAML document, so both objects sit in a
+# v1 List; kustomize expands it into two resources and rewrites the hashed
+# ConfigMap name in each.
+#
+# Job: runs on every child-app sync. A .tf/lock change (new ConfigMap hash) or
+# an image tag bump re-renders it and Argo re-runs the hook.
+# CronJob: every 6h, restores a user, policy or consumer Secret that someone
+# changed or deleted outside git. concurrencyPolicy Forbid; the OpenTofu state
+# lock also guards against overlap with the Sync-hook Job.
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: rustfs-config-reconcile
+      annotations:
+        argocd.argoproj.io/hook: Sync
+        argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    spec: &reconcile
       backoffLimit: 2
       ttlSecondsAfterFinished: 86400
       template:
@@ -28,6 +34,7 @@ spec:
               args:
                 - |
                   set -eux
+                  # TF_PLUGIN_CACHE_DIR must exist before init (see homelab-pki).
                   mkdir -p /tofu/plugin-cache /tofu/data
                   tofu -chdir=/config init -input=false -no-color -lockfile=readonly
                   tofu -chdir=/config apply -input=false -auto-approve -no-color
@@ -62,3 +69,14 @@ spec:
             - name: tofu-cache
               persistentVolumeClaim:
                 claimName: rustfs-config-tofu-cache
+  - apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: rustfs-config-reconcile
+    spec:
+      schedule: "17 */6 * * *"
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 3
+      jobTemplate:
+        spec: *reconcile
