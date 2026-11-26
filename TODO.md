@@ -1,7 +1,8 @@
 # Follow-ups
 
-Follow-ups from the 2026-07-05 validation-tooling review and the 2026-07-04
-IaC best-practices review. Context: this repo is chiefly updated by
+Follow-ups from the 2026-07-05 validation-tooling review, the 2026-07-04
+IaC best-practices review, and the 2026-11-25 bespoke-CI-tooling review (items
+13-16). Context: this repo is chiefly updated by
 LLMs/agents, so automated validation is high-value even with a single human
 maintainer — it's the safety net and the fast feedback loop for agent-authored
 changes.
@@ -266,6 +267,127 @@ scope here, follow-up PRs in those repos:
   builds; `POETRY_CACHE_DIR` on a cache volume.
 - `nijave/cukk`: `uv sync --frozen` in both lint and test with no `UV_CACHE_DIR`,
   so uv's cache lives in the ephemeral container.
+
+## 13. Lint the CI shell: shellcheck (and maybe shfmt) (from the 2026-11-25 bespoke-CI-tooling review)
+
+`.ci/` is 2,027 lines of POSIX sh and nothing lints it: no shellcheck or shfmt
+step in `.woodpecker.yaml`, no hook in `.pre-commit-config.yaml`. The scripts
+already carry `# shellcheck disable=` directives and the 2026-11-06 cache plan
+required `shellcheck -s sh` to pass, so the tool is de facto in use — just not
+enforced, which means the next agent-authored script gets no coverage at all.
+
+A full run (`shellcheck -s sh .ci/*.sh .ci/lib/*.sh .ci/test/*.sh`) is already
+clean apart from two findings, so this is wiring, not a cleanup:
+
+- `SC3040` × 12 (one per script that sets it): `pipefail` is undefined in POSIX
+  sh. A false positive here — every step runs in busybox ash (alpine/k8s, the
+  regctl alpine image), which supports `pipefail`, and the local `sh` is bash.
+  Exclude once with `exclude=SC3040` in a repo-root `.shellcheckrc` rather than
+  12 directives.
+- `SC2086` at `.ci/validate.sh:96` (`xargs $KUBECONFORM`): the word splitting
+  is the point (that string carries the flags). Needs a targeted
+  `# shellcheck disable=SC2086` with a one-line reason.
+
+shfmt is a separate, optional decision: the scripts use 2-space indent while
+shfmt defaults to tabs, so `shfmt -ln posix -i 2` will still produce a large
+first diff. Size it with `shfmt -ln posix -i 2 -d .ci`; if it is noisy, land the
+reformat as its own no-behavior-change commit and gate it after. Gating
+shellcheck alone is the win; formatting is cosmetic.
+
+- Wire as a `lint-shell` step with a path filter on `**/*.sh` and
+  `.shellcheckrc`. Nothing `depends_on` it, so filtering it out is safe.
+- shellcheck is GPL-3.0 (`koalaman/shellcheck`); fine for a CI tool. Use the
+  image, or the `shellcheck-py` pre-commit hook. shfmt is BSD-3-Clause
+  (`mvdan/sh`).
+- Pin the step image with the usual `# renovate:` annotation, remembering item
+  11 (the regex manager still cannot see env-var pins).
+
+## 14. Lint `.woodpecker.yaml` with woodpecker-cli (from the 2026-11-25 bespoke-CI-tooling review)
+
+The pipeline config is the one file whose mistakes fail *every* pipeline at
+compile time, and no linter covers it — while the file's own comments record
+three such failures found the hard way: a `from_secret` from a
+pull_request-scoped secret evaluated on push events, a DAG edge to a step
+filtered out by `when:`, and the PR-only deploy key. Woodpecker ships an
+official linter for exactly this.
+
+- Run `woodpecker-cli lint` over the repo root. Upstream runs it as a CI step
+  with `WOODPECKER_LINT_STRICT: true`; mirror that.
+- Known limit: cli lint does not resolve `${...}` the way the server does
+  (woodpecker-ci/woodpecker#7533, fix in PR #7534), so it cannot see a
+  secret-scope/event mismatch — the `from_secret` class of failure still needs a
+  real push. It does catch schema errors, deprecated/unknown keys and bad habits
+  the server complains about.
+- Version the CLI to the running server (3.x). `woodpeckerci/woodpecker-cli`
+  is the official image; pin it with `# renovate: datasource=docker` (item 11
+  again) and add a `.woodpecker.yaml`-scoped pre-commit hook.
+
+## 15. Replace the bespoke CI-script test harnesses with bats-core (from the 2026-11-25 bespoke-CI-tooling review)
+
+`.ci/test/cache-test.sh` (99 lines) and `.ci/test/verify-images-test.sh` (290)
+each reimplement the same mini-framework — `ok`, `fail`, `make_repo`,
+`commit_at`, a `$TMP` dir and a `trap` — and run under `set -eu`, so the first
+failing assertion aborts the file and a run reports one failure at a time.
+Neither script is in `.woodpecker.yaml`: the only thing that runs them is a
+pre-commit hook, so the `.ci` logic that *does* gate merges has no CI coverage
+of its own.
+
+- bats-core (MIT, active) gives `@test` granularity, `--filter`, TAP output,
+  `setup`/`setup_file`/`teardown`, `run` + `assert_output`, and
+  `BATS_TEST_TMPDIR` instead of the hand-rolled `mktemp -d`/`trap`. The
+  assertions are already output-based (the scripts are invoked as programs,
+  never sourced), so the translation is mechanical and ~90 lines of scaffolding
+  go away.
+- Keep the tests hermetic *and* keep the guard: the `unset GIT_DIR
+  GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR` at the top of both files is
+  load-bearing (a poisoned GIT_DIR once let `git init` mark the real checkout
+  bare). In bats that belongs in `setup_file`, not at file scope — each `@test`
+  runs in a subshell of the runner, so file-level state is not a reliable place
+  for it.
+- Add a `test-ci-scripts` step running `bats .ci/test/` so these tests are
+  gated in CI, not just locally. Nothing depends on it, so path-filter on
+  `.ci/**`.
+- `shellspec` is the alternative if POSIX-sh purity of the *test* code matters
+  (it runs on dash/busybox); it is far less active than bats. Either way the
+  scripts under test stay `#!/bin/sh` — only the harness becomes bash.
+
+## 16. Add pint to the Prometheus rules check (from the 2026-11-25 bespoke-CI-tooling review)
+
+`.ci/validate-prom-rules.sh` already does the hard part — discovering every
+PrometheusRule (Helm renders included, via the object list
+`validate-prom-selectors` writes) and extracting `.spec` into
+`<namespace>/<name>.yaml` — but then only runs `promtool check rules`, which
+checks syntax, PromQL and templates. Two things in the script exist only because
+promtool cannot do them:
+
+- the `"lint error"` string match that downgrades a duplicate-rules warning to
+  a pass (kube-prometheus-stack ships one in
+  `kube-apiserver-availability.rules`), and
+- the unit tests, which are promtool's and should stay.
+
+Cloudflare pint (Apache-2.0, active, tracks Prometheus releases — v0.90.0 knows
+v3.16.0, the version pinned in the pipeline) lints the same rule files and
+covers `rule/duplicate`, `alerts/template` (Go template syntax in
+annotations/labels, which promtool does not check), `promql/vector_matching`,
+`promql/rate`, `rule/name` and more, configured in `pint.hcl`.
+
+- Integration is one command: `pint lint "$RULES_DIR"` on the directory the
+  script already builds (it accepts directory paths). Because those files are
+  plain `.spec` bodies, no `parser { relaxed = ... }` is needed — that setting
+  exists only for pint pointed at PrometheusRule CRs (cloudflare/pint#460).
+- `rule/duplicate` lets the "lint error" tolerance hack go: the chart's
+  duplicate becomes a pinned config entry (or a path-scoped ignore) instead of a
+  substring match on promtool output.
+- `pint ci` (diff-aware against the merge-base, the same idea as
+  `.ci/lib/diff-base.sh`) is optional: the rule set is small (a few dozen
+  objects), so whole-set `lint` is cheap and simpler.
+- Do **not** wire `promql/series` yet. It queries a live Prometheus for metric
+  existence — genuinely useful (it catches a rule referencing a renamed metric,
+  which promtool cannot) but it needs read-only query access and a token, so it
+  is a separate, non-blocking step if ever.
+- Pin the binary in `.woodpecker.yaml` (`ghcr.io/cloudflare/pint`) with a
+  `# renovate:` annotation (blocked on item 11) and add it to the pre-commit
+  hook's tool list next to promtool.
 
 ## Skipped (deliberately, 2026-07-05)
 
