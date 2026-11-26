@@ -2,7 +2,9 @@
 # Every rustfs_* selector carries namespace="rustfs": the CI cache in namespace
 # woodpecker exports the same metric names, and rustfs-alerts.yaml scopes its
 # rules the other way. Pod liveness and restarts come from kube-state-metrics,
-# so they keep working when the rustfs-metrics collector is down. Design:
+# so they keep working when the rustfs-metrics collector is down; those are
+# aggregated because kube-state-metrics runs two replicas and each series
+# arrives twice. Design:
 # docs/superpowers/specs/2026-11-25-ha-rustfs-design.md
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -16,7 +18,7 @@ spec:
     - name: rustfs-ha
       rules:
         - alert: RustfsHAPodsNotReady
-          expr: kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"} < 4
+          expr: max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 4
           for: 15m
           labels:
             severity: warning
@@ -27,7 +29,7 @@ spec:
               and writes on 3, but a second loss stops writes. If a node is
               down for good, follow the failed-node procedure in README.md.
         - alert: RustfsHAWriteQuorumLost
-          expr: kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"} < 3
+          expr: max by (namespace, statefulset) (kube_statefulset_status_replicas_ready{namespace="rustfs", statefulset="rustfs"}) < 3
           for: 5m
           labels:
             severity: critical
@@ -36,7 +38,7 @@ spec:
             description: >-
               {{ $value }} of 4 rustfs pods are ready; writes need 3.
         - alert: RustfsHARestartLooping
-          expr: increase(kube_pod_container_status_restarts_total{namespace="rustfs", container="rustfs"}[30m]) > 2
+          expr: max by (namespace, pod, container) (increase(kube_pod_container_status_restarts_total{namespace="rustfs", container="rustfs"}[30m])) > 2
           labels:
             severity: warning
           annotations:
