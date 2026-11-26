@@ -91,7 +91,7 @@ echo "=== hand-written manifests ==="
 # Everything tracked except: vendored inputs (validated rendered below),
 # kustomize-rendered dirs, kustomization files themselves, and non-k8s YAML.
 git ls-files '*.yaml' \
-  | grep -vE '^(vendored/|fluentbit/|homelab-pki/|docs/|\.|renovate\.json|vendir)' \
+  | grep -vE '^(vendored/|fluentbit/|homelab-pki/|rustfs-config/|docs/|\.|renovate\.json|vendir)' \
   | grep -v 'kustomization\.yaml' \
   | xargs $KUBECONFORM
 

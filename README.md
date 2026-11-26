@@ -149,10 +149,11 @@ secret).
 
 ### Adding a consumer
 
-The root keys in Secret `rustfs/rustfs-root` are for administration only. For
-each consumer, log in to the console with the root keys, create a bucket,
-create a user with its own access key, and attach a policy limited to that
-bucket. Store the consumer's keys the way `## Secret management` describes.
+The root keys in Secret `rustfs/rustfs-root` are for administration only.
+Each consumer gets its own bucket, user and policy, declared in OpenTofu under
+`rustfs-config/` (`application.rustfs-config.yaml`). The credentials arrive as
+Secret `s3-<name>` in the consumer's namespace. Steps:
+`rustfs-config/README.md`.
 
 ### Failure behaviour
 
