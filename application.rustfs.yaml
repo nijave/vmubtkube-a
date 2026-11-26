@@ -133,11 +133,14 @@ spec:
             memory: 1Gi
           limits:
             memory: 3Gi
-        # With TLS on, liveness is a TCP check on 9000. 300s keeps it from
-        # restarting pods while startup time is being measured; the measured
-        # value replaces it (plan Task 8).
+        # With TLS on, liveness is a TCP check on 9000. Startup allowance is
+        # initialDelaySeconds + (failureThreshold - 1) x periodSeconds = 40s,
+        # over three times the slowest measured container-start-to-Ready
+        # (12s: first start, full restart, and with a heal pending). Measured
+        # 2026-11; re-measure if startup behaviour changes across a rustfs
+        # upgrade.
         livenessProbe:
-          initialDelaySeconds: 300
+          initialDelaySeconds: 30
         storageclass:
           name: zfs-generic-iscsi-csi
           dataStorageSize: 250Gi
@@ -317,12 +320,16 @@ spec:
                         - name: config
                           mountPath: /etc/otelcol
                           readOnly: true
+                      # Four pods push here, and every pod move adds a
+                      # new instance id whose series the exporter keeps for
+                      # five minutes. 128Mi (the CI cache sidecar's limit)
+                      # was OOM-killed twice during the disruption tests.
                       resources:
                         requests:
                           cpu: 10m
-                          memory: 64Mi
-                        limits:
                           memory: 128Mi
+                        limits:
+                          memory: 384Mi
                   volumes:
                     - name: config
                       configMap:

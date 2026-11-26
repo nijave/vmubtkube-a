@@ -121,6 +121,137 @@ certs — it issues internal service-to-service certs (e.g.
 `python-envoy-authz`, validated by Contour via the delegated `k8s-ca`
 secret).
 
+## HA rustfs (S3)
+
+`application.rustfs.yaml` runs a four-pod erasure-coded rustfs in namespace
+`rustfs`. Design: `docs/superpowers/specs/2026-11-25-ha-rustfs-design.md`.
+
+- **Endpoint:** `https://s3.k8s.somemissing.info` for every client, inside
+  and outside the cluster. Path-style, region `us-east-1`. Console:
+  `https://s3.k8s.somemissing.info:9001/rustfs/console/`.
+- **Capacity:** 4 × 250Gi zvols at `EC:2`, about 500Gi usable. Every byte
+  stored costs two on the shared `midline` pool. The zvols are thin, so pool
+  space is the real limit; `RustfsHACapacity` warns at 80% of usable.
+- **Not backed up.** NAS snapshots and replication skip the zvols. A consumer that needs a backup copies its bucket elsewhere.
+- **LAN uploads (open issue, 2026-11).** Uploads over about 64KB from LAN
+  hosts to any ClusterIP stall for about 52 seconds on HTTP/1.1 and fail on
+  HTTP/2. The likely cause, not yet confirmed on the router: LAN clients
+  send through the router and replies return direct, so its firewall sees
+  one direction only. In-cluster clients and LAN
+  downloads work. Until the router handles this, LAN uploads need
+  `--disable-http2` (rclone) and patience.
+- **Descheduler.** The cluster descheduler evicts rustfs pods to balance
+  nodes, one at a time under the PDB. Each eviction moves a zvol to another
+  worker; the pod is back in well under a minute.
+- **Separate from the CI cache.** `woodpecker/rustfs.woodpecker.yaml` is a
+  different, single-pod instance. Alert rules tell the two apart by
+  `namespace`.
+
+### Adding a consumer
+
+The root keys in Secret `rustfs/rustfs-root` are for administration only. For
+each consumer, log in to the console with the root keys, create a bucket,
+create a user with its own access key, and attach a policy limited to that
+bucket. Store the consumer's keys the way `## Secret management` describes.
+
+### Failure behaviour
+
+| Pods down | GET of an existing object | PUT |
+|---|---|---|
+| 1 | yes | yes |
+| 2 | yes | no |
+| 3+ | no | no |
+
+Two pods down is a degraded state, not a dependable read-only mode: list,
+delete and multipart calls have their own thresholds.
+
+A drain or kured reboot moves the pod to the spare worker and reattaches its
+zvol; the PDB allows the next eviction only after that pod is Ready. A crashed
+node is different: its pod stays `Terminating` on the dead node and nothing
+replaces it. The service keeps reading and writing on three pods. Expect
+request errors for up to two minutes after a crash, until Kubernetes takes
+the dead pod out of the Service; clients with retries then recover without
+action. In the rehearsal an in-cluster client saw write errors for 43
+seconds and no read errors. LAN clients were not measured.
+
+### A node that will not come back
+
+Three pods have write quorum, so do not rush this.
+
+1. **Fence first.** The workers are physical machines with no remote power
+   control. Confirm at the hardware that the machine is off (no power light,
+   or pull the plug), and keep it off. A failed ping is not proof. A NotReady
+   node may only have lost its network, with rustfs and
+   every other pod still writing to their zvols. A closed iSCSI session on the
+   NAS is not a fence, and neither is blocking one LUN.
+2. `kubectl taint node <node> node.kubernetes.io/out-of-service=nodeshutdown:NoExecute`.
+   This deletes the stuck pods on that node and force-detaches each of its
+   volumes.
+3. Watch the replacement: `kubectl -n rustfs get pods -w`, `kubectl get
+   volumeattachment`, and the democratic-csi controller log. In the rehearsal
+   this took under two minutes: the pod was Ready on the spare 48 seconds after the
+   taint, and all four drives were online at 101 seconds, with no manual
+   VolumeAttachment delete.
+4. If the pod still waits on attachment after 10 minutes, read the CSI
+   controller log. Delete the old VolumeAttachment by hand only when that log
+   shows the detach cannot finish and the machine is still off.
+5. Confirm four pods Ready and
+   `rustfs_cluster_health_drives_online_count{namespace="rustfs"}` at 4.
+6. Remove the taint before powering the machine back on, or after deleting
+   the Node object if the machine will not come back.
+
+### TLS
+
+rustfs serves two certificates and picks one by SNI. Clients get the public
+certificate for `s3.k8s.somemissing.info`. Peers use a certificate from a CA
+that exists only in namespace `rustfs` (Certificate `rustfs-peer-ca`). Both
+come from one projected volume, and rustfs reloads renewals without a
+restart.
+
+Rotating the private CA is manual and causes a full outage (22 seconds in
+the rehearsal). cert-manager does not reissue
+leaves when a CA changes. Save the script below to a file and run it; it
+stops at the first failed check. `cmctl` is the cert-manager CLI.
+
+```sh
+#!/bin/sh
+# Rotate the rustfs peer CA. Stops at the first failed check.
+set -eu
+fp() { kubectl -n rustfs get secret "$1" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d | openssl x509 -noout -fingerprint -sha256 2>/dev/null; }
+# Run a check every 2 seconds until it passes; give up after 2 minutes.
+poll() { n=0; until "$@"; do n=$((n+1)); [ "$n" -lt 60 ] || { echo "STOP: timed out waiting for: $*"; exit 1; }; sleep 2; done; }
+
+OLD=$(fp rustfs-peer-ca 'tls\.crt'); [ -n "$OLD" ] || { echo "STOP: cannot read the current CA"; exit 1; }
+kubectl -n rustfs delete secret rustfs-peer-ca
+new_ca() { NEW=$(fp rustfs-peer-ca 'tls\.crt'); [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; }
+poll new_ca
+
+# cert-manager does not reissue the leaf by itself. The Certificate stays
+# Ready while it reissues, so wait on the Secret content, not the condition.
+cmctl renew -n rustfs rustfs-peer
+leaf_trusts_new_ca() { [ "$(fp rustfs-peer 'ca\.crt')" = "$NEW" ]; }
+poll leaf_trusts_new_ca
+
+# Verify the leaf against the CA Secret, not the leaf Secret's own ca.crt.
+kubectl -n rustfs get secret rustfs-peer-ca -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/rustfs-ca.pem
+kubectl -n rustfs get secret rustfs-peer -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/rustfs-leaf.pem
+openssl verify -CAfile /tmp/rustfs-ca.pem /tmp/rustfs-leaf.pem
+
+# All four together: a pod on the new CA and one on the old reject each other.
+kubectl -n rustfs delete pod -l app.kubernetes.io/name=rustfs
+sleep 5
+kubectl -n rustfs rollout status statefulset/rustfs --timeout=10m
+kubectl -n rustfs wait pod -l app.kubernetes.io/name=rustfs --for=condition=Ready --timeout=5m
+```
+
+### Upgrades
+
+Renovate bumps the chart, and the image follows the chart's `appVersion`.
+After merging a bump, watch the rolling restart finish with four Ready pods
+and the drive count back at 4 before relying on it. Topology (`replicaCount`,
+`drivesPerNode`, PVC size in the template) cannot change in place; grow by
+expanding all four PVCs together or by adding a pool.
+
 ## Secret management
 
 Two mechanisms are available; pick by **where the secret originates**, not by
