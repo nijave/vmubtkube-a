@@ -34,7 +34,7 @@ spec:
     repoURL: https://charts.rustfs.com
     # Chart and image move together: image.rustfs.tag stays unset so the image
     # follows this chart's appVersion (upstream requires upgrading both at once).
-    targetRevision: 1.0.6
+    targetRevision: 1.0.7
     helm:
       releaseName: rustfs
       valuesObject:
